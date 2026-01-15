@@ -15,6 +15,8 @@ import concurrent.futures
 import threading
 import requests
 from enum import Enum
+import base64
+import io
 
 # OCR-specific imports
 from PIL import Image
@@ -116,6 +118,17 @@ class BookmarkExtractionResponse(BaseModel):
     total: int
     pdf_path: str
 
+# --- OCR Preview Models ---
+class PreviewPageData(BaseModel):
+    page_number: int
+    image_data: str  # Base64 encoded image
+
+class OCRPreviewResponse(BaseModel):
+    pages: List[PreviewPageData]
+    total_pages: int
+    offset: int
+    limit: int
+
 # --- Helper Functions ---
 def get_memory_usage():
     """Get current memory usage in MB"""
@@ -177,8 +190,8 @@ async def get_file_scan_config(relative_path: str):
 async def process_ocr(
     image: UploadFile = File(None, description="Image file to process (not needed if relative_path and page_number are provided)"),
     language: str = Form("hin", description="Language code for OCR (hin, guj, eng)"),
-    crop_top: int = Form(0, description="Percentage to crop from top (0-50)"),
-    crop_bottom: int = Form(0, description="Percentage to crop from bottom (0-50)"),
+    crop_top: float = Form(0, description="Percentage to crop from top (0-50)"),
+    crop_bottom: float = Form(0, description="Percentage to crop from bottom (0-50)"),
     mode: OCRMode = Form(
         OCRMode.PSM6,
         description='OCR processing mode. "psm6" and "psm3" use the legacy processor. '
@@ -639,3 +652,113 @@ async def proxy_pdf(url: str):
     except Exception as e:
         log_handle.error(f"Error proxying PDF: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error proxying PDF: {str(e)}")
+
+
+@router.post("/ocr-preview", response_model=OCRPreviewResponse)
+async def generate_ocr_preview(
+    pdf_file: UploadFile = File(..., description="PDF file to preview"),
+    crop_top: float = Form(0, description="Percentage to crop from top (0-50)"),
+    crop_bottom: float = Form(0, description="Percentage to crop from bottom (0-50)"),
+    offset: int = Form(0, description="Starting page number (0-indexed)"),
+    limit: int = Form(50, description="Number of pages to preview (10-100)")
+):
+    """
+    Generate preview images for PDF pages with cropping applied.
+    """
+    # Validate inputs
+    if not (0 <= crop_top <= 50 and 0 <= crop_bottom <= 50):
+        raise HTTPException(status_code=400, detail="Crop percentages must be between 0 and 50")
+
+    if not (10 <= limit <= 100):
+        raise HTTPException(status_code=400, detail="Limit must be between 10 and 100")
+
+    if offset < 0:
+        raise HTTPException(status_code=400, detail="Offset must be non-negative")
+
+    if pdf_file.content_type != 'application/pdf':
+        raise HTTPException(status_code=400, detail="File must be a PDF")
+
+    temp_path = None
+
+    try:
+        # Save uploaded PDF to temp file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+            content = await pdf_file.read()
+            temp_file.write(content)
+            temp_path = temp_file.name
+
+        log_handle.info(f"Processing PDF preview for {pdf_file.filename}, offset={offset}, limit={limit}")
+
+        # Initialize PDF processor
+        config = Config("configs/config.yaml")
+        pdf_processor = PDFProcessor(config)
+
+        # Build scan_config with crop settings
+        scan_config = {}
+        if crop_top > 0 or crop_bottom > 0:
+            scan_config["crop"] = {
+                "top": crop_top,
+                "bottom": crop_bottom
+            }
+
+        # Get total page count first
+        import fitz  # PyMuPDF
+        with fitz.open(temp_path) as doc:
+            total_pages = len(doc)
+
+        log_handle.info(f"PDF has {total_pages} pages")
+
+        # Validate offset
+        if offset >= total_pages:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Offset {offset} is beyond the last page (PDF has {total_pages} pages)"
+            )
+
+        # Calculate page range (1-indexed for PDFProcessor)
+        start_page = offset + 1
+        end_page = min(offset + limit, total_pages)
+        page_numbers = list(range(start_page, end_page + 1))
+
+        log_handle.info(f"Extracting pages {start_page} to {end_page}")
+
+        # Extract images for the specified pages
+        images, extracted_page_numbers = pdf_processor._get_image(temp_path, page_numbers, scan_config)
+
+        if not images:
+            raise HTTPException(status_code=400, detail="Failed to extract pages from PDF")
+
+        # Convert images to base64
+        preview_pages = []
+        for img, page_num in zip(images, extracted_page_numbers):
+            buffer = io.BytesIO()
+            img.save(buffer, format='PNG')
+            buffer.seek(0)
+            image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+            preview_pages.append(PreviewPageData(
+                page_number=page_num,
+                image_data=image_base64
+            ))
+
+        log_handle.info(f"Successfully generated {len(preview_pages)} preview images")
+
+        return OCRPreviewResponse(
+            pages=preview_pages,
+            total_pages=total_pages,
+            offset=offset,
+            limit=limit
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_handle.error(f"Error generating PDF preview: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error generating preview: {str(e)}")
+    finally:
+        # Clean up temp file
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except Exception as e:
+                log_handle.warning(f"Failed to delete temp file {temp_path}: {e}")

@@ -867,10 +867,11 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
                             </label>
                             <input
                                 type="number"
+                                step="0.1"
                                 min="0"
                                 max="50"
                                 value={cropTop}
-                                onChange={(e) => setCropTop(parseInt(e.target.value) || 0)}
+                                onChange={(e) => setCropTop(parseFloat(e.target.value) || 0)}
                                 className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
                             />
                         </div>
@@ -881,10 +882,11 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
                             </label>
                             <input
                                 type="number"
+                                step="0.1"
                                 min="0"
                                 max="50"
                                 value={cropBottom}
-                                onChange={(e) => setCropBottom(parseInt(e.target.value) || 0)}
+                                onChange={(e) => setCropBottom(parseFloat(e.target.value) || 0)}
                                 className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
                             />
                         </div>

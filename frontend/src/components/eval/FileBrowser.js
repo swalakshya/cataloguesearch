@@ -96,7 +96,7 @@ const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectory
                             type: 'file',
                             fileType: 'markdown'
                         });
-                    } else if ((currentTab === 'ocr-eval' || currentTab === 'paragraph-eval') && name.toLowerCase().endsWith('.pdf')) {
+                    } else if ((currentTab === 'ocr-eval' || currentTab === 'paragraph-eval' || currentTab === 'ocr-preview') && name.toLowerCase().endsWith('.pdf')) {
                         items.push({
                             name,
                             handle,
@@ -184,7 +184,9 @@ const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectory
                     sourcePath,
                     targetPath,
                     selectedFolderName: pdfFileName,
-                    selectedPDFFile: file.name
+                    selectedPDFFile: file.name,
+                    pdfFilePath: pdfFilePath,
+                    pdfFileHandle: file.handle
                 });
                 onClose();
             }
