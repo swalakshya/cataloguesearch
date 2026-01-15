@@ -26,6 +26,16 @@ const WhatsNew = () => {
 
     const updates = [
         {
+            date: "January 15, 2026",
+            newContent: [
+                "Hindi Pravachans (compiled) on Mokshmarg Prakashak",
+                "Total Indexed Pravachans: ~3200"
+            ],
+            newFeatures: [
+                "No new features"
+            ]
+        },
+        {
             date: "December 6, 2025",
             newContent: [
                 "No new content"

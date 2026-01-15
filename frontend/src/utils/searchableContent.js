@@ -144,7 +144,14 @@ export const searchableContent = [
     series: "1975 (18th time)",
     count: 535,
     hindi: null,
-    gujarati: "in_progress"
+    gujarati: "searchable"
+  },
+  {
+    granth: "Mokshmarg Prakashak",
+    series: "1952 Series",
+    count: null,
+    hindi: "searchable",
+    gujarati: null
   }
 ];
 
