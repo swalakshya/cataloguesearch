@@ -17,5 +17,8 @@ opencv-python==4.8.1.78
 markdown==3.7             # Markdown to HTML conversion
 beautifulsoup4==4.12.3    # HTML parsing for structured content extraction
 
+## Google Generative AI
+google-generativeai
+
 # Note: These libraries significantly increase Docker image size
 # Only include in crawler/processing containers, not API containers
