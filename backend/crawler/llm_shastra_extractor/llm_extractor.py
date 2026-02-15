@@ -68,6 +68,7 @@ def extract_indic_text(image, model_name="gemini-2.5-flash"):
 
     result = json.loads(response.text)
     log_handle.info(f"LLM extraction returned {len(result)} blocks")
+    log_handle.info(f"result: {result}")
     return result
 
 
