@@ -115,7 +115,7 @@ case $ACTION in
         docker-compose --env-file "$ENV_FILE" logs -f
         ;;
     "push")
-        echo "Building and pushing images to Docker Hub (jain9rajat/cataloguesearch)..."
+        echo "Building and pushing images to Docker Hub (swalakshya/cataloguesearch)..."
         echo "This will build the images and then push them to the repository defined in docker-compose.yml."
         echo "Please ensure you are logged in with 'docker login'."
 
@@ -125,7 +125,7 @@ case $ACTION in
         echo "Images pushed successfully."
         ;;
     "push-api")
-        echo "Building and pushing only API image to Docker Hub (jain9rajat/cataloguesearch:api)..."
+        echo "Building and pushing only API image to Docker Hub (swalakshya/cataloguesearch:api)..."
         echo "Please ensure you are logged in with 'docker login'."
 
         # Build and push only the API service
@@ -134,7 +134,7 @@ case $ACTION in
         echo "API image pushed successfully."
         ;;
     "push-frontend")
-        echo "Building and pushing only frontend image to Docker Hub (jain9rajat/cataloguesearch:frontend)..."
+        echo "Building and pushing only frontend image to Docker Hub (swalakshya/cataloguesearch:frontend)..."
         echo "Please ensure you are logged in with 'docker login'."
 
         # Build and push only the frontend service
