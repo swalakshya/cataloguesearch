@@ -28,7 +28,7 @@ from backend.crawler.pdf_processor import PDFProcessor
 from backend.crawler.markdown_parser import MarkdownParser
 from backend.common.scan_config import get_scan_config
 from backend.crawler.bookmark_extractor.factory import create_bookmark_extractor_by_name
-from backend.crawler.llm_shastra_extractor.llm_extractor import extract_indic_text
+from backend.crawler.llm_pdf_processor import extract_indic_text
 from .ocr import get_ocr_service
 from scratch.para_gen.para_gen import process_image_to_paragraphs
 

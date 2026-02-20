@@ -18,6 +18,24 @@ log_handle = logging.getLogger(__name__)
 # Configure Gemini API key from environment
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY", ""))
 
+
+def extract_indic_text(image, model_name: str = "gemini-2.5-flash") -> list:
+    """
+    Extract and categorise text blocks from a Jain scripture image using Gemini.
+
+    Public API — used by eval/api.py for single-page extraction.
+    Delegates to LLMPDFProcessor._process_single_page_llm for consistency.
+
+    Args:
+        image: PIL.Image object of the page
+        model_name: Gemini model to use
+
+    Returns:
+        List of dicts with "type" and "text" keys
+    """
+    _, blocks = LLMPDFProcessor._process_single_page_llm(0, image, model_name)
+    return blocks
+
 PROMPT = """
 The attached image is from a Jain Scripture. It has different types of text:
 
@@ -110,7 +128,7 @@ class LLMPDFProcessor(PDFProcessor):
         images, page_numbers = self._get_image(pdf_file, missing_pages, scan_config)
 
         paragraphs = self._generate_paragraphs_llm(
-            images, page_numbers, output_ocr_dir, llm_model, llm_workers
+            images, page_numbers, llm_model, llm_workers
         )
 
         self._write_output_to_file(output_ocr_dir, paragraphs)
@@ -122,7 +140,6 @@ class LLMPDFProcessor(PDFProcessor):
             self,
             images: list,
             page_numbers: list[int],
-            output_ocr_dir: str,
             llm_model: str,
             llm_workers: int
     ) -> list[tuple[int, list]]:
