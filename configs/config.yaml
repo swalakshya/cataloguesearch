@@ -7,7 +7,7 @@ crawler:
   bookmark_extractor_llm: "ollama"
   ocr_engine: "tesseract"
   default_llm_model: "gemini-2.5-flash"
-  llm_workers: 2
+  llm_workers: 6
 
 index:
   opensearch_config: "{BASE_DIR}/configs/opensearch-config.yaml"

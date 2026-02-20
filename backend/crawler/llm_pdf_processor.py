@@ -5,18 +5,32 @@ using Google Gemini, as an alternative to Tesseract OCR.
 import json
 import logging
 import os
+import threading
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from tqdm import tqdm
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 from backend.crawler.pdf_processor import PDFProcessor
 
 log_handle = logging.getLogger(__name__)
 
-# Configure Gemini API key from environment
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY", ""))
+# Thread-local storage so each worker thread gets its own genai.Client.
+# A single shared client is not thread-safe because its underlying async
+# HTTP transport can be closed by one thread while another is mid-request.
+_thread_local = threading.local()
+
+
+def _get_gemini_client():
+    if not getattr(_thread_local, "client", None):
+        api_key = os.environ.get("GEMINI_API_KEY", "")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY environment variable is not set")
+        _thread_local.client = genai.Client(api_key=api_key)
+    return _thread_local.client
 
 
 def extract_indic_text(image, model_name: str = "gemini-2.5-flash") -> list:
@@ -127,11 +141,16 @@ class LLMPDFProcessor(PDFProcessor):
 
         images, page_numbers = self._get_image(pdf_file, missing_pages, scan_config)
 
-        paragraphs = self._generate_paragraphs_llm(
-            images, page_numbers, llm_model, llm_workers
+        _, failed_pages = self._generate_paragraphs_llm(
+            images, page_numbers, llm_model, llm_workers, output_ocr_dir
         )
 
-        self._write_output_to_file(output_ocr_dir, paragraphs)
+        if failed_pages:
+            log_handle.error(
+                f"LLM extraction completed with {len(failed_pages)} failed page(s) for {pdf_file}: {failed_pages}. "
+                f"IndexState will NOT be updated — re-run to retry."
+            )
+            return False
 
         log_handle.info(f"LLM extraction completed for {pdf_file} in {output_ocr_dir}")
         return True
@@ -141,14 +160,16 @@ class LLMPDFProcessor(PDFProcessor):
             images: list,
             page_numbers: list[int],
             llm_model: str,
-            llm_workers: int
-    ) -> list[tuple[int, list]]:
+            llm_workers: int,
+            output_ocr_dir: str,
+    ) -> tuple[list, list]:
         """
         Runs LLM extraction concurrently using ThreadPoolExecutor.
         I/O-bound (network) so threads are appropriate here.
         """
         tasks = list(zip(page_numbers, images))
         results = []
+        failed_pages = []
 
         log_handle.info(
             f"Starting LLM extraction: {len(tasks)} pages, "
@@ -161,18 +182,26 @@ class LLMPDFProcessor(PDFProcessor):
                 for page_num, image in tasks
             }
 
-            for future in as_completed(future_to_page):
+            for future in tqdm(as_completed(future_to_page), total=len(tasks), desc="LLM Pages"):
                 page_num = future_to_page[future]
                 try:
-                    result = future.result()
-                    results.append(result)
-                    log_handle.info(f"Completed page {page_num}")
+                    page_num, blocks = future.result()
+                    if blocks:
+                        self._write_output_to_file(output_ocr_dir, [(page_num, blocks)])
+                        results.append((page_num, blocks))
+                    else:
+                        log_handle.warning(f"Page {page_num}: returned empty blocks, marking as failed")
+                        failed_pages.append(page_num)
                 except Exception as e:
                     log_handle.error(f"Failed to process page {page_num}: {e}")
-                    results.append((page_num, []))
+                    failed_pages.append(page_num)
 
         results.sort(key=lambda x: x[0])
-        return results
+        log_handle.info(
+            f"LLM extraction summary: {len(results) - len(failed_pages)}/{len(results)} pages succeeded, "
+            f"{len(failed_pages)} failed"
+        )
+        return results, failed_pages
 
     @staticmethod
     def _process_single_page_llm(page_num: int, image, llm_model: str) -> tuple[int, list]:
@@ -184,12 +213,17 @@ class LLMPDFProcessor(PDFProcessor):
 
         for attempt in range(_MAX_RETRIES):
             try:
-                model = genai.GenerativeModel(llm_model)
-                response = model.generate_content(
-                    [PROMPT, image],
-                    generation_config={"response_mime_type": "application/json"}
+                response = _get_gemini_client().models.generate_content(
+                    model=llm_model,
+                    contents=[PROMPT, image],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json"
+                    )
                 )
-                blocks = json.loads(response.text)
+                raw = response.text
+                if raw is None:
+                    raise ValueError("Gemini returned None response text (possible safety block or transient error)")
+                blocks = json.loads(raw)
                 log_handle.info(
                     f"Page {page_num}: extracted {len(blocks)} blocks "
                     f"(attempt {attempt + 1})"
@@ -200,10 +234,10 @@ class LLMPDFProcessor(PDFProcessor):
                 error_str = str(e)
                 is_rate_limit = "429" in error_str or "quota" in error_str.lower()
 
-                if is_rate_limit and attempt < _MAX_RETRIES - 1:
+                if attempt < _MAX_RETRIES - 1:
                     log_handle.warning(
-                        f"Page {page_num}: rate limited (attempt {attempt + 1}). "
-                        f"Retrying in {backoff}s..."
+                        f"Page {page_num}: {'rate limited' if is_rate_limit else 'transient error'} "
+                        f"(attempt {attempt + 1}): {e}. Retrying in {backoff}s..."
                     )
                     time.sleep(backoff)
                     backoff *= 2
