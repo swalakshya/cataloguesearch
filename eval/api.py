@@ -115,6 +115,9 @@ class BookmarkData(BaseModel):
     title: str
     pravachan_no: Optional[str] = None
     date: Optional[str] = None
+    gatha: Optional[str] = None
+    kalash: Optional[str] = None
+    shlok: Optional[str] = None
 
 class BookmarkExtractionResponse(BaseModel):
     bookmarks: List[BookmarkData]
@@ -602,7 +605,10 @@ async def extract_bookmarks(request: BookmarkExtractionRequest):
                 level=b['level'],
                 title=b['title'],
                 pravachan_no=b.get('pravachan_no'),
-                date=b.get('date')
+                date=b.get('date'),
+                gatha=b.get('gatha'),
+                kalash=b.get('kalash'),
+                shlok=b.get('shlok'),
             )
             for b in bookmarks_data
         ]

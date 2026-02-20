@@ -53,6 +53,15 @@ const ParsedBookmarksModal = ({
                 <td className="py-2 px-3 text-sm text-slate-700 text-center">
                     {bookmark.date || '-'}
                 </td>
+                <td className="py-2 px-3 text-sm text-slate-700 text-center">
+                    {bookmark.gatha || '-'}
+                </td>
+                <td className="py-2 px-3 text-sm text-slate-700 text-center">
+                    {bookmark.kalash || '-'}
+                </td>
+                <td className="py-2 px-3 text-sm text-slate-700 text-center">
+                    {bookmark.shlok || '-'}
+                </td>
             </tr>
         );
     };
@@ -141,6 +150,15 @@ const ParsedBookmarksModal = ({
                                                     </th>
                                                     <th className="py-2 px-3 text-left text-xs font-semibold text-green-900 uppercase tracking-wider text-center">
                                                         Date
+                                                    </th>
+                                                    <th className="py-2 px-3 text-left text-xs font-semibold text-green-900 uppercase tracking-wider text-center">
+                                                        Gatha
+                                                    </th>
+                                                    <th className="py-2 px-3 text-left text-xs font-semibold text-green-900 uppercase tracking-wider text-center">
+                                                        Kalash
+                                                    </th>
+                                                    <th className="py-2 px-3 text-left text-xs font-semibold text-green-900 uppercase tracking-wider text-center">
+                                                        Shlok
                                                     </th>
                                                 </tr>
                                             </thead>

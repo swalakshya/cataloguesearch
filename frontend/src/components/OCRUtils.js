@@ -694,7 +694,7 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
             const ignored = [];
 
             data.bookmarks.forEach(bookmark => {
-                if (bookmark.pravachan_no || bookmark.date) {
+                if (bookmark.pravachan_no || bookmark.date || bookmark.gatha || bookmark.kalash || bookmark.shlok) {
                     extracted.push(bookmark);
                 } else {
                     ignored.push(bookmark);

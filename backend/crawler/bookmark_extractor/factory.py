@@ -6,6 +6,7 @@ import os
 
 from backend.config import Config
 from backend.crawler.bookmark_extractor.base import BookmarkExtractor
+from backend.crawler.bookmark_extractor.gemini import GeminiBookmarkExtractor
 from backend.crawler.bookmark_extractor.ollama import OllamaBookmarkExtractor
 
 log_handle = logging.getLogger(__name__)
@@ -28,16 +29,19 @@ def create_bookmark_extractor_by_name(llm_type: str, model: str = None) -> Bookm
     llm_type_lower = llm_type.lower()
 
     if llm_type_lower == "ollama":
-        # Ollama runs locally, no API key needed
-        # Use custom model if provided, otherwise use default
         ollama_model = model or os.getenv("OLLAMA_MODEL", "phi4:14b")
-        log_handle.info("Creating OllamaBookmarkExtractor for llm_type=ollama with model=%s", ollama_model)
+        log_handle.info("Creating OllamaBookmarkExtractor with model=%s", ollama_model)
         return OllamaBookmarkExtractor(model=ollama_model)
+
+    elif llm_type_lower == "gemini":
+        gemini_model = model or os.getenv("GEMINI_BOOKMARK_MODEL", "gemini-2.5-flash")
+        log_handle.info("Creating GeminiBookmarkExtractor with model=%s", gemini_model)
+        return GeminiBookmarkExtractor(model=gemini_model)
 
     else:
         raise ValueError(
             f"Unsupported bookmark extractor LLM: {llm_type}. "
-            f"Supported values: 'ollama', 'mock'"
+            f"Supported values: 'ollama', 'gemini'"
         )
 
 
