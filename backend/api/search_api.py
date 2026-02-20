@@ -16,11 +16,6 @@ from backend.utils import json_dumps, JSONResponse, log_memory_usage
 from utils.logger import setup_logging, VERBOSE_LEVEL_NUM, METRICS_LEVEL_NUM
 from backend.api.feedback_api import router as feedback_router
 
-# Only import eval router if not in Docker environment and not running pytest
-# (eval/ folder not available in Docker, and eval imports may fail in tests)
-if not Config.is_docker_environment() and 'pytest' not in sys.modules:
-    from eval.api import router as eval_router
-
 log_handle = logging.getLogger(__name__)
 
 # --- FastAPI Application Setup ---
@@ -41,10 +36,6 @@ app.add_middleware(
 
 # --- Include Routers ---
 app.include_router(feedback_router, prefix="/api")
-
-# Only include eval router if not in Docker environment and not running pytest
-if not Config.is_docker_environment() and 'pytest' not in sys.modules:
-    app.include_router(eval_router, prefix="/api")
 
 @app.on_event("startup")
 async def initialize():

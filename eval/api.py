@@ -1,5 +1,7 @@
-from fastapi import APIRouter, HTTPException, File, UploadFile, Form, BackgroundTasks
+from fastapi import APIRouter, FastAPI, HTTPException, File, UploadFile, Form, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
+from utils.logger import setup_logging, VERBOSE_LEVEL_NUM
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional
 import os
@@ -860,3 +862,25 @@ async def process_scripture_llm(
                 os.unlink(temp_path)
             except Exception as cleanup_error:
                 log_handle.warning(f"Failed to cleanup temp file: {cleanup_error}")
+
+
+# --- Standalone Eval App ---
+# Run with: uvicorn eval.api:app --host 0.0.0.0 --port 8000 --env-file .env.local
+app = FastAPI(title="Catalogue Eval UI", version="1.0.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.include_router(router, prefix="/api")
+
+@app.on_event("startup")
+async def startup():
+    logs_dir = os.environ.get("LOGS_DIR", "logs")
+    setup_logging(
+        logs_dir=logs_dir, console_level=VERBOSE_LEVEL_NUM,
+        file_level=VERBOSE_LEVEL_NUM,
+        console_only=False)
+    log_handle.info("Eval app started.")
