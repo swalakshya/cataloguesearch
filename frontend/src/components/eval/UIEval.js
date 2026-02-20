@@ -445,6 +445,7 @@ const UIEval = () => {
                             <ScriptureLLMEval
                                 selectedFile={selectedFile}
                                 baseDirectoryHandles={baseDirectoryHandles}
+                                basePaths={basePaths}
                             />
                         )}
                     </div>

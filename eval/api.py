@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from utils.logger import setup_logging, VERBOSE_LEVEL_NUM
 from pydantic import BaseModel, Field
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 import os
 import sys
 import tempfile
@@ -106,7 +106,7 @@ class ScriptureEvalRequest(BaseModel):
 
 # --- Bookmark Extraction Models ---
 class BookmarkExtractionRequest(BaseModel):
-    pdf_path: str = Field(..., description="Full path to the PDF file")
+    bookmarks: List[Dict[str, Any]] = Field(..., description="List of bookmark objects with title, page, level")
     llm_provider: str = Field("groq", description="LLM provider to use: 'groq' or 'gemini'")
 
 class BookmarkData(BaseModel):
@@ -122,7 +122,6 @@ class BookmarkData(BaseModel):
 class BookmarkExtractionResponse(BaseModel):
     bookmarks: List[BookmarkData]
     total: int
-    pdf_path: str
 
 # --- OCR Preview Models ---
 class ScriptureLLMTextBlock(BaseModel):
@@ -569,23 +568,22 @@ async def process_scripture(request: ScriptureEvalRequest):
 @router.post("/bookmarks/extract", response_model=BookmarkExtractionResponse)
 async def extract_bookmarks(request: BookmarkExtractionRequest):
     """
-    Extract bookmarks from a PDF file and parse pravachan numbers and dates using LLM.
+    Parse pravachan numbers, dates, and other fields from bookmark data using LLM.
+
+    Bookmarks are extracted client-side (PDF.js) and sent as JSON.
+    The backend only performs LLM parsing.
 
     Args:
-        request: BookmarkExtractionRequest with pdf_path and LLM settings
+        request: BookmarkExtractionRequest with bookmarks list and LLM provider
 
     Returns:
-        BookmarkExtractionResponse with extracted bookmark data
+        BookmarkExtractionResponse with parsed bookmark data
     """
     try:
-        # Validate PDF file exists
-        if not os.path.exists(request.pdf_path):
-            raise HTTPException(status_code=404, detail=f"PDF file not found: {request.pdf_path}")
+        if not request.bookmarks:
+            raise HTTPException(status_code=400, detail="No bookmarks provided")
 
-        if not request.pdf_path.lower().endswith('.pdf'):
-            raise HTTPException(status_code=400, detail="File must be a PDF")
-
-        log_handle.info(f"Extracting bookmarks from: {request.pdf_path} using {request.llm_provider}")
+        log_handle.info(f"Parsing {len(request.bookmarks)} bookmarks using {request.llm_provider}")
 
         # Create extractor using factory
         try:
@@ -593,10 +591,10 @@ async def extract_bookmarks(request: BookmarkExtractionRequest):
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-        # Extract and parse bookmarks
-        bookmarks_data = extractor.parse_bookmarks(request.pdf_path)
+        # Parse bookmarks using pre-extracted list (no PDF file needed)
+        bookmarks_data = extractor.parse_bookmarks_from_list(request.bookmarks)
 
-        log_handle.info(f"Successfully extracted {len(bookmarks_data)} bookmarks")
+        log_handle.info(f"Successfully parsed {len(bookmarks_data)} bookmarks")
 
         # Convert to response model
         bookmark_list = [
@@ -616,14 +614,13 @@ async def extract_bookmarks(request: BookmarkExtractionRequest):
         return BookmarkExtractionResponse(
             bookmarks=bookmark_list,
             total=len(bookmark_list),
-            pdf_path=request.pdf_path
         )
 
     except HTTPException:
         raise
     except Exception as e:
-        log_handle.error(f"Error extracting bookmarks: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error extracting bookmarks: {str(e)}")
+        log_handle.error(f"Error parsing bookmarks: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error parsing bookmarks: {str(e)}")
 
 @router.get("/pdf/proxy")
 async def proxy_pdf(url: str):

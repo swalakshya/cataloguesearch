@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Spinner } from '../SharedComponents';
 import ShowBookmarksButton from '../ShowBookmarksButton';
 import BookmarksModal from '../BookmarksModal';
+import ParseBookmarksControl from '../ParseBookmarksControl';
 import { addPageNumbersToBookmarks } from '../../utils/pdfUtils';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
@@ -20,7 +21,7 @@ const CATEGORY_STYLES = {
 
 const DEFAULT_STYLE = { label: 'Unknown', bg: 'bg-gray-50', border: 'border-gray-200', text: 'text-gray-800', badge: 'bg-gray-100 text-gray-700' };
 
-const ScriptureLLMEval = ({ selectedFile: propSelectedFile, baseDirectoryHandles }) => {
+const ScriptureLLMEval = ({ selectedFile: propSelectedFile, baseDirectoryHandles, basePaths }) => {
     // File state
     const [selectedFile, setSelectedFile] = useState(null);
     const [isPDF, setIsPDF] = useState(false);
@@ -494,6 +495,12 @@ const ScriptureLLMEval = ({ selectedFile: propSelectedFile, baseDirectoryHandles
                         <ShowBookmarksButton
                             hasBookmarks={isPDF && bookmarks.length > 0}
                             onClick={() => setShowBookmarkModal(true)}
+                        />
+
+                        {/* Parse Bookmarks control with LLM selector */}
+                        <ParseBookmarksControl
+                            isPDF={isPDF}
+                            pdfDoc={pdfDoc}
                         />
 
                         {/* Model info */}

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Spinner } from './SharedComponents';
 import ShowBookmarksButton from './ShowBookmarksButton';
 import BookmarksModal from './BookmarksModal';
-import ParsedBookmarksModal from './ParsedBookmarksModal';
+import ParseBookmarksControl from './ParseBookmarksControl';
 import { addPageNumbersToBookmarks } from '../utils/pdfUtils';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
@@ -23,12 +23,8 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
     const [previewUrl, setPreviewUrl] = useState(null);
     const [bookmarks, setBookmarks] = useState([]);
     const [showBookmarkModal, setShowBookmarkModal] = useState(false);
-    const [parsedBookmarks, setParsedBookmarks] = useState({ extracted: [], ignored: [] });
-    const [showParsedBookmarkModal, setShowParsedBookmarkModal] = useState(false);
-    const [isParsedBookmarksLoading, setIsParsedBookmarksLoading] = useState(false);
     const [useGoogleOCR, setUseGoogleOCR] = useState(false);
     const [ocrMode, setOcrMode] = useState('psm6');
-    const [bookmarkLLM, setBookmarkLLM] = useState('ollama');
 
     // New state for batch processing
     const [batchJobId, setBatchJobId] = useState(null);
@@ -159,8 +155,6 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
         setTotalPages(1);
         setBookmarks([]);
         setShowBookmarkModal(false);
-        setParsedBookmarks({ extracted: [], ignored: [] });
-        setShowParsedBookmarkModal(false);
 
         // Reset OCR state
         setOcrResults(null);
@@ -649,69 +643,6 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
         }
     };
 
-    const handleFetchParsedBookmarks = async () => {
-        if (!selectedFile || !isPDF) {
-            setError('Please select a PDF file to extract bookmarks.');
-            return;
-        }
-
-        // Get the PDF path - need to construct full path for API call
-        let pdfPath = '';
-        const isFromBrowser = propSelectedFile && propSelectedFile.relativePath &&
-                              selectedFile.name === propSelectedFile.selectedPDFFile;
-
-        if (isFromBrowser && basePaths) {
-            // Construct full path from base path + relative path
-            pdfPath = `${basePaths.base_pdf_path}/${propSelectedFile.relativePath}.pdf`;
-        } else {
-            setError('PDF path not available. Please select a file from the browser.');
-            return;
-        }
-
-        setIsParsedBookmarksLoading(true);
-        setError(null);
-
-        try {
-            const response = await fetch(`${API_BASE_URL}/eval/bookmarks/extract`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    pdf_path: pdfPath,
-                    llm_provider: bookmarkLLM
-                })
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.detail || `HTTP error! status: ${response.status}`);
-            }
-
-            // Categorize bookmarks into extracted and ignored
-            const extracted = [];
-            const ignored = [];
-
-            data.bookmarks.forEach(bookmark => {
-                if (bookmark.pravachan_no || bookmark.date || bookmark.gatha || bookmark.kalash || bookmark.shlok) {
-                    extracted.push(bookmark);
-                } else {
-                    ignored.push(bookmark);
-                }
-            });
-
-            setParsedBookmarks({ extracted, ignored });
-            setShowParsedBookmarkModal(true);
-
-        } catch (err) {
-            setError(`Failed to fetch parsed bookmarks: ${err.message}`);
-            console.error('Parsed Bookmarks Error:', err);
-        } finally {
-            setIsParsedBookmarksLoading(false);
-        }
-    };
-
     const ProgressBar = ({ progress, total }) => {
         const percentage = total > 0 ? Math.round((progress / total) * 100) : 0;
         return (
@@ -732,14 +663,6 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
                 onClose={() => setShowBookmarkModal(false)}
                 bookmarks={bookmarks}
                 onBookmarkClick={handleBookmarkClick}
-            />
-
-            {/* Parsed Bookmarks Modal */}
-            <ParsedBookmarksModal
-                isOpen={showParsedBookmarkModal}
-                onClose={() => setShowParsedBookmarkModal(false)}
-                extractedBookmarks={parsedBookmarks.extracted}
-                ignoredBookmarks={parsedBookmarks.ignored}
             />
 
             {/* Main OCR Utils Panel Container */}
@@ -946,40 +869,11 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
                                 onClick={() => setShowBookmarkModal(true)}
                             />
 
-                            {/* Show parsed bookmarks button with LLM selector */}
-                            {isPDF && selectedFile && propSelectedFile && propSelectedFile.relativePath && (
-                                <div className="flex items-center space-x-2">
-                                    <select
-                                        value={bookmarkLLM}
-                                        onChange={(e) => setBookmarkLLM(e.target.value)}
-                                        className="text-sm border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                                        disabled={isParsedBookmarksLoading}
-                                    >
-                                        <option value="ollama">Ollama (Local)</option>
-                                        <option value="groq">Groq</option>
-                                        <option value="gemini">Gemini</option>
-                                    </select>
-                                    <button
-                                        onClick={handleFetchParsedBookmarks}
-                                        disabled={isParsedBookmarksLoading}
-                                        className="text-sm text-purple-600 hover:text-purple-800 flex items-center disabled:text-gray-400 disabled:hover:text-gray-400"
-                                    >
-                                        {isParsedBookmarksLoading ? (
-                                            <>
-                                                <Spinner />
-                                                <span className="ml-1">Loading...</span>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                                                </svg>
-                                                Parse Bookmarks
-                                            </>
-                                        )}
-                                    </button>
-                                </div>
-                            )}
+                            {/* Parse Bookmarks control with LLM selector */}
+                            <ParseBookmarksControl
+                                isPDF={isPDF}
+                                pdfDoc={pdfDoc}
+                            />
                         </div>
 
                         {/* Action Buttons */}
