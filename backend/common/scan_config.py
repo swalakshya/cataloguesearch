@@ -105,6 +105,18 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
                 if "ignore_bookmarks" in default_config:
                     scan_meta["ignore_bookmarks"] = default_config["ignore_bookmarks"]
 
+                # Update ocr_engine setting from default config (if present)
+                if "ocr_engine" in default_config:
+                    scan_meta["ocr_engine"] = default_config["ocr_engine"]
+
+                # Update llm_model setting from default config (if present)
+                if "llm_model" in default_config:
+                    scan_meta["llm_model"] = default_config["llm_model"]
+
+                # Update llm_workers setting from default config (if present)
+                if "llm_workers" in default_config:
+                    scan_meta["llm_workers"] = default_config["llm_workers"]
+
             except (json.JSONDecodeError, IOError) as e:
                 log_handle.warning(f"Could not read or parse {scan_config_path}: {e}")
 
@@ -139,5 +151,17 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
         # Update ignore_bookmarks setting from file-specific config (overrides default)
         if "ignore_bookmarks" in file_config:
             scan_meta["ignore_bookmarks"] = file_config["ignore_bookmarks"]
+
+        # Update ocr_engine setting from file-specific config (overrides default)
+        if "ocr_engine" in file_config:
+            scan_meta["ocr_engine"] = file_config["ocr_engine"]
+
+        # Update llm_model setting from file-specific config (overrides default)
+        if "llm_model" in file_config:
+            scan_meta["llm_model"] = file_config["llm_model"]
+
+        # Update llm_workers setting from file-specific config (overrides default)
+        if "llm_workers" in file_config:
+            scan_meta["llm_workers"] = file_config["llm_workers"]
 
     return scan_meta

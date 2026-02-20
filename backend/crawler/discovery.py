@@ -5,6 +5,7 @@ import sys
 import traceback
 import uuid
 import logging
+import requests
 from datetime import datetime
 
 import fitz
@@ -52,18 +53,24 @@ class SingleFileProcessor:
 
     def _get_pdf_processor(self) -> PDFProcessor:
         """
-        Creates and returns the appropriate PDF processor based on chunk_strategy.
+        Creates and returns the appropriate PDF processor.
+        ocr_engine from scan_config determines LLM vs Tesseract.
+        chunk_strategy determines paragraph chunking for Tesseract processors.
         Uses the injected pdf_processor_factory if provided (for testing).
 
         Returns:
-            PDFProcessor or AdvancedPDFProcessor instance
+            PDFProcessor, AdvancedPDFProcessor, or LLMPDFProcessor instance
         """
         if self._pdf_processor_factory:
             # Use injected factory (for testing)
             return self._pdf_processor_factory(self._config)
         else:
-            # Use default factory
-            return create_pdf_processor(self._config, self._get_chunk_strategy())
+            # Use default factory — pass scan_config so ocr_engine can be read
+            return create_pdf_processor(
+                self._config,
+                self._get_chunk_strategy(),
+                self._scan_config
+            )
 
     def _get_ocr_file_extension(self) -> str:
         """
@@ -393,6 +400,48 @@ class Discovery:
 
         return directories_to_crawl
 
+    def _download_missing_pdfs(self, directory: str):
+        """
+        Checks the directory's scan_config.json for file entries with a file_url
+        and downloads any PDFs that don't already exist locally.
+
+        The PDF is saved as <key>.pdf (e.g. Samaysaar.pdf) in the same directory.
+        """
+        scan_config_path = os.path.join(directory, "scan_config.json")
+        if not os.path.exists(scan_config_path):
+            return
+
+        try:
+            with open(scan_config_path, "r", encoding="utf-8") as f:
+                scan_config_data = json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            log_handle.warning(f"Could not read scan_config.json in {directory}: {e}")
+            return
+
+        for key, file_config in scan_config_data.items():
+            if key == "default" or not isinstance(file_config, dict):
+                continue
+
+            file_url = file_config.get("file_url", "")
+            if not file_url:
+                continue
+
+            pdf_path = os.path.join(directory, f"{key}.pdf")
+            if os.path.exists(pdf_path):
+                log_handle.info(f"PDF already exists, skipping download: {pdf_path}")
+                continue
+
+            log_handle.info(f"Downloading {key}.pdf from {file_url}")
+            try:
+                response = requests.get(file_url, timeout=120, stream=True)
+                response.raise_for_status()
+                with open(pdf_path, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                log_handle.info(f"Downloaded {pdf_path} ({os.path.getsize(pdf_path)} bytes)")
+            except Exception as e:
+                log_handle.error(f"Failed to download {key}.pdf from {file_url}: {e}")
+
     def process_directory(self, directory, process=False, index=False, dry_run=False, reindex_metadata_only=False, scan_time=None):
         """
         Process all PDF files in a single directory (non-recursive).
@@ -407,6 +456,9 @@ class Discovery:
         """
         if scan_time is None:
             scan_time = datetime.now().isoformat()
+
+        # Download any missing PDFs referenced by file_url in scan_config.json
+        self._download_missing_pdfs(directory)
 
         try:
             files = os.listdir(directory)
