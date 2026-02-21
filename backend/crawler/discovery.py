@@ -16,6 +16,7 @@ from backend.utils import json_dumps
 from backend.common.scan_config import get_scan_config
 from backend.config import Config
 from backend.crawler.index_generator import IndexGenerator
+from backend.crawler.granth_index_generator import GranthIndexGenerator
 from backend.crawler.index_state import IndexState
 from backend.common.utils import get_merged_config
 
@@ -71,6 +72,20 @@ class SingleFileProcessor:
                 self._get_chunk_strategy(),
                 self._scan_config
             )
+
+    def _get_index_generator(self) -> IndexGenerator:
+        """
+        Returns the appropriate IndexGenerator for this document.
+
+        Uses GranthIndexGenerator for LLM-extracted documents (ocr_engine == "llm"),
+        which additionally writes verses_NNNN.json files alongside paragraphs.
+        Falls back to the shared indexing module for all other documents.
+        """
+        ocr_engine = self._scan_config.get("ocr_engine", self._config.OCR_ENGINE)
+        if ocr_engine == "llm":
+            return GranthIndexGenerator(
+                self._config, self._indexing_module._opensearch_client)
+        return self._indexing_module
 
     def _get_ocr_file_extension(self) -> str:
         """
@@ -297,7 +312,8 @@ class SingleFileProcessor:
         page_to_pravachan_data = self._apply_forward_fill(parsed_bookmarks, total_pages)
 
         pdf_processor = self._get_pdf_processor()
-        self._indexing_module.index_document(
+        index_generator = self._get_index_generator()
+        index_generator.index_document(
             document_id, relative_path, output_ocr_dir, output_text_dir,
             pages_list, file_metadata, self._scan_config,
             page_to_pravachan_data,
