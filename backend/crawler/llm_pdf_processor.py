@@ -266,6 +266,29 @@ class LLMPDFProcessor(PDFProcessor):
             except IOError as e:
                 log_handle.error(f"Failed to write {fname}: {e}")
 
+    def read_paragraphs(self, ocr_dir: str, pages_list: list[int]) -> list[tuple[int, list[dict]]]:
+        """
+        Reads LLM-extracted JSON files and returns typed block lists per page.
+
+        Args:
+            ocr_dir: Directory containing page_NNNN.json files
+            pages_list: List of page numbers to read
+
+        Returns:
+            List of (page_num, blocks) where blocks is a list of
+            {"type": str, "text": str} dicts as written by _write_output_to_file
+        """
+        pages = []
+        for page_num in pages_list:
+            ocr_file = f"{ocr_dir}/page_{page_num:04d}.json"
+            try:
+                with open(ocr_file, 'r', encoding='utf-8') as fh:
+                    blocks = json.load(fh)
+                pages.append((page_num, blocks))
+            except (IOError, json.JSONDecodeError) as e:
+                log_handle.error(f"Could not read {ocr_file}: {e}")
+        return pages
+
     # Tesseract-specific methods — not used by this processor
     def _generate_paragraphs(self, pdf_file, page_list, scan_config, language):
         raise NotImplementedError("LLMPDFProcessor uses _generate_paragraphs_llm instead")

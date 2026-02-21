@@ -4,7 +4,7 @@ crawler:
   base_text_path: "{HOME}/cataloguesearch/text"
   base_ocr_path: "{HOME}/cataloguesearch/ocr"
   sqlite_db_path: "{HOME}/cataloguesearch/db/cataloguesearch.db"
-  bookmark_extractor_llm: "ollama"
+  bookmark_extractor_llm: "gemini"
   ocr_engine: "tesseract"
   default_llm_model: "gemini-2.5-flash"
   llm_workers: 6

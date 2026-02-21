@@ -74,12 +74,15 @@ class SingleFileProcessor:
 
     def _get_ocr_file_extension(self) -> str:
         """
-        Returns the file extension for OCR files based on chunk_strategy.
+        Returns the file extension for OCR files based on the OCR engine.
 
         Returns:
-            '.json' for advanced strategy, '.txt' otherwise
+            '.json' for LLM-based or advanced strategies, '.txt' otherwise
         """
-        return '.json' if self._get_chunk_strategy() == 'advanced' else '.txt'
+        ocr_engine = self._scan_config.get("ocr_engine", self._config.OCR_ENGINE)
+        if ocr_engine == "llm" or self._get_chunk_strategy() == "advanced":
+            return ".json"
+        return ".txt"
 
     def _get_metadata(self) -> dict:
         """
@@ -293,11 +296,13 @@ class SingleFileProcessor:
         # Apply forward-fill logic to map all pages
         page_to_pravachan_data = self._apply_forward_fill(parsed_bookmarks, total_pages)
 
+        pdf_processor = self._get_pdf_processor()
         self._indexing_module.index_document(
             document_id, relative_path, output_ocr_dir, output_text_dir,
             pages_list, file_metadata, self._scan_config,
             page_to_pravachan_data,
-            reindex_metadata_only, dry_run
+            reindex_metadata_only, dry_run,
+            pdf_processor=pdf_processor
         )
 
         if dry_run:
@@ -442,7 +447,9 @@ class Discovery:
             except Exception as e:
                 log_handle.error(f"Failed to download {key}.pdf from {file_url}: {e}")
 
-    def process_directory(self, directory, process=False, index=False, dry_run=False, reindex_metadata_only=False, scan_time=None):
+    def process_directory(
+            self, directory, process=False, index=False,
+            dry_run=False, reindex_metadata_only=False, scan_time=None):
         """
         Process all PDF files in a single directory (non-recursive).
 

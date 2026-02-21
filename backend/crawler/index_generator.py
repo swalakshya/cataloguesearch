@@ -42,16 +42,18 @@ class IndexGenerator:
         self, document_id: str, original_filename: str,
         ocr_dir: str, output_text_dir: str, pages_list: list[int], metadata: dict,
         scan_config: dict, page_to_pravachan_data: dict[int, dict],
-        reindex_metadata_only: bool = False, dry_run: bool = True):
+        reindex_metadata_only: bool = False, dry_run: bool = True,
+        pdf_processor=None):
         log_handle.info(
             f"Indexing document: {document_id}, reindex_metadata_only: {reindex_metadata_only}, "
             f"Dry Run: {dry_run}")
 
-        # Extract chunk_strategy from scan_config, fallback to config.yaml if not provided
         chunk_strategy = scan_config.get("chunk_strategy")
 
-        # Create appropriate PDF processor based on chunk_strategy to read OCR files
-        pdf_processor = create_pdf_processor(self._config, chunk_strategy)
+        # Use the provided processor (created by SingleFileProcessor) or fall back to
+        # creating one here for standalone callers (scripts, tests).
+        if pdf_processor is None:
+            pdf_processor = create_pdf_processor(self._config, chunk_strategy, scan_config)
 
         # Read OCR data using appropriate processor (text files or JSON files)
         raw_data = pdf_processor.read_paragraphs(ocr_dir, pages_list)
@@ -72,8 +74,8 @@ class IndexGenerator:
         language = metadata.get("language", "hi")
         language_meta = get_language_meta(language, scan_config)
 
-        # Create appropriate paragraph generator based on chunk_strategy
-        paragraph_gen = create_paragraph_generator(self._config, language_meta, chunk_strategy)
+        # Create appropriate paragraph generator based on chunk_strategy / ocr_engine
+        paragraph_gen = create_paragraph_generator(self._config, language_meta, chunk_strategy, scan_config)
 
         # Generate paragraphs from raw data
         processed_paras = paragraph_gen.generate_paragraphs(raw_data, scan_config)
