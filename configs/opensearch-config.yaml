@@ -149,6 +149,16 @@ search_index:
       date:
         type: date
         format: "yyyy-MM-dd||strict_date_optional_time||epoch_millis"
+      gatha:
+        type: keyword
+      kalash:
+        type: keyword
+      shlok:
+        type: keyword
+      verse_type:
+        type: keyword
+      verse_id:
+        type: keyword
       vector_embedding:
         type: knn_vector
         dimension: 1024

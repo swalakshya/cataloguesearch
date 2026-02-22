@@ -146,35 +146,38 @@ class SingleFileProcessor:
         # 3. Return the final sorted list of unique pages
         return sorted(list(all_pages))
 
+    # All meaningful fields that the bookmark extractor can return
+    _BOOKMARK_FIELDS = ("pravachan_no", "date", "gatha", "kalash", "shlok")
+
     def _apply_forward_fill(self, parsed_bookmarks, total_pages):
         """
-        Maps every page to pravachan data using forward-fill logic.
+        Maps every page to bookmark data using forward-fill logic.
         Pages without bookmarks inherit data from the previous bookmark.
 
+        Handles both Pravachan bookmarks (pravachan_no, date) and Granth bookmarks
+        (gatha, kalash, shlok) generically — any bookmark with at least one non-null
+        meaningful field advances the forward-fill state.
+
         Args:
-            parsed_bookmarks: List of dicts with 'page', 'pravachan_no', 'date'
+            parsed_bookmarks: List of dicts from parse_bookmarks()
             total_pages: Total number of pages in PDF
 
         Returns:
-            dict[int, dict]: Mapping of page_num -> {pravachan_no, date}
+            dict[int, dict]: Mapping of page_num -> {pravachan_no, date, gatha, kalash, shlok}
         """
         page_to_data = {}
-        current_data = {"pravachan_no": None, "date": None}
+        current_data = {f: None for f in self._BOOKMARK_FIELDS}
         bookmark_index = 0
         sorted_bookmarks = sorted(parsed_bookmarks, key=lambda x: x['page'])
 
         for page_num in range(1, total_pages + 1):
-            # Advance bookmark if next one starts on this page
             while (bookmark_index < len(sorted_bookmarks) and
                    sorted_bookmarks[bookmark_index]['page'] <= page_num):
                 bookmark = sorted_bookmarks[bookmark_index]
-                # Only process bookmarks with valid dates (pravachan bookmarks)
-                # Skip section headers, gatha titles, etc. which have null dates
-                if bookmark.get('date') is not None:
-                    current_data = {
-                        "pravachan_no": bookmark.get('pravachan_no'),
-                        "date": bookmark.get('date')
-                    }
+                # Advance only if the bookmark carries at least one meaningful field
+                # (skips pure section headers with all-null fields)
+                if any(bookmark.get(f) is not None for f in self._BOOKMARK_FIELDS):
+                    current_data = {f: bookmark.get(f) for f in self._BOOKMARK_FIELDS}
                 bookmark_index += 1
             page_to_data[page_num] = current_data.copy()
 

@@ -193,6 +193,9 @@ class IndexGenerator:
                         "metadata": metadata,
                         "pravachan_number": pravachan_number,
                         "date": date_iso,
+                        "gatha": pravachan_data.get('gatha'),
+                        "kalash": pravachan_data.get('kalash'),
+                        "shlok": pravachan_data.get('shlok'),
                         "timestamp_indexed": timestamp
                     }
                 }
@@ -240,6 +243,9 @@ class IndexGenerator:
                 "metadata": metadata,
                 "pravachan_number": pravachan_number,
                 "date": date_iso,
+                "gatha": pravachan_data.get('gatha'),
+                "kalash": pravachan_data.get('kalash'),
+                "shlok": pravachan_data.get('shlok'),
                 "timestamp_indexed": timestamp,
             }
 

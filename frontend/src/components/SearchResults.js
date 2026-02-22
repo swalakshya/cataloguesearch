@@ -154,6 +154,9 @@ export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, re
                             : `${result.metadata.verse_type_start_num}-${result.metadata.verse_type_end_num}`}
                     </span>
                 )}
+                {resultType === 'granth' && result.metadata?.Author && (
+                    <span className="text-slate-600">Author: {result.metadata.Author}</span>
+                )}
                 {result.metadata?.Series && <span>{result.metadata.Series}</span>}
                 {result.date && result.pravachan_number ? (
                     <>
@@ -163,7 +166,15 @@ export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, re
                 ) : (
                     <>
                         {resultType !== 'granth' && <span className="text-slate-600">{result.filename}</span>}
-                        <span>Page Number: {result.page_number}</span>
+                        {resultType === 'granth' ? (
+                            <>
+                                {result.gatha && <span className="text-slate-600">Gatha: {result.gatha}</span>}
+                                {result.kalash && <span className="text-slate-600">Kalash: {result.kalash}</span>}
+                                {result.shlok && <span className="text-slate-600">Shlok: {result.shlok}</span>}
+                            </>
+                        ) : (
+                            <span>Page Number: {result.page_number}</span>
+                        )}
                     </>
                 )}
                 {result.file_url && (
