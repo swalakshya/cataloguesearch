@@ -265,7 +265,8 @@ def get_metadata(config: Config) -> dict[str, dict[str, list[str]]]:
 
         # Build result dynamically keyed by content_type so new types are
         # picked up automatically without code changes.
-        result = {}
+        # Seed with known types so callers always find these keys even for empty indices.
+        result = {"Pravachan": {}, "Granth": {}}
 
         for hit in response.get('hits', {}).get('hits', []):
             source = hit.get('_source', {})

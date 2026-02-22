@@ -63,8 +63,11 @@ class SingleFileProcessor:
             PDFProcessor, AdvancedPDFProcessor, or LLMPDFProcessor instance
         """
         if self._pdf_processor_factory:
-            # Use injected factory (for testing)
-            return self._pdf_processor_factory(self._config)
+            # Support both a factory callable (class or function) and a pre-built instance.
+            # Tests may pass either: MockPDFProcessor (class) or create_pdf_processor(...) (instance).
+            if callable(self._pdf_processor_factory):
+                return self._pdf_processor_factory(self._config)
+            return self._pdf_processor_factory  # already an instance
         else:
             # Use default factory — pass scan_config so ocr_engine can be read
             return create_pdf_processor(

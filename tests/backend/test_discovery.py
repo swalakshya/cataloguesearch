@@ -43,7 +43,8 @@ class MockIndexGenerator(IndexGenerator):
         self, document_id: str, original_filename: str,
         ocr_dir: str, output_text_dir: str, pages_list: list[int], metadata: dict,
         scan_config: dict, page_to_pravachan_data: dict[int, dict],
-        reindex_metadata_only: bool = False, dry_run: bool = True):
+        reindex_metadata_only: bool = False, dry_run: bool = True,
+        pdf_processor=None):
         pass
 
     def create_index_if_not_exists(self):
