@@ -76,12 +76,21 @@ const ShareModal = ({ result, query, currentFilters, language, searchType, onClo
                                 <div className="text-sm text-slate-700 mb-2">
                                     <strong>Granth:</strong> {shareData.granthName || 'Unknown Granth'}
                                 </div>
-                                <div className="text-sm text-slate-700 mb-2">
-                                    <strong>Author:</strong> {shareData.author || 'Unknown Author'}
-                                </div>
-                                <div className="text-sm text-slate-700">
-                                    <strong>Location:</strong> {shareData.locationInfo || 'Unknown'}
-                                </div>
+                                {shareData.author && (
+                                    <div className="text-sm text-slate-700 mb-2">
+                                        <strong>Author:</strong> {shareData.author}
+                                    </div>
+                                )}
+                                {shareData.tikakaar && (
+                                    <div className="text-sm text-slate-700 mb-2">
+                                        <strong>Tikakaar:</strong> {shareData.tikakaar}
+                                    </div>
+                                )}
+                                {shareData.locationInfo && (
+                                    <div className="text-sm text-slate-700">
+                                        <strong>Location:</strong> {shareData.locationInfo}
+                                    </div>
+                                )}
                             </>
                         ) : (
                             // Pravachan result display

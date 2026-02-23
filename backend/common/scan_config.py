@@ -67,7 +67,9 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
         "typo_list": [],
         "crop": {},
         "question_prefix": [],
-        "answer_prefix": []
+        "answer_prefix": [],
+        "stop_words": [],
+        "verses": []
     }
 
     # Merge scan_config.json from each folder, starting from base directory
@@ -88,6 +90,8 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
                 scan_meta["typo_list"].extend(default_config.get("typo_list", []))
                 scan_meta["question_prefix"].extend(default_config.get("question_prefix", []))
                 scan_meta["answer_prefix"].extend(default_config.get("answer_prefix", []))
+                scan_meta["stop_words"].extend(default_config.get("stop_words", []))
+                scan_meta["verses"].extend(default_config.get("verses", []))
 
                 # Update crop settings from default config
                 if "crop" in default_config:
@@ -105,6 +109,18 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
                 if "ignore_bookmarks" in default_config:
                     scan_meta["ignore_bookmarks"] = default_config["ignore_bookmarks"]
 
+                # Update ocr_engine setting from default config (if present)
+                if "ocr_engine" in default_config:
+                    scan_meta["ocr_engine"] = default_config["ocr_engine"]
+
+                # Update llm_model setting from default config (if present)
+                if "llm_model" in default_config:
+                    scan_meta["llm_model"] = default_config["llm_model"]
+
+                # Update llm_workers setting from default config (if present)
+                if "llm_workers" in default_config:
+                    scan_meta["llm_workers"] = default_config["llm_workers"]
+
             except (json.JSONDecodeError, IOError) as e:
                 log_handle.warning(f"Could not read or parse {scan_config_path}: {e}")
 
@@ -116,6 +132,8 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
         scan_meta["header_regex"].extend(file_config.get("header_regex", []))
         scan_meta["question_prefix"].extend(file_config.get("question_prefix", []))
         scan_meta["answer_prefix"].extend(file_config.get("answer_prefix", []))
+        scan_meta["stop_words"].extend(file_config.get("stop_words", []))
+        scan_meta["verses"].extend(file_config.get("verses", []))
         scan_meta["file_url"] = file_config.get("file_url", "")
         if file_config.get("start_page") and file_config.get("end_page"):
             # Page numbers are typically file-specific.
@@ -139,5 +157,17 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
         # Update ignore_bookmarks setting from file-specific config (overrides default)
         if "ignore_bookmarks" in file_config:
             scan_meta["ignore_bookmarks"] = file_config["ignore_bookmarks"]
+
+        # Update ocr_engine setting from file-specific config (overrides default)
+        if "ocr_engine" in file_config:
+            scan_meta["ocr_engine"] = file_config["ocr_engine"]
+
+        # Update llm_model setting from file-specific config (overrides default)
+        if "llm_model" in file_config:
+            scan_meta["llm_model"] = file_config["llm_model"]
+
+        # Update llm_workers setting from file-specific config (overrides default)
+        if "llm_workers" in file_config:
+            scan_meta["llm_workers"] = file_config["llm_workers"]
 
     return scan_meta

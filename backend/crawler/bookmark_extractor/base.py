@@ -16,7 +16,7 @@ class BookmarkExtractor(ABC):
 
     def __init__(self):
         self.system_prompt = """
-You are a data extraction assistant. Extract the Pravachan Number and Date from bookmark titles.
+You are a data extraction assistant. Extract the Pravachan Number, Date, Gatha, Kalash, and Shlok from bookmark titles.
 
 You will receive a JSON array of objects. You MUST return a JSON array with the SAME number of items.
 
@@ -24,18 +24,29 @@ Each output object must have:
 - index: the position number from the input
 - pravachan_no: the extracted pravachan number, or null if not found
 - date: the extracted date in DD-MM-YYYY format, or null if not found
+- gatha: the extracted gatha number/range (e.g. "4", "65-66"), or null if not found
+- kalash: the extracted kalash number/range (e.g. "219", "2-3"), or null if not found
+- shlok: the extracted shlok number/range (e.g. "5", "2-14-15"), or null if not found
+
+Gatha variants (case-insensitive): gatha, GATHA, gATHA, Gāthā, etc.
+Kalash variants (case-insensitive): kalash, KALASH, Kalash, Kalaś, etc.
+Shlok variants (case-insensitive): shlok, SHLOK, sHLOK, shloka, Sloka, etc.
+
+Number normalization: replace commas with dashes ("2,3" → "2-3"), replace "&" with "-" ("65 & 66" → "65-66").
 
 EXAMPLE - Process ALL items in the input array:
-Input (2 items):
+Input (3 items):
 [
-  {"index": 0, "title": "Prav. no. 244-A on Kalash 219, Date: 07-11-1965"},
-  {"index": 1, "title": "Gatha 65 & 66"}
+  {"index": 0, "page": 5,  "title": "Prav. no. 244-A on Kalash 219, Date: 07-11-1965"},
+  {"index": 1, "page": 18, "title": "Gatha 65 & 66"},
+  {"index": 2, "page": 32, "title": "sHLOK 2-14-15"}
 ]
 
-Output (2 items - MUST match input length):
+Output (3 items - MUST match input length):
 [
-  {"index": 0, "pravachan_no": "244-A", "date": "07-11-1965"},
-  {"index": 1, "pravachan_no": null, "date": null}
+  {"index": 0, "page": 5,  "pravachan_no": "244-A", "date": "07-11-1965", "gatha": null, "kalash": "219", "shlok": null},
+  {"index": 1, "page": 18, "pravachan_no": null, "date": null, "gatha": "65-66", "kalash": null, "shlok": null},
+  {"index": 2, "page": 32, "pravachan_no": null, "date": null, "gatha": null, "kalash": null, "shlok": "2-14-15"}
 ]
 
 CRITICAL: Output array length MUST equal input array length. Process every item.
@@ -70,10 +81,10 @@ Return ONLY the JSON array, nothing else.
 
         log_handle.info("Found %s bookmarks in PDF", bookmark_json['total'])
 
-        # Step 2: Prepare indexed titles for LLM
+        # Step 2: Prepare indexed titles for LLM (include page for traceability in logs)
         bookmarks = bookmark_json['bookmarks']
         indexed_titles = [
-            {"index": i, "title": item.get('title', '')}
+            {"index": i, "page": item.get('page'), "title": item.get('title', '')}
             for i, item in enumerate(bookmarks)
         ]
 
@@ -105,6 +116,58 @@ Return ONLY the JSON array, nothing else.
         # Step 4: Merge extracted data back with original page numbers
         result = self._merge_results(bookmarks, all_extracted_data)
         log_handle.info("Bookmark extraction completed. Processed %s bookmarks", len(result))
+        return result
+
+    def parse_bookmarks_from_list(self, bookmarks: List[Dict[str, Any]], batch_size: int = 100) -> List[Dict[str, str]]:
+        """
+        Parse bookmarks from a pre-extracted list using LLM.
+
+        This is the preferred entry point when bookmarks have already been extracted
+        client-side (e.g. via PDF.js), avoiding the need for server-side PDF access.
+
+        Args:
+            bookmarks: List of bookmark dicts with 'title', 'page', 'level' keys
+            batch_size: Number of bookmarks to process per LLM call (default: 100)
+
+        Returns:
+            List of dictionaries with parsed bookmark data
+        """
+        if not bookmarks:
+            log_handle.warning("No bookmarks provided to parse_bookmarks_from_list")
+            return []
+
+        log_handle.info("Starting LLM parsing for %s pre-extracted bookmarks", len(bookmarks))
+
+        indexed_titles = [
+            {"index": i, "page": item.get('page'), "title": item.get('title', '')}
+            for i, item in enumerate(bookmarks)
+        ]
+
+        all_extracted_data = []
+        total_batches = (len(indexed_titles) + batch_size - 1) // batch_size
+
+        log_handle.info("Processing %s bookmarks in %s batches of %s", len(indexed_titles), total_batches, batch_size)
+
+        for batch_num in range(total_batches):
+            start_idx = batch_num * batch_size
+            end_idx = min((batch_num + 1) * batch_size, len(indexed_titles))
+            batch = indexed_titles[start_idx:end_idx]
+
+            log_handle.info("Processing batch %s/%s (%s bookmarks)", batch_num + 1, total_batches, len(batch))
+
+            extracted_data = self.call_llm(batch)
+
+            if not extracted_data:
+                log_handle.error("Failed to extract data from LLM for batch %s/%s", batch_num + 1, total_batches)
+                return []
+
+            all_extracted_data.extend(extracted_data)
+            log_handle.info("Successfully processed batch %s/%s", batch_num + 1, total_batches)
+
+        log_handle.info("Successfully extracted data from all %s batches", total_batches)
+
+        result = self._merge_results(bookmarks, all_extracted_data)
+        log_handle.info("Bookmark parsing completed. Processed %s bookmarks", len(result))
         return result
 
     def _extract_bookmarks_from_pdf(self, pdf_path: str) -> Dict[str, Any]:
@@ -156,12 +219,20 @@ Return ONLY the JSON array, nothing else.
 
             if extracted_item:
                 final_output.append({
-                    "page": original_item['page'],
+                    "page": original_item['page'],   # authoritative source
                     "level": original_item['level'],
                     "title": original_item['title'],
                     "pravachan_no": extracted_item.get('pravachan_no'),
                     "date": extracted_item.get('date'),
+                    "gatha": extracted_item.get('gatha'),
+                    "kalash": extracted_item.get('kalash'),
+                    "shlok": extracted_item.get('shlok'),
                 })
+                log_handle.debug("index=%d page=%s → pravachan=%s date=%s gatha=%s kalash=%s shlok=%s",
+                    i, original_item['page'],
+                    extracted_item.get('pravachan_no'), extracted_item.get('date'),
+                    extracted_item.get('gatha'), extracted_item.get('kalash'), extracted_item.get('shlok')
+                )
 
         return final_output
 

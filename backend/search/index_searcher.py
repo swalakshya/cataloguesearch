@@ -342,6 +342,9 @@ class IndexSearcher:
                 "file_url": metadata.get("file_url", ""),
                 "date": source.get('date'),
                 "pravachan_number": source.get('pravachan_number'),
+                "gatha": source.get('gatha'),
+                "kalash": source.get('kalash'),
+                "shlok": source.get('shlok'),
                 "series_start_date": metadata.get('series_start_date'),
                 "series_end_date": metadata.get('series_end_date')
             }

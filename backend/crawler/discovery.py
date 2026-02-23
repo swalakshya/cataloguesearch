@@ -5,6 +5,7 @@ import sys
 import traceback
 import uuid
 import logging
+import requests
 from datetime import datetime
 
 import fitz
@@ -15,6 +16,7 @@ from backend.utils import json_dumps
 from backend.common.scan_config import get_scan_config
 from backend.config import Config
 from backend.crawler.index_generator import IndexGenerator
+from backend.crawler.granth_index_generator import GranthIndexGenerator
 from backend.crawler.index_state import IndexState
 from backend.common.utils import get_merged_config
 
@@ -52,27 +54,53 @@ class SingleFileProcessor:
 
     def _get_pdf_processor(self) -> PDFProcessor:
         """
-        Creates and returns the appropriate PDF processor based on chunk_strategy.
+        Creates and returns the appropriate PDF processor.
+        ocr_engine from scan_config determines LLM vs Tesseract.
+        chunk_strategy determines paragraph chunking for Tesseract processors.
         Uses the injected pdf_processor_factory if provided (for testing).
 
         Returns:
-            PDFProcessor or AdvancedPDFProcessor instance
+            PDFProcessor, AdvancedPDFProcessor, or LLMPDFProcessor instance
         """
         if self._pdf_processor_factory:
-            # Use injected factory (for testing)
-            return self._pdf_processor_factory(self._config)
+            # Support both a factory callable (class or function) and a pre-built instance.
+            # Tests may pass either: MockPDFProcessor (class) or create_pdf_processor(...) (instance).
+            if callable(self._pdf_processor_factory):
+                return self._pdf_processor_factory(self._config)
+            return self._pdf_processor_factory  # already an instance
         else:
-            # Use default factory
-            return create_pdf_processor(self._config, self._get_chunk_strategy())
+            # Use default factory — pass scan_config so ocr_engine can be read
+            return create_pdf_processor(
+                self._config,
+                self._get_chunk_strategy(),
+                self._scan_config
+            )
+
+    def _get_index_generator(self) -> IndexGenerator:
+        """
+        Returns the appropriate IndexGenerator for this document.
+
+        Uses GranthIndexGenerator for LLM-extracted documents (ocr_engine == "llm"),
+        which additionally writes verses_NNNN.json files alongside paragraphs.
+        Falls back to the shared indexing module for all other documents.
+        """
+        ocr_engine = self._scan_config.get("ocr_engine", self._config.OCR_ENGINE)
+        if ocr_engine == "llm":
+            return GranthIndexGenerator(
+                self._config, self._indexing_module._opensearch_client)
+        return self._indexing_module
 
     def _get_ocr_file_extension(self) -> str:
         """
-        Returns the file extension for OCR files based on chunk_strategy.
+        Returns the file extension for OCR files based on the OCR engine.
 
         Returns:
-            '.json' for advanced strategy, '.txt' otherwise
+            '.json' for LLM-based or advanced strategies, '.txt' otherwise
         """
-        return '.json' if self._get_chunk_strategy() == 'advanced' else '.txt'
+        ocr_engine = self._scan_config.get("ocr_engine", self._config.OCR_ENGINE)
+        if ocr_engine == "llm" or self._get_chunk_strategy() == "advanced":
+            return ".json"
+        return ".txt"
 
     def _get_metadata(self) -> dict:
         """
@@ -121,35 +149,38 @@ class SingleFileProcessor:
         # 3. Return the final sorted list of unique pages
         return sorted(list(all_pages))
 
+    # All meaningful fields that the bookmark extractor can return
+    _BOOKMARK_FIELDS = ("pravachan_no", "date", "gatha", "kalash", "shlok")
+
     def _apply_forward_fill(self, parsed_bookmarks, total_pages):
         """
-        Maps every page to pravachan data using forward-fill logic.
+        Maps every page to bookmark data using forward-fill logic.
         Pages without bookmarks inherit data from the previous bookmark.
 
+        Handles both Pravachan bookmarks (pravachan_no, date) and Granth bookmarks
+        (gatha, kalash, shlok) generically — any bookmark with at least one non-null
+        meaningful field advances the forward-fill state.
+
         Args:
-            parsed_bookmarks: List of dicts with 'page', 'pravachan_no', 'date'
+            parsed_bookmarks: List of dicts from parse_bookmarks()
             total_pages: Total number of pages in PDF
 
         Returns:
-            dict[int, dict]: Mapping of page_num -> {pravachan_no, date}
+            dict[int, dict]: Mapping of page_num -> {pravachan_no, date, gatha, kalash, shlok}
         """
         page_to_data = {}
-        current_data = {"pravachan_no": None, "date": None}
+        current_data = {f: None for f in self._BOOKMARK_FIELDS}
         bookmark_index = 0
         sorted_bookmarks = sorted(parsed_bookmarks, key=lambda x: x['page'])
 
         for page_num in range(1, total_pages + 1):
-            # Advance bookmark if next one starts on this page
             while (bookmark_index < len(sorted_bookmarks) and
                    sorted_bookmarks[bookmark_index]['page'] <= page_num):
                 bookmark = sorted_bookmarks[bookmark_index]
-                # Only process bookmarks with valid dates (pravachan bookmarks)
-                # Skip section headers, gatha titles, etc. which have null dates
-                if bookmark.get('date') is not None:
-                    current_data = {
-                        "pravachan_no": bookmark.get('pravachan_no'),
-                        "date": bookmark.get('date')
-                    }
+                # Advance only if the bookmark carries at least one meaningful field
+                # (skips pure section headers with all-null fields)
+                if any(bookmark.get(f) is not None for f in self._BOOKMARK_FIELDS):
+                    current_data = {f: bookmark.get(f) for f in self._BOOKMARK_FIELDS}
                 bookmark_index += 1
             page_to_data[page_num] = current_data.copy()
 
@@ -286,11 +317,14 @@ class SingleFileProcessor:
         # Apply forward-fill logic to map all pages
         page_to_pravachan_data = self._apply_forward_fill(parsed_bookmarks, total_pages)
 
-        self._indexing_module.index_document(
+        pdf_processor = self._get_pdf_processor()
+        index_generator = self._get_index_generator()
+        index_generator.index_document(
             document_id, relative_path, output_ocr_dir, output_text_dir,
             pages_list, file_metadata, self._scan_config,
             page_to_pravachan_data,
-            reindex_metadata_only, dry_run
+            reindex_metadata_only, dry_run,
+            pdf_processor=pdf_processor
         )
 
         if dry_run:
@@ -393,7 +427,51 @@ class Discovery:
 
         return directories_to_crawl
 
-    def process_directory(self, directory, process=False, index=False, dry_run=False, reindex_metadata_only=False, scan_time=None):
+    def _download_missing_pdfs(self, directory: str):
+        """
+        Checks the directory's scan_config.json for file entries with a file_url
+        and downloads any PDFs that don't already exist locally.
+
+        The PDF is saved as <key>.pdf (e.g. Samaysaar.pdf) in the same directory.
+        """
+        scan_config_path = os.path.join(directory, "scan_config.json")
+        if not os.path.exists(scan_config_path):
+            return
+
+        try:
+            with open(scan_config_path, "r", encoding="utf-8") as f:
+                scan_config_data = json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            log_handle.warning(f"Could not read scan_config.json in {directory}: {e}")
+            return
+
+        for key, file_config in scan_config_data.items():
+            if key == "default" or not isinstance(file_config, dict):
+                continue
+
+            file_url = file_config.get("file_url", "")
+            if not file_url:
+                continue
+
+            pdf_path = os.path.join(directory, f"{key}.pdf")
+            if os.path.exists(pdf_path):
+                log_handle.info(f"PDF already exists, skipping download: {pdf_path}")
+                continue
+
+            log_handle.info(f"Downloading {key}.pdf from {file_url}")
+            try:
+                response = requests.get(file_url, timeout=120, stream=True)
+                response.raise_for_status()
+                with open(pdf_path, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                log_handle.info(f"Downloaded {pdf_path} ({os.path.getsize(pdf_path)} bytes)")
+            except Exception as e:
+                log_handle.error(f"Failed to download {key}.pdf from {file_url}: {e}")
+
+    def process_directory(
+            self, directory, process=False, index=False,
+            dry_run=False, reindex_metadata_only=False, scan_time=None):
         """
         Process all PDF files in a single directory (non-recursive).
 
@@ -407,6 +485,9 @@ class Discovery:
         """
         if scan_time is None:
             scan_time = datetime.now().isoformat()
+
+        # Download any missing PDFs referenced by file_url in scan_config.json
+        self._download_missing_pdfs(directory)
 
         try:
             files = os.listdir(directory)

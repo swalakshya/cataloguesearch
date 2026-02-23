@@ -3,6 +3,7 @@ import OCRUtils from '../OCRUtils';
 import ParagraphGenEval from './ParagraphGenEval';
 import ScriptureEval from './ScriptureEval';
 import OCRPreview from './OCRPreview';
+import ScriptureLLMEval from './ScriptureLLMEval';
 import FileBrowser from './FileBrowser';
 import { storeDirectoryHandles, getStoredDirectoryHandles, validateDirectoryHandles } from '../../utils/directoryHandlers';
 
@@ -233,10 +234,16 @@ const UIEval = () => {
                                         isActive={activeTab === 'scripture-eval'}
                                         onClick={setActiveTab}
                                     />
+                                    <NavButton
+                                        id="scripture-llm-eval"
+                                        label="Scripture LLM Eval"
+                                        isActive={activeTab === 'scripture-llm-eval'}
+                                        onClick={setActiveTab}
+                                    />
                                 </div>
 
                                 {/* File Browser Button */}
-                                {(activeTab === 'ocr-eval' || activeTab === 'ocr-preview' || activeTab === 'paragraph-eval' || activeTab === 'scripture-eval') && (
+                                {(activeTab === 'ocr-eval' || activeTab === 'ocr-preview' || activeTab === 'paragraph-eval' || activeTab === 'scripture-eval' || activeTab === 'scripture-llm-eval') && (
                                     <button
                                         onClick={handleBrowseFiles}
                                         className="bg-green-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-green-700 transition-colors flex items-center"
@@ -431,6 +438,14 @@ const UIEval = () => {
                                 onFileSelect={handleFileSelect}
                                 basePaths={basePaths}
                                 baseDirectoryHandles={baseDirectoryHandles}
+                            />
+                        )}
+
+                        {activeTab === 'scripture-llm-eval' && (
+                            <ScriptureLLMEval
+                                selectedFile={selectedFile}
+                                baseDirectoryHandles={baseDirectoryHandles}
+                                basePaths={basePaths}
                             />
                         )}
                     </div>

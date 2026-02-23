@@ -263,38 +263,32 @@ def get_metadata(config: Config) -> dict[str, dict[str, list[str]]]:
             body=query_body
         )
 
-        # Initialize content_type-specific dictionaries
+        # Build result dynamically keyed by content_type so new types are
+        # picked up automatically without code changes.
+        # Seed with known types so callers always find these keys even for empty indices.
         result = {"Pravachan": {}, "Granth": {}}
 
         for hit in response.get('hits', {}).get('hits', []):
             source = hit.get('_source', {})
 
-            # Get content_type, key, and language from source
             content_type = source.get('content_type')
             key = source.get('key')
             language = source.get('language', 'hi')
 
-            # Handle both regular metadata (with 'values') and Granth_date_ranges (with 'date_ranges')
+            # Handle both regular metadata (with 'values') and date_ranges
             values = source.get('values')
             date_ranges = source.get('date_ranges')
-
-            # Use whichever field exists
             data = values if values is not None else date_ranges
 
             if key and data and content_type:
-                # Ensure content_type key exists in result
                 if content_type not in result:
                     result[content_type] = {}
-
-                # Create composite key: key_language
                 composite_key = f"{key}_{language}"
-
-                # The values/date_ranges should already be sorted/structured from the indexing process
                 result[content_type][composite_key] = data
 
         log_handle.info(
             f"Metadata retrieved from '{metadata_index}': "
-            f"Pravachan: {len(result.get('Pravachan', {}))} keys, Granth: {len(result.get('Granth', {}))} keys")
+            + ", ".join(f"{ct}: {len(v)} keys" for ct, v in result.items()))
         return result
     except (ConnectionError, ValueError, OSError) as e:
         log_handle.error(

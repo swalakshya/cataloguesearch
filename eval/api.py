@@ -1,7 +1,9 @@
-from fastapi import APIRouter, HTTPException, File, UploadFile, Form, BackgroundTasks
+from fastapi import APIRouter, FastAPI, HTTPException, File, UploadFile, Form, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
+from utils.logger import setup_logging, VERBOSE_LEVEL_NUM
 from pydantic import BaseModel, Field
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 import os
 import sys
 import tempfile
@@ -26,6 +28,7 @@ from backend.crawler.pdf_processor import PDFProcessor
 from backend.crawler.markdown_parser import MarkdownParser
 from backend.common.scan_config import get_scan_config
 from backend.crawler.bookmark_extractor.factory import create_bookmark_extractor_by_name
+from backend.crawler.llm_pdf_processor import extract_indic_text
 from .ocr import get_ocr_service
 from scratch.para_gen.para_gen import process_image_to_paragraphs
 
@@ -103,7 +106,7 @@ class ScriptureEvalRequest(BaseModel):
 
 # --- Bookmark Extraction Models ---
 class BookmarkExtractionRequest(BaseModel):
-    pdf_path: str = Field(..., description="Full path to the PDF file")
+    bookmarks: List[Dict[str, Any]] = Field(..., description="List of bookmark objects with title, page, level")
     llm_provider: str = Field("groq", description="LLM provider to use: 'groq' or 'gemini'")
 
 class BookmarkData(BaseModel):
@@ -112,13 +115,25 @@ class BookmarkData(BaseModel):
     title: str
     pravachan_no: Optional[str] = None
     date: Optional[str] = None
+    gatha: Optional[str] = None
+    kalash: Optional[str] = None
+    shlok: Optional[str] = None
 
 class BookmarkExtractionResponse(BaseModel):
     bookmarks: List[BookmarkData]
     total: int
-    pdf_path: str
 
 # --- OCR Preview Models ---
+class ScriptureLLMTextBlock(BaseModel):
+    type: str
+    text: str
+
+class ScriptureLLMResponse(BaseModel):
+    blocks: List[ScriptureLLMTextBlock]
+    model: str
+    language: str
+    preview_image: str  # Base64 encoded cropped page image
+
 class PreviewPageData(BaseModel):
     page_number: int
     image_data: str  # Base64 encoded image
@@ -553,23 +568,22 @@ async def process_scripture(request: ScriptureEvalRequest):
 @router.post("/bookmarks/extract", response_model=BookmarkExtractionResponse)
 async def extract_bookmarks(request: BookmarkExtractionRequest):
     """
-    Extract bookmarks from a PDF file and parse pravachan numbers and dates using LLM.
+    Parse pravachan numbers, dates, and other fields from bookmark data using LLM.
+
+    Bookmarks are extracted client-side (PDF.js) and sent as JSON.
+    The backend only performs LLM parsing.
 
     Args:
-        request: BookmarkExtractionRequest with pdf_path and LLM settings
+        request: BookmarkExtractionRequest with bookmarks list and LLM provider
 
     Returns:
-        BookmarkExtractionResponse with extracted bookmark data
+        BookmarkExtractionResponse with parsed bookmark data
     """
     try:
-        # Validate PDF file exists
-        if not os.path.exists(request.pdf_path):
-            raise HTTPException(status_code=404, detail=f"PDF file not found: {request.pdf_path}")
+        if not request.bookmarks:
+            raise HTTPException(status_code=400, detail="No bookmarks provided")
 
-        if not request.pdf_path.lower().endswith('.pdf'):
-            raise HTTPException(status_code=400, detail="File must be a PDF")
-
-        log_handle.info(f"Extracting bookmarks from: {request.pdf_path} using {request.llm_provider}")
+        log_handle.info(f"Parsing {len(request.bookmarks)} bookmarks using {request.llm_provider}")
 
         # Create extractor using factory
         try:
@@ -577,10 +591,10 @@ async def extract_bookmarks(request: BookmarkExtractionRequest):
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-        # Extract and parse bookmarks
-        bookmarks_data = extractor.parse_bookmarks(request.pdf_path)
+        # Parse bookmarks using pre-extracted list (no PDF file needed)
+        bookmarks_data = extractor.parse_bookmarks_from_list(request.bookmarks)
 
-        log_handle.info(f"Successfully extracted {len(bookmarks_data)} bookmarks")
+        log_handle.info(f"Successfully parsed {len(bookmarks_data)} bookmarks")
 
         # Convert to response model
         bookmark_list = [
@@ -589,7 +603,10 @@ async def extract_bookmarks(request: BookmarkExtractionRequest):
                 level=b['level'],
                 title=b['title'],
                 pravachan_no=b.get('pravachan_no'),
-                date=b.get('date')
+                date=b.get('date'),
+                gatha=b.get('gatha'),
+                kalash=b.get('kalash'),
+                shlok=b.get('shlok'),
             )
             for b in bookmarks_data
         ]
@@ -597,14 +614,13 @@ async def extract_bookmarks(request: BookmarkExtractionRequest):
         return BookmarkExtractionResponse(
             bookmarks=bookmark_list,
             total=len(bookmark_list),
-            pdf_path=request.pdf_path
         )
 
     except HTTPException:
         raise
     except Exception as e:
-        log_handle.error(f"Error extracting bookmarks: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error extracting bookmarks: {str(e)}")
+        log_handle.error(f"Error parsing bookmarks: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error parsing bookmarks: {str(e)}")
 
 @router.get("/pdf/proxy")
 async def proxy_pdf(url: str):
@@ -762,3 +778,112 @@ async def generate_ocr_preview(
                 os.unlink(temp_path)
             except Exception as e:
                 log_handle.warning(f"Failed to delete temp file {temp_path}: {e}")
+
+
+@router.post("/scripture-llm", response_model=ScriptureLLMResponse)
+async def process_scripture_llm(
+    image: UploadFile = File(..., description="PDF or image file to process"),
+    page_number: int = Form(1, description="Page number to extract from PDF (1-indexed)"),
+    language: str = Form("hin", description="Language code (hin, guj, eng)"),
+    model_name: str = Form("gemini-2.5-flash", description="Gemini model to use"),
+    crop_top: float = Form(0, description="Percentage to crop from top (0-50)"),
+    crop_bottom: float = Form(0, description="Percentage to crop from bottom (0-50)"),
+):
+    """
+    Process a scripture page using Gemini LLM for text extraction and categorisation.
+    Accepts a PDF (extracts the specified page) or an image file.
+    """
+    if not (0 <= crop_top <= 50 and 0 <= crop_bottom <= 50):
+        raise HTTPException(status_code=400, detail="Crop percentages must be between 0 and 50")
+
+    allowed_models = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro"]
+    if model_name not in allowed_models:
+        raise HTTPException(status_code=400, detail=f"Model must be one of: {allowed_models}")
+
+    temp_path = None
+
+    try:
+        # Save uploaded file to temp
+        is_pdf = image.content_type == 'application/pdf' or (image.filename and image.filename.lower().endswith('.pdf'))
+        suffix = '.pdf' if is_pdf else '.png'
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+            content = await image.read()
+            temp_file.write(content)
+            temp_path = temp_file.name
+
+        # Build scan_config for cropping
+        scan_config = {}
+        if crop_top > 0 or crop_bottom > 0:
+            scan_config["crop"] = {"top": crop_top, "bottom": crop_bottom}
+
+        if is_pdf:
+            # Extract the specified page from PDF
+            config = Config("configs/config.yaml")
+            pdf_processor = PDFProcessor(config)
+
+            images, page_numbers = pdf_processor._get_image(temp_path, [page_number], scan_config)
+            if not images:
+                raise HTTPException(status_code=400, detail=f"Failed to extract page {page_number} from PDF")
+
+            pil_image = images[0]
+        else:
+            # Load image directly and apply cropping
+            pil_image = Image.open(temp_path)
+
+            if crop_top > 0 or crop_bottom > 0:
+                width, height = pil_image.size
+                top_px = int(height * crop_top / 100)
+                bottom_px = int(height * crop_bottom / 100)
+                pil_image = pil_image.crop((0, top_px, width, height - bottom_px))
+
+        # Generate base64 preview of the cropped image
+        buffer = io.BytesIO()
+        pil_image.save(buffer, format='PNG')
+        buffer.seek(0)
+        preview_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+        # Call LLM extractor
+        log_handle.info(f"Calling LLM extractor: model={model_name}, language={language}")
+        blocks = extract_indic_text(pil_image, model_name=model_name)
+
+        return ScriptureLLMResponse(
+            blocks=[ScriptureLLMTextBlock(**b) for b in blocks],
+            model=model_name,
+            language=language,
+            preview_image=preview_base64,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_handle.error(f"Scripture LLM processing failed: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Scripture LLM processing failed: {str(e)}")
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except Exception as cleanup_error:
+                log_handle.warning(f"Failed to cleanup temp file: {cleanup_error}")
+
+
+# --- Standalone Eval App ---
+# Run with: uvicorn eval.api:app --host 0.0.0.0 --port 8000 --env-file .env.local
+app = FastAPI(title="Catalogue Eval UI", version="1.0.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.include_router(router, prefix="/api")
+
+@app.on_event("startup")
+async def startup():
+    logs_dir = os.environ.get("LOGS_DIR", "logs")
+    setup_logging(
+        logs_dir=logs_dir, console_level=VERBOSE_LEVEL_NUM,
+        file_level=VERBOSE_LEVEL_NUM,
+        console_only=False)
+    log_handle.info("Eval app started.")

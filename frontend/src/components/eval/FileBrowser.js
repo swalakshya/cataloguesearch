@@ -96,7 +96,7 @@ const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectory
                             type: 'file',
                             fileType: 'markdown'
                         });
-                    } else if ((currentTab === 'ocr-eval' || currentTab === 'paragraph-eval' || currentTab === 'ocr-preview') && name.toLowerCase().endsWith('.pdf')) {
+                    } else if ((currentTab === 'ocr-eval' || currentTab === 'paragraph-eval' || currentTab === 'ocr-preview' || currentTab === 'scripture-llm-eval') && name.toLowerCase().endsWith('.pdf')) {
                         items.push({
                             name,
                             handle,

@@ -135,3 +135,5 @@ models
 .vscode
 
 .env.*
+
+.claude

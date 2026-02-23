@@ -50,8 +50,8 @@ Parse the following list of indexed bookmark titles and return the results:
 {indexed_titles_json}
 
 CRITICAL: Return ONLY a valid JSON array. Do NOT include any explanations, markdown formatting, or additional text.
-Your response must be a JSON array where each element has: index, pravachan_no, date
-Example format: [{{"index": 0, "pravachan_no": "244-A", "date": "07-11-1965"}}]"""
+Your response must be a JSON array where each element has: index, page, pravachan_no, date, gatha, kalash, shlok
+Example format: [{{"index": 0, "page": 5, "pravachan_no": "244-A", "date": "07-11-1965", "gatha": null, "kalash": "219", "shlok": null}}]"""
 
         payload = {
             "model": self.model,
@@ -139,10 +139,9 @@ Example format: [{{"index": 0, "pravachan_no": "244-A", "date": "07-11-1965"}}]"
                 if parsed_data:
                     # Post-process: Convert "N/A" strings to None
                     for item in parsed_data:
-                        if item.get('pravachan_no') == 'N/A':
-                            item['pravachan_no'] = None
-                        if item.get('date') == 'N/A':
-                            item['date'] = None
+                        for field in ('pravachan_no', 'date', 'gatha', 'kalash', 'shlok'):
+                            if item.get(field) == 'N/A':
+                                item[field] = None
 
                     log_handle.info("Successfully extracted %d items", len(parsed_data))
                     return parsed_data

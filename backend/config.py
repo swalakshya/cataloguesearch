@@ -135,6 +135,12 @@ class Config:
             return self._settings.get("transliteration", {}).get("timeout", 10)
         elif name == "BOOKMARK_EXTRACTOR_LLM":
             return self._settings.get("crawler", {}).get("bookmark_extractor_llm", "gemini")
+        elif name == "OCR_ENGINE":
+            return self._settings.get("crawler", {}).get("ocr_engine", "tesseract")
+        elif name == "DEFAULT_LLM_MODEL":
+            return self._settings.get("crawler", {}).get("default_llm_model", "gemini-2.5-flash")
+        elif name == "LLM_WORKERS":
+            return self._settings.get("crawler", {}).get("llm_workers", 2)
         else:
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 

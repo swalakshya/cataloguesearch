@@ -219,7 +219,8 @@ def delete_index(config: Config):
     index_state = IndexState(config.SQLITE_DB_PATH)
     index_state.delete_index_state()
 
-def process_folder(config: Config, folder_path: str, dry_run=False, reindex_metadata_only=False):
+def process_folder(config: Config, folder_path: str, crawl=True,
+                   index=True, dry_run=False, reindex_metadata_only=False):
     """Process all PDF files in a specific folder (non-recursive)"""
     if not os.path.exists(folder_path):
         log_handle.error(f"Folder does not exist: {folder_path}")
@@ -239,8 +240,10 @@ def process_folder(config: Config, folder_path: str, dry_run=False, reindex_meta
     client = get_opensearch_client(config)
     create_indices_if_not_exists(config, client)
 
-    # Process the directory (both process OCR and index)
-    discovery.process_directory(folder_path, process=True, index=True, dry_run=dry_run, reindex_metadata_only=reindex_metadata_only)
+    # Process the directory
+    discovery.process_directory(
+        folder_path, process=crawl,
+        index=index, dry_run=dry_run, reindex_metadata_only=reindex_metadata_only)
 
     if dry_run:
         log_handle.warning("DRY RUN was enabled. No documents were actually indexed.")
@@ -324,6 +327,13 @@ def cleanup_files(config: Config, path: str):
 
 
 def main():
+    # Load .env.local if present (e.g. GEMINI_API_KEY, GROQ_API_KEY, etc.)
+    try:
+        from dotenv import load_dotenv
+        load_dotenv('.env.local')
+    except ImportError:
+        pass
+
     parser = argparse.ArgumentParser(description="CatalogueSearch Discovery CLI/Daemon")
 
     parser.add_argument('command', choices=['discover'], help='Command to run')
@@ -364,7 +374,9 @@ def main():
         sys.exit(0) # Exit after cleanup is done
 
     if args.process_folder:
-        process_folder(config, args.process_folder, args.dry_run, args.reindex_metadata_only)
+        process_folder(
+            config, args.process_folder, args.crawl, args.index,
+            args.dry_run, args.reindex_metadata_only)
         sys.exit(0) # Exit after processing folder is done
 
     if args.command == 'discover':
