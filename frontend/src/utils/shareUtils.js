@@ -11,22 +11,16 @@ export const formatGranthShareContent = (query, result, shareUrl) => {
         ? result.content_snippet.replace(/<[^>]*>/g, '').trim()
         : 'Search result from Aagam-Khoj';
 
-    const granthName = result?.original_filename ? result.original_filename.split('/').pop().replace('.md', '') : 'Unknown Granth';
-    const author = result?.metadata?.author || 'Unknown Author';
-    const adhikar = result?.metadata?.adhikar || '';
+    const granthName = result?.metadata?.Granth || result?.filename?.replace('.pdf', '') || 'Unknown Granth';
+    const author = result?.metadata?.Author || '';
+    const tikakaar = result?.metadata?.Tikakaar || '';
 
-    // Determine if it's verse or prose
-    let locationInfo = '';
-    if (result?.metadata?.verse_seq_num !== undefined) {
-        const verseType = result?.metadata?.verse_type || 'Verse';
-        const verseStart = result?.metadata?.verse_type_start_num;
-        const verseEnd = result?.metadata?.verse_type_end_num;
-        const verseNum = verseStart === verseEnd ? verseStart : `${verseStart}-${verseEnd}`;
-        locationInfo = adhikar ? `${adhikar} › ${verseType} ${verseNum}` : `${verseType} ${verseNum}`;
-    } else if (result?.metadata?.prose_seq_num !== undefined) {
-        const proseHeading = result?.metadata?.prose_heading || 'Prose Section';
-        locationInfo = adhikar ? `${adhikar} › ${proseHeading}` : proseHeading;
-    }
+    // Build location string from whichever of gatha/kalash/shlok are present
+    const locationParts = [];
+    if (result?.gatha) locationParts.push(`Gatha ${result.gatha}`);
+    if (result?.kalash) locationParts.push(`Kalash ${result.kalash}`);
+    if (result?.shlok) locationParts.push(`Shlok ${result.shlok}`);
+    const locationInfo = locationParts.join(', ');
 
     return {
         title: `Found in Aagam-Khoj: "${query}"`,
@@ -35,6 +29,7 @@ export const formatGranthShareContent = (query, result, shareUrl) => {
         isGranth: true,
         granthName,
         author,
+        tikakaar,
         locationInfo
     };
 };
@@ -74,7 +69,7 @@ export const formatPravachanShareContent = (query, result, shareUrl, language = 
 
 // Main dispatcher function - determines result type and calls appropriate formatter
 export const formatShareContent = (query, result, shareUrl, language = 'hindi') => {
-    const isGranthResult = result?.metadata?.verse_seq_num !== undefined || result?.metadata?.prose_seq_num !== undefined;
+    const isGranthResult = result?.metadata?.category === 'Granth';
 
     if (isGranthResult) {
         return formatGranthShareContent(query, result, shareUrl);

@@ -239,7 +239,7 @@ class IndexGenerator:
                 "original_filename": original_filename,
                 "page_number": page_num,
                 "paragraph_id": i,
-                "embedding_text": para_text,
+                "embedding_text": self._prepare_embedding_text(para_text),
                 "metadata": metadata,
                 "pravachan_number": pravachan_number,
                 "date": date_iso,
@@ -349,6 +349,10 @@ class IndexGenerator:
             except IOError as e:
                 log_handle.error(f"Could not read file {page_text_path}: {e}")
         return final_paras
+
+    def _prepare_embedding_text(self, text: str) -> str:
+        """Hook for subclasses to clean text before embedding. No-op by default."""
+        return text
 
     def _get_page_num(self, file_path: str) -> int | None:
         """Extracts the page number from a filename like 'page_0123.txt'."""

@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import traceback
 from datetime import datetime, timezone
 
@@ -26,8 +27,16 @@ class GranthIndexGenerator(IndexGenerator):
         Only verse types listed in scan_config["verses"] are indexed into OpenSearch.
     """
 
+    # Matches [...] non-greedily — nested brackets are not handled (by design).
+    _BRACKET_RE = re.compile(r'\[.*?\]', re.DOTALL)
+
     def __init__(self, config: Config, opensearch_client: OpenSearch):
         super().__init__(config, opensearch_client)
+
+    def _prepare_embedding_text(self, text: str) -> str:
+        """Strip square-bracket content (glosses, transliterations) and normalize spacing."""
+        cleaned = self._BRACKET_RE.sub('', text)
+        return ' '.join(cleaned.split())
 
     def index_document(self, document_id, original_filename,
                        ocr_dir, output_text_dir, pages_list, metadata,
