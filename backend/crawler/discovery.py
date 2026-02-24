@@ -146,7 +146,13 @@ class SingleFileProcessor:
         if start_page is not None and end_page is not None:
             all_pages.update(range(start_page, end_page + 1))
 
-        # 3. Return the final sorted list of unique pages
+        # Add pages from sub_sections (union of all sub-section page ranges)
+        for sg in scan_config.get("sub_sections", []):
+            sg_start = sg.get("start_page")
+            sg_end = sg.get("end_page")
+            if sg_start is not None and sg_end is not None:
+                all_pages.update(range(sg_start, sg_end + 1))
+
         return sorted(list(all_pages))
 
     # All meaningful fields that the bookmark extractor can return
@@ -319,32 +325,123 @@ class SingleFileProcessor:
 
         pdf_processor = self._get_pdf_processor()
         index_generator = self._get_index_generator()
-        index_generator.index_document(
-            document_id, relative_path, output_ocr_dir, output_text_dir,
-            pages_list, file_metadata, self._scan_config,
-            page_to_pravachan_data,
-            reindex_metadata_only, dry_run,
-            pdf_processor=pdf_processor
-        )
+        sub_sections = self._scan_config.get("sub_sections", [])
 
-        if dry_run:
-            # During dry run, only cache the parsed bookmarks
-            current_state = self._index_state.get_state(document_id) or {}
-            current_state["parsed_bookmarks"] = json.dumps(parsed_bookmarks)
-            self._save_state(document_id, current_state)
-            log_handle.info(f"[DRY RUN] Cached parsed bookmarks for {self._file_path}")
+        if not sub_sections:
+            # --- Standard path: single document per PDF ---
+            index_generator.index_document(
+                document_id, relative_path, output_ocr_dir, output_text_dir,
+                pages_list, file_metadata, self._scan_config,
+                page_to_pravachan_data,
+                reindex_metadata_only, dry_run,
+                pdf_processor=pdf_processor
+            )
+
+            if dry_run:
+                current_state = self._index_state.get_state(document_id) or {}
+                current_state["parsed_bookmarks"] = json.dumps(parsed_bookmarks)
+                self._save_state(document_id, current_state)
+                log_handle.info(f"[DRY RUN] Cached parsed bookmarks for {self._file_path}")
+            else:
+                self._save_state(document_id, {
+                    "file_path": relative_path,
+                    "last_indexed_timestamp": self._scan_time,
+                    "file_checksum": "",
+                    "config_hash": current_config_hash,
+                    "index_checksum": "",
+                    "ocr_checksum": current_ocr_checksum,
+                    "parsed_bookmarks": json.dumps(parsed_bookmarks)
+                })
+                log_handle.info(f"Completed indexing of {self._file_path}")
+
         else:
-            # During normal run, save complete state including parsed bookmarks
-            self._save_state(document_id, {
-                "file_path": relative_path,
-                "last_indexed_timestamp": self._scan_time,
-                "file_checksum": "",
-                "config_hash": current_config_hash,
-                "index_checksum": "",
-                "ocr_checksum": current_ocr_checksum,
-                "parsed_bookmarks": json.dumps(parsed_bookmarks)
-            })
-            log_handle.info(f"Completed indexing of {self._file_path}")
+            # --- Sub-section path: one document per sub-section ---
+            dir_cleaned = False
+            for i, sg in enumerate(sub_sections):
+                sg_field = sg.get("field", "")
+                sg_name = sg.get("name", "")
+                sg_start = sg.get("start_page")
+                sg_end = sg.get("end_page")
+
+                if not sg_name or sg_start is None or sg_end is None:
+                    log_handle.warning(f"Skipping malformed sub_section entry: {sg}")
+                    continue
+
+                sub_doc_id = str(uuid.uuid5(
+                    uuid.NAMESPACE_URL,
+                    f"{relative_path}#{sg_field}:{sg_name}"
+                ))
+                sub_pages = list(range(sg_start, sg_end + 1))
+                sub_metadata = {**file_metadata, "sub_section": {"field": sg_field, "name": sg_name}}
+                sub_config_hash = self._get_config_hash(sub_metadata)
+                # Encode sub-section identity into file_path so each sub-section's
+                # state row is visually distinct and unambiguous in the DB.
+                # garbage_collect strips the #... suffix when checking existence.
+                sub_section_key = f"{sg_field}:{sg_name}" if sg_field else sg_name
+                sub_file_path = f"{relative_path}#{sub_section_key}"
+                # Use sub_file_path (not relative_path) so the stored ocr_checksum
+                # is tied to this sub-section's identity, consistent with file_path.
+                sub_ocr_checksum = self._index_state.calculate_ocr_checksum(
+                    sub_file_path, pages_list)
+
+                log_handle.info(
+                    f"Processing sub-section [{i+1}/{len(sub_sections)}]: "
+                    f"{sg_field}={sg_name}, pages {sg_start}-{sg_end}, doc_id={sub_doc_id}"
+                )
+
+                # Check if re-indexing is needed for this sub-granth
+                if not reindex_metadata_only:
+                    sub_state = self._index_state.get_state(sub_doc_id)
+                    if (sub_state and
+                            sub_state.get("config_hash") == sub_config_hash and
+                            sub_state.get("ocr_checksum") == sub_ocr_checksum):
+                        log_handle.info(
+                            f"No changes for sub-granth {sg_name}. Skipping.")
+                        continue
+
+                index_generator.index_document(
+                    sub_doc_id, relative_path, output_ocr_dir, output_text_dir,
+                    sub_pages, sub_metadata, self._scan_config,
+                    page_to_pravachan_data,
+                    reindex_metadata_only, dry_run,
+                    pdf_processor=pdf_processor,
+                    clean_output_dir=not dir_cleaned
+                )
+                dir_cleaned = True
+
+                if dry_run:
+                    # Cache parsed bookmarks on the base document_id (shared across sub-granths)
+                    current_state = self._index_state.get_state(document_id) or {}
+                    current_state["parsed_bookmarks"] = json.dumps(parsed_bookmarks)
+                    self._save_state(document_id, current_state)
+                    log_handle.info(
+                        f"[DRY RUN] Cached parsed bookmarks for sub-section {sg_name}")
+                else:
+                    self._save_state(sub_doc_id, {
+                        "file_path": sub_file_path,
+                        "last_indexed_timestamp": self._scan_time,
+                        "file_checksum": "",
+                        "config_hash": sub_config_hash,
+                        "index_checksum": "",
+                        "ocr_checksum": sub_ocr_checksum,
+                        "parsed_bookmarks": json.dumps(parsed_bookmarks)
+                    })
+                    log_handle.info(
+                        f"Completed indexing of sub-section {sg_name} for {self._file_path}")
+
+            # Persist parsed_bookmarks and checksums on the base document_id so that:
+            # 1. The early-exit check at the top of index() fires on subsequent runs.
+            # 2. Bookmark extraction is not repeated when all sub-sections are up-to-date.
+            if not dry_run:
+                current_base_state = self._index_state.get_state(document_id) or {}
+                current_base_state.update({
+                    "file_path": relative_path,
+                    "config_hash": current_config_hash,
+                    "ocr_checksum": current_ocr_checksum,
+                    "parsed_bookmarks": json.dumps(parsed_bookmarks)
+                })
+                self._save_state(document_id, current_base_state)
+                log_handle.info(f"Cached base state for sub-section document {self._file_path}")
 
 
 class Discovery:

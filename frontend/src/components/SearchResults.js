@@ -143,6 +143,9 @@ export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, re
         <div className={cardClasses}>
             <div className="border-b border-slate-200 pb-2 mb-2 text-sm text-slate-500 flex flex-wrap gap-x-3 gap-y-1 items-center">
                 {result.metadata?.Granth && <span className="font-bold text-slate-700">{result.metadata.Granth}</span>}
+                {result.metadata?.sub_section && (
+                    <span className="text-slate-700">({result.metadata.sub_section.name})</span>
+                )}
                 {result.metadata?.title && resultType === 'granth' && <span className="font-bold text-slate-700">{result.metadata.title}</span>}
                 {resultType === 'granth' && result.metadata?.adhikar && (
                     <span className="text-slate-700">Adhikar: {result.metadata.adhikar}</span>

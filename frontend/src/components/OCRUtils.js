@@ -5,7 +5,7 @@ import BookmarksModal from './BookmarksModal';
 import ParseBookmarksControl from './ParseBookmarksControl';
 import { addPageNumbersToBookmarks } from '../utils/pdfUtils';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
+const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
 
 const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, baseDirectoryHandles, onPdfParentDirChange }) => {
     const [selectedFile, setSelectedFile] = useState(null);

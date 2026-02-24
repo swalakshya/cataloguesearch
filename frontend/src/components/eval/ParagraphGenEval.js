@@ -16,6 +16,8 @@ import {
 } from '../../utils/directoryHandlers';
 import { addPageNumbersToBookmarks } from '../../utils/pdfUtils';
 
+const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
+
 const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, basePaths: parentBasePaths, selectedFolder: propSelectedFolder, baseDirectoryHandles: parentBaseDirectoryHandles, onPdfParentDirChange }) => {
     const [selectedFolder, setSelectedFolder] = useState(propSelectedFolder || null);
     const [sourceHandle, setSourceHandle] = useState(null);
@@ -107,7 +109,6 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
         if (!parentBasePaths) {
             const loadBasePaths = async () => {
                 try {
-                    const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
                     const response = await fetch(`${API_BASE_URL}/eval/paths`);
                     const data = await response.json();
                     setBasePaths(data);

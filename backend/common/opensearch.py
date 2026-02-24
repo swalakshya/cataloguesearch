@@ -332,6 +332,39 @@ def delete_documents_by_filename(config: Config, original_filename: str):
             f"Error deleting documents for '{original_filename}': {e}", exc_info=True)
         raise
 
+def delete_documents_by_document_id(config: Config, document_id: str):
+    """
+    Deletes all chunks from the OpenSearch index that match the given document_id.
+    Used when re-indexing a single sub-section to avoid deleting sibling sub-sections
+    that share the same original_filename.
+
+    Args:
+        config: Config object containing OpenSearch settings.
+        document_id: The document_id whose chunks should be deleted.
+    """
+    client = get_opensearch_client(config)
+    index_name = config.OPENSEARCH_INDEX_NAME
+
+    query_body = {
+        "query": {
+            "term": {
+                "document_id": document_id
+            }
+        }
+    }
+
+    try:
+        log_handle.info(f"Attempting to delete chunks with document_id: {document_id}")
+        response = client.delete_by_query(index=index_name, body=query_body)
+        client.indices.refresh(index=index_name)
+        deleted_count = response.get('deleted', 0)
+        log_handle.info(
+            f"Successfully deleted {deleted_count} chunks for document_id '{document_id}'.")
+    except Exception as e:
+        log_handle.error(
+            f"Error deleting chunks for document_id '{document_id}': {e}", exc_info=True)
+
+
 def update_metadata_index(config: Config, opensearch_client: OpenSearch, metadata: dict):
     """
     Updates the dedicated metadata index with new values from a document.

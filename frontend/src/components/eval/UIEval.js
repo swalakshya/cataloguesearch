@@ -7,6 +7,8 @@ import ScriptureLLMEval from './ScriptureLLMEval';
 import FileBrowser from './FileBrowser';
 import { storeDirectoryHandles, getStoredDirectoryHandles, validateDirectoryHandles } from '../../utils/directoryHandlers';
 
+const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
+
 const UIEval = () => {
     const [activeTab, setActiveTab] = useState('home');
     const [basePaths, setBasePaths] = useState(null);
@@ -25,7 +27,6 @@ const UIEval = () => {
     useEffect(() => {
         const loadBasePaths = async () => {
             try {
-                const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
                 const response = await fetch(`${API_BASE_URL}/eval/paths`);
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);

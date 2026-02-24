@@ -219,9 +219,10 @@ class PDFCache {
 // Export singleton instance
 export const pdfCache = new PDFCache();
 
+const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
+
 // Helper function to get scripture data (always from API - no caching)
 export const getScriptureData = async (relativePath) => {
-    const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
     const response = await fetch(`${API_BASE_URL}/eval/scripture`, {
         method: 'POST',
         headers: {
@@ -248,7 +249,6 @@ export const getPDFWithCache = async (pdfUrl) => {
     // If not in cache, fetch from network
     let finalUrl = pdfUrl;
     if (pdfUrl.startsWith('http://') || pdfUrl.startsWith('https://')) {
-        const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
         finalUrl = `${API_BASE_URL}/eval/pdf/proxy?url=${encodeURIComponent(pdfUrl)}`;
     }
     

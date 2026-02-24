@@ -14,6 +14,7 @@ export const formatGranthShareContent = (query, result, shareUrl) => {
     const granthName = result?.metadata?.Granth || result?.filename?.replace('.pdf', '') || 'Unknown Granth';
     const author = result?.metadata?.Author || '';
     const tikakaar = result?.metadata?.Tikakaar || '';
+    const subSection = result?.metadata?.sub_section || null;
 
     // Build location string from whichever of gatha/kalash/shlok are present
     const locationParts = [];
@@ -24,13 +25,14 @@ export const formatGranthShareContent = (query, result, shareUrl) => {
 
     return {
         title: `Found in Aagam-Khoj: "${query}"`,
-        text: `Query: ${query}\n\nExtract: "${cleanContent}"\n\nGranth: ${granthName}\n\nAuthor: ${author}\n\nLocation: ${locationInfo}\n\nSearch more at: ${shareUrl}`,
+        text: `Query: ${query}\n\nExtract: "${cleanContent}"\n\nGranth: ${granthName}${subSection ? `\n\n${subSection.field}: ${subSection.name}` : ''}\n\nAuthor: ${author}\n\nLocation: ${locationInfo}\n\nSearch more at: ${shareUrl}`,
         url: shareUrl,
         isGranth: true,
         granthName,
         author,
         tikakaar,
-        locationInfo
+        locationInfo,
+        subSection
     };
 };
 
