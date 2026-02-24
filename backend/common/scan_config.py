@@ -170,4 +170,8 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
         if "llm_workers" in file_config:
             scan_meta["llm_workers"] = file_config["llm_workers"]
 
+        # Pass through sub_sections (file-specific only — defines per-section page ranges)
+        if "sub_sections" in file_config:
+            scan_meta["sub_sections"] = file_config["sub_sections"]
+
     return scan_meta

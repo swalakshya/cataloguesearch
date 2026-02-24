@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Spinner } from './SharedComponents';
 import ParsedBookmarksModal from './ParsedBookmarksModal';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
+const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
 
 /**
  * Recursively flatten a PDF.js outline into a flat bookmark list with resolved page numbers.

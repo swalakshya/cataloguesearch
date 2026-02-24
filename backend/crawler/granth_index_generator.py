@@ -42,14 +42,15 @@ class GranthIndexGenerator(IndexGenerator):
                        ocr_dir, output_text_dir, pages_list, metadata,
                        scan_config, page_to_pravachan_data,
                        reindex_metadata_only=False, dry_run=True,
-                       pdf_processor=None):
+                       pdf_processor=None, clean_output_dir=True):
         # Base class handles paragraphs: write files, embed, index, metadata_index update
         super().index_document(
             document_id, original_filename,
             ocr_dir, output_text_dir, pages_list, metadata,
             scan_config, page_to_pravachan_data,
             reindex_metadata_only, dry_run,
-            pdf_processor=pdf_processor
+            pdf_processor=pdf_processor,
+            clean_output_dir=clean_output_dir
         )
 
         # Metadata-only mode touches neither files nor verse chunks
@@ -75,7 +76,7 @@ class GranthIndexGenerator(IndexGenerator):
             return
 
         timestamp = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
-        verse_data = self._read_verse_files(output_text_dir, verse_types)
+        verse_data = self._read_verse_files(output_text_dir, verse_types, pages_list)
         verse_chunks = self._create_chunks_from_verses(
             verse_data, document_id, original_filename,
             metadata, page_to_pravachan_data, timestamp
@@ -110,14 +111,20 @@ class GranthIndexGenerator(IndexGenerator):
                 traceback.print_exc()
                 log_handle.error(f"Failed to write {fname}")
 
-    def _read_verse_files(self, output_text_dir: str, verse_types: list) -> list[tuple[int, list[dict]]]:
+    def _read_verse_files(self, output_text_dir: str, verse_types: list,
+                          pages_list: list[int] = None) -> list[tuple[int, list[dict]]]:
         """
         Read verses_NNNN.json files from output_text_dir, keeping only blocks
         whose type is in verse_types (from scan_config["verses"]).
 
+        When pages_list is provided, only verse files whose page number is in
+        pages_list are read — prevents picking up sibling sub-sections' verse files
+        when multiple sub-sections share the same output_text_dir.
+
         Returns List[Tuple[page_num, List[dict]]] — only pages with matching verses.
         """
         verse_type_set = set(verse_types)
+        pages_set = set(pages_list) if pages_list is not None else None
         result = []
 
         try:
@@ -133,6 +140,9 @@ class GranthIndexGenerator(IndexGenerator):
             try:
                 page_num = int(fname[len("verses_"):-len(".json")])
             except ValueError:
+                continue
+
+            if pages_set is not None and page_num not in pages_set:
                 continue
 
             fpath = os.path.join(output_text_dir, fname)

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Spinner } from '../SharedComponents';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
+const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
 
 const OCRPreview = ({ selectedFile: propSelectedFile, baseDirectoryHandles }) => {
     const [pdfFile, setPdfFile] = useState(null);

@@ -140,6 +140,13 @@ search_index:
           series_end_date:
             type: date
             format: "yyyy-MM-dd||strict_date_optional_time||epoch_millis"
+          sub_section:
+            type: object
+            properties:
+              field:
+                type: keyword
+              name:
+                type: keyword
       timestamp_indexed:
         type: date
       paragraph_id:

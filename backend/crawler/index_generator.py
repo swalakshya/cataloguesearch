@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from opensearchpy import OpenSearch, helpers
 
 from backend.common.embedding_models import get_embedding_model_factory
-from backend.common.opensearch import delete_documents_by_filename, update_metadata_index
+from backend.common.opensearch import delete_documents_by_document_id, update_metadata_index
 from backend.config import Config
 from backend.crawler.pdf_factory import create_pdf_processor
 from backend.crawler.paragraph_generator.factory import create_paragraph_generator
@@ -43,7 +43,7 @@ class IndexGenerator:
         ocr_dir: str, output_text_dir: str, pages_list: list[int], metadata: dict,
         scan_config: dict, page_to_pravachan_data: dict[int, dict],
         reindex_metadata_only: bool = False, dry_run: bool = True,
-        pdf_processor=None):
+        pdf_processor=None, clean_output_dir: bool = True):
         log_handle.info(
             f"Indexing document: {document_id}, reindex_metadata_only: {reindex_metadata_only}, "
             f"Dry Run: {dry_run}")
@@ -80,7 +80,7 @@ class IndexGenerator:
         # Generate paragraphs from raw data
         processed_paras = paragraph_gen.generate_paragraphs(raw_data, scan_config)
 
-        if os.path.exists(output_text_dir):
+        if clean_output_dir and os.path.exists(output_text_dir):
             shutil.rmtree(output_text_dir)
         os.makedirs(output_text_dir, exist_ok=True)
 
@@ -100,20 +100,26 @@ class IndexGenerator:
             return
 
         # --- Full Re-indexing Logic ---
-        # Delete all existing documents for this original_filename before reindexing
-        log_handle.info(f"Deleting existing documents for {original_filename} before reindexing")
+        # Delete existing chunks for this document_id before reindexing.
+        # Using document_id (not original_filename) ensures that when a PDF has sub-sections,
+        # only the current sub-section's chunks are removed — siblings are left untouched.
+        log_handle.info(f"Deleting existing chunks for document_id {document_id} before reindexing")
         try:
-            delete_documents_by_filename(self._config, original_filename)
+            delete_documents_by_document_id(self._config, document_id)
         except Exception as e:
-            log_handle.error(f"Failed to delete existing documents for {original_filename}: {e}")
+            log_handle.error(f"Failed to delete existing chunks for document_id {document_id}: {e}")
             # Continue with indexing even if deletion fails, as it's a safety measure
 
+        pages_set = set(pages_list)
         page_text_paths = []
         for root, _, files in os.walk(output_text_dir):
             for file_name in files:
                 if not file_name.lower().endswith(".txt"):
                     continue
-                page_text_paths.append(os.path.join(root, file_name))
+                full_path = os.path.join(root, file_name)
+                page_num = self._get_page_num(full_path)
+                if page_num is not None and page_num in pages_set:
+                    page_text_paths.append(full_path)
         page_text_paths = sorted(page_text_paths)
         paras = self._get_paras(page_text_paths)
 

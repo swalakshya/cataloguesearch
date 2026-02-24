@@ -76,6 +76,11 @@ const ShareModal = ({ result, query, currentFilters, language, searchType, onClo
                                 <div className="text-sm text-slate-700 mb-2">
                                     <strong>Granth:</strong> {shareData.granthName || 'Unknown Granth'}
                                 </div>
+                                {shareData.subSection && (
+                                    <div className="text-sm text-slate-700 mb-2">
+                                        <strong>{shareData.subSection.field}:</strong> {shareData.subSection.name}
+                                    </div>
+                                )}
                                 {shareData.author && (
                                     <div className="text-sm text-slate-700 mb-2">
                                         <strong>Author:</strong> {shareData.author}

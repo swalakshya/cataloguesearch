@@ -142,7 +142,10 @@ class IndexState:
 
         for row in rows:
             document_id, file_path = row
-            if not os.path.exists(os.path.join(base_dir, file_path)):
+            # Sub-section states store file_path as "relative/path.pdf#field:name".
+            # Strip the suffix to get the actual file path for existence check.
+            actual_file_path = file_path.split('#')[0] if file_path and '#' in file_path else file_path
+            if not os.path.exists(os.path.join(base_dir, actual_file_path)):
                 c.execute("DELETE FROM indexed_files_state WHERE document_id = ?", (document_id,))
                 deleted_files.append(file_path)
 

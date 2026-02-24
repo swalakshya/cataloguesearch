@@ -868,7 +868,7 @@ async def process_scripture_llm(
 
 
 # --- Standalone Eval App ---
-# Run with: uvicorn eval.api:app --host 0.0.0.0 --port 8000 --env-file .env.local
+# Run with: uvicorn eval.api:app --host 0.0.0.0 --port 8001 --env-file .env.local
 app = FastAPI(title="Catalogue Eval UI", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
