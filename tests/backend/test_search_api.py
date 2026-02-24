@@ -155,7 +155,7 @@ def build_index(initialise):
 class APIServerManager:
     """Manager class to handle API server startup and shutdown."""
 
-    def __init__(self, host="127.0.0.1", port=8001):
+    def __init__(self, host="127.0.0.1", port=19876):
         self.host = host
         self.port = port
         self.server_thread = None
@@ -210,7 +210,7 @@ class APIServerManager:
 @pytest.fixture(scope="module")
 def api_server():
     """Fixture to start and stop the API server for tests."""
-    server_manager = APIServerManager(host="127.0.0.1", port=8001)  # Use different port to avoid conflicts
+    server_manager = APIServerManager(host="127.0.0.1", port=19876)
 
     try:
         log_handle.info("Starting API server for tests...")
