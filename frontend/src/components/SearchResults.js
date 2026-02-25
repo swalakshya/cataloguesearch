@@ -121,7 +121,7 @@ export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, re
 
     const handleExpandClick = () => {
         if (resultType === 'granth') {
-            // For Granth results, extract original_filename and seq_num from metadata
+            // For structured Granth results with seq_num, use the granth expand path
             const originalFilename = result.original_filename;
             const verseSeqNum = result.metadata?.verse_seq_num;
             const proseSeqNum = result.metadata?.prose_seq_num;
@@ -130,6 +130,9 @@ export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, re
                 onExpandGranth(originalFilename, verseSeqNum, 'verse');
             } else if (originalFilename && proseSeqNum !== undefined && onExpandGranth) {
                 onExpandGranth(originalFilename, proseSeqNum, 'prose');
+            } else if (onExpand) {
+                // Paragraph chunks from search_index — same context path as Pravachan
+                onExpand(result.document_id);
             }
         } else {
             // For Pravachan and other results, use document_id
