@@ -26,6 +26,16 @@ const WhatsNew = () => {
 
     const updates = [
         {
+            date: "February 28, 2025",
+            newContent: [
+                "Total 11 new Granths added, including Panch Parmagams.",
+                "Look at the Content page to see the list of available Granths"
+            ],
+            newFeatures: [
+                "New automated way to parse and index scriptures to speed-up the indexing process"
+            ]
+        },
+        {
             date: "January 15, 2026",
             newContent: [
                 "Hindi Pravachans (compiled) on Mokshmarg Prakashak",

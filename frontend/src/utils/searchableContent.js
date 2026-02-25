@@ -200,18 +200,58 @@ export const getAllGranths = () => {
  */
 export const searchableGranths = [
   {
-    name: "Chhah Dhala",
-    author: "Pandit Shri Daulat Ram ji",
+    name: "Samaysaar",
+    author: "Acharya Kund Kund",
+    status: "searchable"
+  },
+  {
+    name: "Pravachansaar",
+    author: "Acharya Kund Kund",
+    status: "searchable"
+  },
+  {
+    name: "Niyamsaar",
+    author: "Acharya Kund Kund",
+    status: "searchable"
+  },
+  {
+    name: "Panchastikaya",
+    author: "Acharya Kund Kund",
+    status: "searchable"
+  },
+  {
+    name: "Asht Pahud",
+    author: "Acharya Kund Kund",
     status: "searchable"
   },
   {
     name: "Purusharth Siddhi Upay",
-    author: "Shri Amritchandra Acharya",
+    author: "Acharya Amritchandra",
     status: "searchable"
   },
   {
     name: "Ishtopadesh",
-    author: "Shri Pujyapad Swami",
+    author: "Shrimad Pujyapad Swami",
+    status: "searchable"
+  },
+  {
+    name: "Bruhad Dravya Sangrah",
+    author: "Acharya Nemichand Siddhant Chakravarti",
+    status: "searchable"
+  },
+  {
+    name: "Ratnakarand Shravakachar",
+    author: "Acharya Samant Bhadra",
+    status: "searchable"
+  },
+  {
+    name: "Moksh Marg Prakashak",
+    author: "Pandit Shri Todarmal",
+    status: "searchable"
+  },
+  {
+    name: "Chhah Dhala",
+    author: "Pandit Shri Daulat Ram",
     status: "searchable"
   }
 ];
