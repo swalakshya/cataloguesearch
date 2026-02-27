@@ -7,6 +7,13 @@ from backend.crawler.paragraph_generator.language_meta import LanguageMeta
 
 log_handle = logging.getLogger(__name__)
 
+# Characters that can legally precede a prefix word
+_LEADING_STRIP = '([{\'"'
+
+# Characters that can legally follow a prefix word (separators)
+_STOP_WORD_SEPARATORS = set(':ः- —\t[({\'"')
+
+
 class BaseParagraphGenerator:
     def __init__(self, config: Config, language_meta: LanguageMeta):
         self._config = config
@@ -17,20 +24,31 @@ class BaseParagraphGenerator:
         return self._language_meta.punctuation_suffixes
 
     @property
-    def stop_prefixes(self):
-        return self._language_meta.stop_prefixes
-
-    @property
-    def answer_prefixes(self):
-        return self._language_meta.answer_prefixes
-
-    @property
     def dialogue_prefixes(self):
         return self._language_meta.dialogue_prefixes
 
+    @staticmethod
+    def _starts_with_prefix(text: str, prefixes: tuple) -> bool:
+        """
+        Return True if *text* begins with one of *prefixes* (as a complete
+        word) after stripping any leading bracket / quote characters.
+
+        A complete word match requires that the character immediately after the
+        prefix is a known separator (:, ः, -, —, space, bracket, quote) or
+        end-of-text. This prevents partial matches like 'अर्थात्' matching 'अर्थ'.
+        """
+        if not prefixes:
+            return False
+        stripped = text.lstrip(_LEADING_STRIP)
+        for prefix in prefixes:
+            if stripped.startswith(prefix):
+                rest = stripped[len(prefix):]
+                if not rest or rest[0] in _STOP_WORD_SEPARATORS:
+                    return True
+        return False
+
     def generate_paragraphs(self, paragraphs: List[Tuple[int, List[str]]],
                             file_metadata : dict) -> List[Tuple[int, List[str]]]:
-        rejected_paras = []
         # Pass 1: Cleanup the null lines etc.
         log_handle.info(f"Generating paragraphs for {len(paragraphs)} pages")
         header_regex = file_metadata.get("header_regex", [])
@@ -117,20 +135,20 @@ class BaseParagraphGenerator:
             para = para.strip()
 
             # Check if we have a question that can be combined with consecutive answers
-            if para.startswith(self.stop_prefixes):
+            if para.startswith(tuple(self._language_meta.question_prefix)):
                 combined_qa = para
                 i += 1
 
                 # Keep combining consecutive Q&A pairs
                 while (i < num_paras and
-                       combined_phase1[i][1].strip().startswith(self.answer_prefixes)):
+                       combined_phase1[i][1].strip().startswith(tuple(self._language_meta.answer_prefix))):
                     next_para = combined_phase1[i][1].strip()
                     combined_qa += "\n" + next_para
                     i += 1
 
                     # Check if there's another question following this answer
                     if (i < num_paras and
-                        combined_phase1[i][1].strip().startswith(self.stop_prefixes)):
+                        combined_phase1[i][1].strip().startswith(tuple(self._language_meta.question_prefix))):
                         next_question = combined_phase1[i][1].strip()
                         combined_qa += "\n" + next_question
                         i += 1

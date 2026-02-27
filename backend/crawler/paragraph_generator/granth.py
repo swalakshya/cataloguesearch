@@ -10,17 +10,24 @@ Phase 1 — Sentence-boundary combining:
     the heading itself is not added to any paragraph).
   - The running buffer is flushed when:
       1. The last added text ends with a punctuation suffix (।?!:)]}), OR
-      2. The next block's text starts with a configured stop prefix
-         (e.g. अर्थ, टीका, भावार्थ) after stripping leading brackets/quotes, OR
+      2. The next block's text starts with a stop or QA prefix, OR
       3. The next block is a chapter_heading.
   - stop_words from scan_config provides the stop prefix list.
 
+Phase 1.5 — Q&A tagging:
+  - Takes Phase 1 output and tags each paragraph as QA or non-QA.
+  - A paragraph is QA if its text starts with a question_prefix or
+    answer_prefix (from scan_config) after stripping optional leading
+    number markers like '(२) ', '(3) '.
+
 Phase 2 — Minimum-length combining (target: 100 words):
-  - Takes Phase 1 output (List[Tuple[int, str, bool]]) and greedily merges
-    consecutive paragraphs until the buffer reaches >= 100 words.
-  - Hard flush boundaries (never merge across):
-      * is_chapter_start=True — paragraph follows a chapter_heading
-      * stop prefix — paragraph begins a commentary section
+  - Takes Phase 1.5 output (List[Tuple[int, str, bool, bool]]) and:
+      * Combines consecutive QA paragraphs with '\n' (like advanced.py Phase 2)
+      * Greedily merges consecutive non-QA paragraphs until >= 100 words
+  - Hard flush boundaries (never merge across), in priority order:
+      * is_chapter_start=True — chapter boundary, always flushes
+      * QA ↔ non-QA type change
+      * stop prefix — paragraph begins a commentary section (non-QA only)
   - The 100-word threshold is a soft minimum; if a logical section never
     reaches 100 words, it is output as-is.
 
@@ -28,6 +35,7 @@ Output: List[Tuple[int, str]] compatible with index_generator._write_paragraphs(
 page_num in each tuple is the page of the first block in the paragraph.
 """
 import logging
+import re
 from typing import List, Tuple
 
 from backend.config import Config
@@ -36,44 +44,11 @@ from backend.crawler.paragraph_generator.language_meta import LanguageMeta
 
 log_handle = logging.getLogger(__name__)
 
-# Characters that can legally precede a stop-prefix word
-_LEADING_STRIP = '([{\'"'
-
-# Characters that can legally follow a stop-prefix word (separators)
-_STOP_WORD_SEPARATORS = set(':ः- —\t[({\'"')
 _MIN_PARA_LENGTH = 100  # minimum words per output paragraph
 
-
-def _starts_with_stop_prefix(text: str, stop_prefixes: tuple) -> bool:
-    """
-    Return True if *text* begins with one of *stop_prefixes* (as a complete
-    word) after stripping any leading bracket / quote characters.
-
-    A complete word match requires that the character immediately after the
-    prefix is a known separator (:, ः, -, —, space, bracket, quote) or
-    end-of-text. This prevents partial matches like 'अर्थात्' matching 'अर्थ'.
-
-    Handles patterns like:
-        अर्थ:—        →  ':' is a separator  → match
-        अर्थ :—       →  ' ' is a separator  → match
-        गाथार्थः      →  'ः' is a separator  → match
-        गाथार्थ -     →  ' ' is a separator  → match
-        [टीका:-       →  strip '[', ':' follows → match
-        अर्थात्...    →  'ा' is NOT a separator → no match
-    """
-    if not stop_prefixes:
-        return False
-    stripped = text.lstrip(_LEADING_STRIP)
-    for prefix in stop_prefixes:
-        if stripped.startswith(prefix):
-            rest = stripped[len(prefix):]
-            # Match if end-of-text or next char is a known separator.
-            # This ensures the stop word is a complete word — e.g. 'अर्थ'
-            # matches 'अर्थ:' and 'अर्थः' but NOT 'अर्थात्' (where 'ा'
-            # is not a separator).
-            if not rest or rest[0] in _STOP_WORD_SEPARATORS:
-                return True
-    return False
+# Strips optional leading number markers like '(२) ', '(3) ', '3. ' before
+# QA prefix matching. Handles ASCII and Devanagari digits.
+_QA_MARKER_RE = re.compile(r'^[\s([{\'"]*[0-9०-९]+[\s.)\]}\'"]*')
 
 
 class GranthParagraphGenerator(BaseParagraphGenerator):
@@ -103,21 +78,27 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
             pages_data: List of (page_num, blocks) where blocks is a list of
                         {"type": str, "text": str} dicts (from LLMPDFProcessor).
             scan_config: Document scan configuration; reads:
-                - "stop_words": list[str]     — prefixes that close the buffer
-                - "typo_list":  list[[str,str]] — typo corrections
+                - "stop_words":      list[str]      — prefixes that close the buffer
+                - "question_prefix": list[str]      — question paragraph prefixes
+                - "answer_prefix":   list[str]      — answer paragraph prefixes
+                - "typo_list":       list[[str,str]] — typo corrections
 
         Returns:
             List of (page_num, paragraph_text) tuples.
         """
         stop_prefixes = tuple(scan_config.get("stop_words", []))
+        question_prefixes = tuple(scan_config.get("question_prefix", []))
+        answer_prefixes = tuple(scan_config.get("answer_prefix", []))
         typo_list = scan_config.get("typo_list", [])
 
-        phase1 = self._phase1_sentence_boundaries(pages_data, stop_prefixes, typo_list)
-        phase2 = self._phase2_min_length(phase1, stop_prefixes)
+        qa_prefixes = question_prefixes + answer_prefixes
+        phase1 = self._phase1_sentence_boundaries(pages_data, stop_prefixes, qa_prefixes, typo_list)
+        phase1_5 = self._phase1_5_tag_qa(phase1, question_prefixes, answer_prefixes)
+        phase2 = self._phase2_min_length(phase1_5, stop_prefixes)
 
         log_handle.info(
-            "GranthParagraphGenerator: %d pages → %d (phase1) → %d (phase2) paragraphs",
-            len(pages_data), len(phase1), len(phase2)
+            "GranthParagraphGenerator: %d pages → %d (phase1) → %d (phase1.5) → %d (phase2) paragraphs",
+            len(pages_data), len(phase1), len(phase1_5), len(phase2)
         )
         return phase2
 
@@ -129,6 +110,7 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
         self,
         pages_data: List[Tuple[int, List[dict]]],
         stop_prefixes: tuple,
+        qa_prefixes: tuple,
         typo_list: list,
     ) -> List[Tuple[int, str, bool]]:
         """
@@ -136,7 +118,7 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
 
         Buffer is flushed on:
           1. Punctuation suffix at end of current text.
-          2. Next block starts with a stop prefix.
+          2. Next block starts with a stop or QA prefix.
           3. Next block is a chapter_heading (hard break; heading not emitted).
 
         Returns List[Tuple[page_num, text, is_chapter_start]] where
@@ -176,7 +158,8 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
                 if not text:
                     continue
 
-                if buffer and _starts_with_stop_prefix(text, stop_prefixes):
+                if buffer and (self._starts_with_prefix(text, stop_prefixes) or
+                               self._starts_with_prefix(text, qa_prefixes)):
                     _flush()
 
                 if not buffer:
@@ -191,51 +174,94 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
         return result
 
     # ------------------------------------------------------------------
+    # Phase 1.5 — Q&A tagging
+    # ------------------------------------------------------------------
+
+    def _phase1_5_tag_qa(
+        self,
+        paragraphs: List[Tuple[int, str, bool]],
+        question_prefixes: tuple,
+        answer_prefixes: tuple,
+    ) -> List[Tuple[int, str, bool, bool]]:
+        """
+        Tag each paragraph as QA or non-QA.
+
+        A paragraph is tagged as QA if its text starts with a question or
+        answer prefix after optionally stripping leading number markers
+        (e.g. '(२) प्रश्न:' → 'प्रश्न:').
+
+        Returns List[Tuple[page_num, text, is_chapter_start, is_qa]].
+        Combining of consecutive QA blocks is handled by Phase 2.
+        """
+        qa_prefixes = question_prefixes + answer_prefixes
+        result: List[Tuple[int, str, bool, bool]] = []
+
+        for page_num, text, is_chapter_start in paragraphs:
+            stripped = _QA_MARKER_RE.sub('', text)
+            is_qa = (self._starts_with_prefix(text, qa_prefixes) or
+                     self._starts_with_prefix(stripped, qa_prefixes))
+            result.append((page_num, text, is_chapter_start, is_qa))
+
+        return result
+
+    # ------------------------------------------------------------------
     # Phase 2 — minimum-length combining
     # ------------------------------------------------------------------
 
-    @staticmethod
     def _phase2_min_length(
-        paragraphs: List[Tuple[int, str, bool]],
+        self,
+        paragraphs: List[Tuple[int, str, bool, bool]],
         stop_prefixes: tuple,
     ) -> List[Tuple[int, str]]:
         """
-        Merge consecutive short paragraphs until the buffer reaches
-        _MIN_PARA_LENGTH words.
+        Combine consecutive QA paragraphs with '\\n', and greedily merge
+        consecutive non-QA paragraphs until _MIN_PARA_LENGTH words.
 
-        Hard flush boundaries (never merge across):
-          - is_chapter_start=True  — paragraph follows a chapter_heading
-          - stop prefix            — paragraph begins a commentary section
+        Hard flush boundaries (never merge across), in priority order:
+          - is_chapter_start=True  — chapter boundary, always flushes
+          - QA ↔ non-QA type change
+          - stop prefix            — paragraph begins a commentary section (non-QA only)
 
-        Soft flush: once buffer_len >= _MIN_PARA_LENGTH words, flush.
+        Soft flush: once non-QA buffer_len >= _MIN_PARA_LENGTH words, flush.
         """
         result: List[Tuple[int, str]] = []
         buffer: List[str] = []
         buffer_len: int = 0
         buffer_page: int | None = None
+        buffer_is_qa: bool = False
 
         def _flush():
-            nonlocal buffer, buffer_len, buffer_page
+            nonlocal buffer, buffer_len, buffer_page, buffer_is_qa
             if buffer:
                 result.append((buffer_page, '\n'.join(buffer)))
             buffer = []
             buffer_len = 0
             buffer_page = None
+            buffer_is_qa = False
 
-        for page_num, text, is_chapter_start in paragraphs:
-            # Hard boundaries — flush before absorbing this paragraph
-            if buffer and (is_chapter_start or
-                           _starts_with_stop_prefix(text, stop_prefixes)):
+        for page_num, text, is_chapter_start, is_qa in paragraphs:
+            # Chapter boundary always flushes — regardless of QA or non-QA
+            if buffer and is_chapter_start:
+                _flush()
+
+            # Flush on type change (QA ↔ non-QA)
+            if buffer and is_qa != buffer_is_qa:
+                _flush()
+
+            # stop_prefix is a hard boundary for non-QA only
+            if not is_qa and buffer and self._starts_with_prefix(text, stop_prefixes):
                 _flush()
 
             if not buffer:
                 buffer_page = page_num
+                buffer_is_qa = is_qa
 
             buffer.append(text)
-            buffer_len += len(text.split())
 
-            if buffer_len >= _MIN_PARA_LENGTH:
-                _flush()
+            if not is_qa:
+                buffer_len += len(text.split())
+                if buffer_len >= _MIN_PARA_LENGTH:
+                    _flush()
 
         _flush()
         return result

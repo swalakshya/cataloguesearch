@@ -5,7 +5,7 @@ import ScriptureEval from './ScriptureEval';
 import OCRPreview from './OCRPreview';
 import ScriptureLLMEval from './ScriptureLLMEval';
 import FileBrowser from './FileBrowser';
-import { storeDirectoryHandles, getStoredDirectoryHandles, validateDirectoryHandles } from '../../utils/directoryHandlers';
+import { storeDirectoryHandles, getStoredDirectoryHandles, validateDirectoryHandles, requestStoredPermissions, clearStoredDirectoryHandles } from '../../utils/directoryHandlers';
 
 const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
 
@@ -16,6 +16,7 @@ const UIEval = () => {
     const [showFileBrowser, setShowFileBrowser] = useState(false);
     const [selectedFolder, setSelectedFolder] = useState(null);
     const [baseDirectoryHandles, setBaseDirectoryHandles] = useState(null);
+    const [expiredHandles, setExpiredHandles] = useState(null); // stored but permissions lapsed
     const [pdfParentDirPath, setPdfParentDirPath] = useState('');
 
     // Debug activeTab changes
@@ -57,13 +58,14 @@ const UIEval = () => {
             try {
                 const storedHandles = await getStoredDirectoryHandles();
                 if (storedHandles.pdf && storedHandles.ocr && storedHandles.text) {
-                    // Validate that the handles still have permissions
                     const isValid = await validateDirectoryHandles(storedHandles);
                     if (isValid) {
                         setBaseDirectoryHandles(storedHandles);
                         console.log('Successfully restored directory handles from storage');
                     } else {
-                        console.log('Stored directory handles lost permissions');
+                        // Permissions lapsed — keep handles so we can re-grant without navigation
+                        setExpiredHandles(storedHandles);
+                        console.log('Stored handles found but permissions lapsed — re-grant available');
                     }
                 }
             } catch (err) {
@@ -108,41 +110,59 @@ const UIEval = () => {
         setBaseDirectoryHandles(handles);
     };
 
+    const resetPermissions = async () => {
+        await clearStoredDirectoryHandles();
+        setBaseDirectoryHandles(null);
+        setExpiredHandles(null);
+    };
+
+    const regrantPermissions = async () => {
+        if (!expiredHandles) return;
+        try {
+            const granted = await requestStoredPermissions(expiredHandles);
+            if (granted) {
+                setBaseDirectoryHandles(expiredHandles);
+                setExpiredHandles(null);
+            } else {
+                alert('Permission was denied. Please try again or use "Set up from scratch".');
+            }
+        } catch (err) {
+            console.error('Error re-granting permissions:', err);
+        }
+    };
+
     const requestBaseDirectoryPermissions = async () => {
         if (!basePaths) return;
-        
+
         try {
-            // Check if File System Access API is available
             if (!window.showDirectoryPicker) {
                 alert('File System Access API is not supported in this browser. Please use Google Chrome for the best experience.');
                 return;
             }
-            
-            // Request PDF directory
+
+            // Step 1 — configs + PDFs
+            alert(`Step 1 of 3: Select the configs & PDFs directory.\n\nNavigate to:\n${basePaths.base_pdf_path}`);
             const pdfHandle = await window.showDirectoryPicker();
-            
-            // Request OCR directory
+
+            // Step 2 — OCR output
+            alert(`Step 2 of 3: Select the OCR output directory.\n\nNavigate to:\n${basePaths.base_ocr_path}`);
             const ocrHandle = await window.showDirectoryPicker();
-            
-            // Request Text directory
+
+            // Step 3 — Text output
+            alert(`Step 3 of 3: Select the Text output directory.\n\nNavigate to:\n${basePaths.base_text_path}`);
             const textHandle = await window.showDirectoryPicker();
-            
-            // Store all handles
-            const handles = {
-                pdf: pdfHandle,
-                ocr: ocrHandle,
-                text: textHandle
-            };
+
+            const handles = { pdf: pdfHandle, ocr: ocrHandle, text: textHandle };
             setBaseDirectoryHandles(handles);
-            
-            // Store in IndexedDB for persistence
+            setExpiredHandles(null);
+
             try {
                 await storeDirectoryHandles(handles);
                 console.log('Directory handles stored successfully');
             } catch (storageErr) {
                 console.warn('Could not persist directory handles:', storageErr);
             }
-            
+
         } catch (err) {
             if (err.name === 'AbortError') {
                 console.log('User cancelled directory selection');
@@ -301,27 +321,8 @@ const UIEval = () => {
                                             </p>
                                         </div>
 
-                                        {!baseDirectoryHandles ? (
-                                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
-                                                <div className="flex items-start">
-                                                    <svg className="w-5 h-5 text-amber-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                                                    </svg>
-                                                    <div>
-                                                        <p className="text-amber-800 font-medium text-sm">Directory access required</p>
-                                                        <p className="text-amber-700 text-sm mt-1">
-                                                            Please grant permission to access your base directories to use file browsing features in the evaluation tools.
-                                                        </p>
-                                                        <button
-                                                            onClick={requestBaseDirectoryPermissions}
-                                                            className="mt-3 bg-amber-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-amber-700 transition duration-200"
-                                                        >
-                                                            Grant Directory Permissions
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ) : (
+                                        {baseDirectoryHandles ? (
+                                            // State 1 — all good
                                             <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
                                                 <div className="flex items-start">
                                                     <svg className="w-5 h-5 text-green-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -329,14 +330,78 @@ const UIEval = () => {
                                                     </svg>
                                                     <div>
                                                         <p className="text-green-800 font-medium text-sm">Directory permissions granted</p>
-                                                        <p className="text-green-700 text-sm mt-1">
-                                                            File browsing is now available across all evaluation tools.
-                                                        </p>
-                                                        <div className="mt-2 text-xs text-green-600">
-                                                            <div>📁 PDF Directory: {basePaths.base_pdf_path}</div>
-                                                            <div>📁 OCR Directory: {basePaths.base_ocr_path}</div>
-                                                            <div>📁 Text Directory: {basePaths.base_text_path}</div>
+                                                        <p className="text-green-700 text-sm mt-1">File browsing is available across all evaluation tools.</p>
+                                                        <div className="mt-2 text-xs text-green-600 space-y-0.5">
+                                                            <div>📁 Configs & PDFs: {baseDirectoryHandles.pdf?.name}</div>
+                                                            <div>📁 OCR Output: {baseDirectoryHandles.ocr?.name}</div>
+                                                            <div>📁 Text Output: {baseDirectoryHandles.text?.name}</div>
                                                         </div>
+                                                        <button
+                                                            onClick={resetPermissions}
+                                                            className="mt-3 text-green-700 text-xs underline hover:text-green-900"
+                                                        >
+                                                            Reset &amp; start over
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : expiredHandles ? (
+                                            // State 2 — had permissions before, just need re-grant (no navigation)
+                                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                                                <div className="flex items-start">
+                                                    <svg className="w-5 h-5 text-amber-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                                                    </svg>
+                                                    <div className="flex-1">
+                                                        <p className="text-amber-800 font-medium text-sm">Permissions expired</p>
+                                                        <p className="text-amber-700 text-sm mt-1">
+                                                            Your previously selected folders are remembered. Click Re-grant — the browser will show Allow dialogs, no folder navigation needed.
+                                                        </p>
+                                                        <div className="mt-2 text-xs text-amber-700 space-y-0.5">
+                                                            <div>📁 Configs & PDFs: <span className="font-mono">{expiredHandles.pdf?.name}</span></div>
+                                                            <div>📁 OCR Output: <span className="font-mono">{expiredHandles.ocr?.name}</span></div>
+                                                            <div>📁 Text Output: <span className="font-mono">{expiredHandles.text?.name}</span></div>
+                                                        </div>
+                                                        <div className="mt-3 flex items-center gap-3">
+                                                            <button
+                                                                onClick={regrantPermissions}
+                                                                className="bg-amber-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-amber-700 transition duration-200"
+                                                            >
+                                                                Re-grant Access
+                                                            </button>
+                                                            <button
+                                                                onClick={resetPermissions}
+                                                                className="text-amber-700 text-sm underline hover:text-amber-900"
+                                                            >
+                                                                Set up from scratch
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            // State 3 — first time, step-by-step setup
+                                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                                                <div className="flex items-start">
+                                                    <svg className="w-5 h-5 text-amber-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                                                    </svg>
+                                                    <div className="flex-1">
+                                                        <p className="text-amber-800 font-medium text-sm">Directory access required</p>
+                                                        <p className="text-amber-700 text-sm mt-1">
+                                                            Three folder pickers will open in sequence. Navigate to each path below:
+                                                        </p>
+                                                        <div className="mt-2 text-xs text-amber-800 space-y-1">
+                                                            <div className="flex gap-2"><span className="font-semibold w-4">1.</span><span>Configs &amp; PDFs: <span className="font-mono bg-amber-100 px-1 rounded">{basePaths.base_pdf_path}</span></span></div>
+                                                            <div className="flex gap-2"><span className="font-semibold w-4">2.</span><span>OCR Output: <span className="font-mono bg-amber-100 px-1 rounded">{basePaths.base_ocr_path}</span></span></div>
+                                                            <div className="flex gap-2"><span className="font-semibold w-4">3.</span><span>Text Output: <span className="font-mono bg-amber-100 px-1 rounded">{basePaths.base_text_path}</span></span></div>
+                                                        </div>
+                                                        <button
+                                                            onClick={requestBaseDirectoryPermissions}
+                                                            className="mt-3 bg-amber-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-amber-700 transition duration-200"
+                                                        >
+                                                            Grant Directory Permissions (3 steps)
+                                                        </button>
                                                     </div>
                                                 </div>
                                             </div>

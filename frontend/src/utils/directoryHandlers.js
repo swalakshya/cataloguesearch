@@ -90,6 +90,28 @@ export const getStoredDirectoryHandles = async () => {
 };
 
 /**
+ * Re-grants permissions on previously stored handles using requestPermission().
+ * No folder navigation needed — browser shows simple Allow/Deny dialogs.
+ * Must be called from a user gesture (button click).
+ */
+export const requestStoredPermissions = async (handles) => {
+    try {
+        const [pdfResult, ocrResult, textResult] = await Promise.all([
+            handles.pdf?.requestPermission({ mode: 'read' }),
+            handles.ocr?.requestPermission({ mode: 'read' }),
+            handles.text?.requestPermission({ mode: 'read' }),
+        ]);
+
+        const granted = pdfResult === 'granted' && ocrResult === 'granted' && textResult === 'granted';
+        console.log('[PERMISSIONS] Re-grant result:', { pdf: pdfResult, ocr: ocrResult, text: textResult, granted });
+        return granted;
+    } catch (err) {
+        console.error('[PERMISSIONS] ❌ Error re-granting permissions:', err);
+        return false;
+    }
+};
+
+/**
  * Clears stored directory handles from IndexedDB
  */
 export const clearStoredDirectoryHandles = async () => {
