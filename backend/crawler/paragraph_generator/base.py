@@ -1,5 +1,6 @@
 import logging
 import re
+from dataclasses import dataclass
 from typing import List, Tuple
 
 from backend.config import Config
@@ -7,11 +8,30 @@ from backend.crawler.paragraph_generator.language_meta import LanguageMeta
 
 log_handle = logging.getLogger(__name__)
 
+
+@dataclass
+class ParaInfo:
+    """
+    Carries a paragraph and its structural labels through the generation pipeline.
+
+    Flags (all default False):
+        is_chapter_start  — first paragraph after a chapter heading; hard merge boundary.
+        is_verse_end      — paragraph ends with a verse marker (e.g. ।।67।।); flush after.
+        is_qa             — paragraph is a Q&A block; combine with consecutive QA, never
+                            merge with non-QA.
+    """
+    page_num: int
+    text: str
+    is_chapter_start: bool = False
+    is_verse_end: bool = False
+    is_qa: bool = False
+
+
 # Characters that can legally precede a prefix word
 _LEADING_STRIP = '([{\'"'
 
 # Characters that can legally follow a prefix word (separators)
-_STOP_WORD_SEPARATORS = set(':ः- —\t[({\'"')
+_STOP_WORD_SEPARATORS = set(':ः- –—\t[({\'"')  # includes en-dash (–) and em-dash (—)
 
 
 class BaseParagraphGenerator:
@@ -192,8 +212,8 @@ class BaseParagraphGenerator:
         for error_char in purn_viram_errors:
             text = text.replace(error_char, '।')
 
-        # Normalize "double danda" (end of verses)
-        text = text.replace("॥", "।")
+        # Normalize "double danda" (end of verses) to two purn virams
+        text = text.replace("॥", "।।")
 
         # Remove whitespace after opening punctuation marks.
         # This finds an opening punctuation mark followed by a space and removes the space.

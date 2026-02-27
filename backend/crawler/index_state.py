@@ -94,7 +94,12 @@ class IndexState:
         """Inserts or updates a document's state in the DB."""
         conn = sqlite3.connect(self.state_db_path)
         c = conn.cursor()
-        log_handle.info(f"Storing state: {json_dumps(state)}")
+        log_state = {**state}
+        if "parsed_bookmarks" in log_state and log_state["parsed_bookmarks"]:
+            import json as _json
+            bookmarks = _json.loads(log_state["parsed_bookmarks"]) if isinstance(log_state["parsed_bookmarks"], str) else log_state["parsed_bookmarks"]
+            log_state["parsed_bookmarks"] = f"<{len(bookmarks)} bookmarks>"
+        log_handle.info(f"Storing state: {json_dumps(log_state)}")
         c.execute("""
             INSERT INTO indexed_files_state (document_id, file_path, last_indexed_timestamp, file_checksum, config_hash, index_checksum, ocr_checksum, parsed_bookmarks)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
