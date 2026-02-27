@@ -38,21 +38,9 @@ class LanguageMeta(ABC):
         pass
 
     @property
-    @abstractmethod
-    def stop_prefixes(self) -> tuple:
-        """Returns language-specific question/stop prefixes."""
-        pass
-
-    @property
-    @abstractmethod
-    def answer_prefixes(self) -> tuple:
-        """Returns language-specific answer prefixes."""
-        pass
-
-    @property
     def dialogue_prefixes(self) -> tuple:
-        """Returns combined stop and answer prefixes."""
-        return self.stop_prefixes + self.answer_prefixes
+        """Returns combined question and answer prefixes."""
+        return tuple(self.question_prefix) + tuple(self.answer_prefix)
 
     @property
     def question_prefix(self) -> list:
@@ -89,14 +77,6 @@ class HindiMeta(LanguageMeta):
     def punctuation_suffixes(self) -> tuple:
         return ('।', '?', '!', ':', ')', ']', '}')
 
-    @property
-    def stop_prefixes(self) -> tuple:
-        return ('प्रश्न:', 'प्रश्न :', 'उत्तर:', 'उत्तर :')
-
-    @property
-    def answer_prefixes(self) -> tuple:
-        return ('उत्तर:', 'उत्तर :')
-
     def normalize_dialogue_patterns(self, text: str) -> str:
         """
         Normalize Hindi dialogue patterns.
@@ -127,14 +107,6 @@ class GujaratiMeta(LanguageMeta):
     @property
     def punctuation_suffixes(self) -> tuple:
         return ('।', '.', '?', '!', ':', ')', ']', '}')
-
-    @property
-    def stop_prefixes(self) -> tuple:
-        return ('શ્રોતા:', 'પૂજ્ય ગુરુદેવશ્રી:', 'મુમુક્ષુ:', 'શંકા:', 'પ્રશ્ન:')
-
-    @property
-    def answer_prefixes(self) -> tuple:
-        return ('સમાધાન:', 'ઉત્તર:')
 
     def normalize_dialogue_patterns(self, text: str) -> str:
         """
