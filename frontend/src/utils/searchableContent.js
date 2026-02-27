@@ -253,6 +253,15 @@ export const searchableGranths = [
     name: "Chhah Dhala",
     author: "Pandit Shri Daulat Ram",
     status: "searchable"
+  },
+  {
+    name: "Parmatma Prakash",
+    author: "Shrimad Yogindu Dev",
+    status: "searchable"
+  },
+  {
+    name: "Samadhi Tantra",
+    author: "Shrimad Pujyapaad Swami"
   }
 ];
 
