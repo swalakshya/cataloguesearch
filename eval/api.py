@@ -16,7 +16,6 @@ import shutil
 import concurrent.futures
 import threading
 import requests
-from enum import Enum
 import base64
 import io
 
@@ -24,7 +23,7 @@ import io
 from PIL import Image
 
 from backend.config import Config
-from backend.crawler.pdf_processor import PDFProcessor
+from backend.crawler.advanced_pdf_processor import AdvancedPDFProcessor
 from backend.crawler.markdown_parser import MarkdownParser
 from backend.common.scan_config import get_scan_config
 from backend.crawler.bookmark_extractor.factory import create_bookmark_extractor_by_name
@@ -33,18 +32,6 @@ from .ocr import get_ocr_service
 from scratch.para_gen.para_gen import process_image_to_paragraphs
 
 log_handle = logging.getLogger(__name__)
-
-# --- Language mapping for PDFProcessor compatibility ---
-def get_pdf_processor_language(api_language: str) -> str:
-    """Convert API language codes to PDFProcessor language codes"""
-    language_map = {"hin": "hi", "guj": "gu", "eng": "en"}
-    return language_map.get(api_language, "hi")
-
-class OCRMode(str, Enum):
-    """Defines the available OCR processing modes."""
-    PSM6 = "psm6"
-    PSM3 = "psm3"
-    ADVANCED = "advanced"
 
 # --- Removed old job tracking - now handled by EvalOCRService ---
 
@@ -67,6 +54,7 @@ class TextBox(BaseModel):
 class Paragraph(BaseModel):
     text: str
     boxes: List[TextBox]
+    paragraph_type: str = ""
 
 class OCRResponse(BaseModel):
     text: str
@@ -207,11 +195,6 @@ async def process_ocr(
     language: str = Form("hin", description="Language code for OCR (hin, guj, eng)"),
     crop_top: float = Form(0, description="Percentage to crop from top (0-50)"),
     crop_bottom: float = Form(0, description="Percentage to crop from bottom (0-50)"),
-    mode: OCRMode = Form(
-        OCRMode.PSM6,
-        description='OCR processing mode. "psm6" and "psm3" use the legacy processor. '
-                    '"advanced" uses the new para_gen logic (beta).'
-    ),
     relative_path: Optional[str] = Form(None, description="Relative path to PDF file from base folder"),
     page_number: Optional[int] = Form(None, description="Page number to extract from PDF (1-indexed, requires relative_path)")
 ):
@@ -233,17 +216,6 @@ async def process_ocr(
         raise HTTPException(status_code=400, detail="Provide either 'image' file OR 'relative_path'+'page_number', not both")
     if not (0 <= crop_top <= 50 and 0 <= crop_bottom <= 50):
         raise HTTPException(status_code=400, detail="Crop percentages must be between 0 and 50")
-
-    # Determine settings based on the selected mode
-    use_para_gen = (mode == OCRMode.ADVANCED)
-    psm = 3 if mode == OCRMode.PSM3 else 6
-
-    # For now, Google OCR is not supported with this endpoint.
-    use_google_ocr = False
-
-    # TODO: Google OCR not yet supported in PDFProcessor integration
-    if use_google_ocr:
-        raise HTTPException(status_code=400, detail="Google OCR is not supported for single-page evaluation.")
 
     # Build scan_config
     scan_config = {}
@@ -271,12 +243,9 @@ async def process_ocr(
         scan_config["crop"]["top"] = crop_top
         scan_config["crop"]["bottom"] = crop_bottom
 
-    # Map language to PDFProcessor format
-    processor_language = get_pdf_processor_language(language)
-
     # Initialize PDF processor
     config = Config("configs/config.yaml")
-    pdf_processor = PDFProcessor(config)
+    pdf_processor = AdvancedPDFProcessor(config)
 
     # --- Determine Image Source ---
     temp_path = None
@@ -339,40 +308,18 @@ async def process_ocr(
             source_description = f"uploaded file {image.filename}"
 
         # --- OCR and Paragraph Logic ---
-        if use_para_gen:
-            log_handle.info(f"Processing OCR for {source_description} using para_gen logic...")
-            # Map language to pytesseract format ('hin+guj')
-            tesseract_lang = language.replace(' ', '+')
+        log_handle.info(f"Processing OCR for {source_description} using para_gen logic...")
+        tesseract_lang = language.replace(' ', '+')
 
-            # Call the new refactored function with scan_config
-            generated_paragraphs, _ = process_image_to_paragraphs(
-                pil_image, lang=tesseract_lang, page_num=page_num, scan_config=scan_config
-            )
+        generated_paragraphs, _ = process_image_to_paragraphs(
+            pil_image, lang=tesseract_lang, page_num=page_num, scan_config=scan_config
+        )
 
-            # Adapt the output to the API's Paragraph model
-            api_paragraphs = [Paragraph(text=p.text, boxes=[]) for p in generated_paragraphs]
-            extracted_text = '\n\n----\n\n'.join([p.text for p in api_paragraphs])
-            log_handle.info(f"OCR processing completed using para_gen: {len(api_paragraphs)} paragraphs")
+        api_paragraphs = [Paragraph(text=p.text, boxes=[], paragraph_type=p.paragraph_type.name) for p in generated_paragraphs]
+        extracted_text = '\n\n----\n\n'.join([p.text for p in api_paragraphs])
+        log_handle.info(f"OCR processing completed: {len(api_paragraphs)} paragraphs")
 
-            return OCRResponse(text=extracted_text, boxes=[], paragraphs=api_paragraphs, language=language)
-
-        else: # Keep the original logic
-            log_handle.info(f"Processing OCR for {source_description} using legacy PDFProcessor logic...")
-            config = Config("configs/config.yaml")
-            pdf_processor = PDFProcessor(config)
-            processor_language = get_pdf_processor_language(language)
-
-            # Use PDFProcessor._process_single_page for OCR
-            processor_lang_code = pdf_processor._pytesseract_language_map[processor_language]
-            _, text_paragraphs = PDFProcessor._process_single_page(
-                (page_num, pil_image, processor_lang_code, psm))
-
-            # Create paragraphs without text boxes (simplified approach)
-            paragraphs = [Paragraph(text=p_text, boxes=[]) for p_text in text_paragraphs]
-            extracted_text = '\n\n----\n\n'.join([p.text for p in paragraphs])
-            log_handle.info(f"OCR processing completed using PDFProcessor: {len(paragraphs)} paragraphs")
-
-            return OCRResponse(text=extracted_text, boxes=[], paragraphs=paragraphs, language=language)
+        return OCRResponse(text=extracted_text, boxes=[], paragraphs=api_paragraphs, language=language)
 
     except HTTPException:
         raise
@@ -392,7 +339,6 @@ async def start_batch_ocr(
     file: UploadFile = File(..., description="PDF file to process"),
     language: str = Form("hin", description="Language code for OCR (hin, guj, eng)"),
     use_google_ocr: bool = Form(False, description="Use Google Vision OCR instead of Tesseract"),
-    psm: int = Form(6, description="PSM mode (3 or 6)")
 ):
     """
     Start batch OCR processing of a PDF file.
@@ -401,10 +347,6 @@ async def start_batch_ocr(
     if not file.filename or not file.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Please upload a PDF file")
 
-    # Validate PSM value
-    if psm not in [3, 6]:
-        raise HTTPException(status_code=400, detail="PSM must be 3 or 6")
-
     log_handle.info(f"Starting batch OCR for {file.filename} with language={language}")
 
     try:
@@ -412,7 +354,7 @@ async def start_batch_ocr(
         file_content = await file.read()
 
         ocr_service = get_ocr_service()
-        job_id = ocr_service.start_batch_processing(file_content, language, use_google_ocr, psm)
+        job_id = ocr_service.start_batch_processing(file_content, language, use_google_ocr)
 
         return BatchJobResponse(job_id=job_id)
 
@@ -591,8 +533,23 @@ async def extract_bookmarks(request: BookmarkExtractionRequest):
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-        # Parse bookmarks using pre-extracted list (no PDF file needed)
-        bookmarks_data = extractor.parse_bookmarks_from_list(request.bookmarks)
+        # Parse bookmarks using pre-extracted list (no PDF file needed).
+        # Bookmarks are sent by the client (PDF.js); batch through call_llm directly.
+        bookmarks = request.bookmarks
+        batch_size = 100
+        indexed_titles = [
+            {"index": i, "page": item.get("page"), "title": item.get("title", "")}
+            for i, item in enumerate(bookmarks)
+        ]
+        all_extracted_data = []
+        total_batches = (len(indexed_titles) + batch_size - 1) // batch_size
+        for batch_num in range(total_batches):
+            batch = indexed_titles[batch_num * batch_size:(batch_num + 1) * batch_size]
+            extracted = extractor.call_llm(batch)
+            if not extracted:
+                raise HTTPException(status_code=500, detail=f"LLM failed on batch {batch_num + 1}/{total_batches}")
+            all_extracted_data.extend(extracted)
+        bookmarks_data = extractor._merge_results(bookmarks, all_extracted_data)
 
         log_handle.info(f"Successfully parsed {len(bookmarks_data)} bookmarks")
 
@@ -707,7 +664,7 @@ async def generate_ocr_preview(
 
         # Initialize PDF processor
         config = Config("configs/config.yaml")
-        pdf_processor = PDFProcessor(config)
+        pdf_processor = AdvancedPDFProcessor(config)
 
         # Build scan_config with crop settings
         scan_config = {}
@@ -820,7 +777,7 @@ async def process_scripture_llm(
         if is_pdf:
             # Extract the specified page from PDF
             config = Config("configs/config.yaml")
-            pdf_processor = PDFProcessor(config)
+            pdf_processor = AdvancedPDFProcessor(config)
 
             images, page_numbers = pdf_processor._get_image(temp_path, [page_number], scan_config)
             if not images:

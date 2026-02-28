@@ -4,7 +4,6 @@ Factory for creating paragraph generators based on configuration.
 import logging
 
 from backend.config import Config
-from backend.crawler.paragraph_generator.base import BaseParagraphGenerator
 from backend.crawler.paragraph_generator.advanced import AdvancedParagraphGenerator
 from backend.crawler.paragraph_generator.granth import GranthParagraphGenerator
 from backend.crawler.paragraph_generator.language_meta import LanguageMeta
@@ -28,7 +27,7 @@ def create_paragraph_generator(config: Config, language_meta: LanguageMeta,
         scan_config: Optional scan config dict; used to read ocr_engine
 
     Returns:
-        BaseParagraphGenerator, AdvancedParagraphGenerator, or GranthParagraphGenerator instance
+        AdvancedParagraphGenerator or GranthParagraphGenerator instance
     """
     scan_config = scan_config or {}
 
@@ -48,5 +47,4 @@ def create_paragraph_generator(config: Config, language_meta: LanguageMeta,
         log_handle.info(f"Creating AdvancedParagraphGenerator based on chunk_strategy={strategy}")
         return AdvancedParagraphGenerator(config, language_meta)
     else:
-        log_handle.info(f"Creating BaseParagraphGenerator based on chunk_strategy={strategy}")
-        return BaseParagraphGenerator(config, language_meta)
+        raise ValueError(f"Unknown chunk_strategy: {strategy!r}")

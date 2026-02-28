@@ -118,58 +118,6 @@ Return ONLY the JSON array, nothing else.
         log_handle.info("Bookmark extraction completed. Processed %s bookmarks", len(result))
         return result
 
-    def parse_bookmarks_from_list(self, bookmarks: List[Dict[str, Any]], batch_size: int = 100) -> List[Dict[str, str]]:
-        """
-        Parse bookmarks from a pre-extracted list using LLM.
-
-        This is the preferred entry point when bookmarks have already been extracted
-        client-side (e.g. via PDF.js), avoiding the need for server-side PDF access.
-
-        Args:
-            bookmarks: List of bookmark dicts with 'title', 'page', 'level' keys
-            batch_size: Number of bookmarks to process per LLM call (default: 100)
-
-        Returns:
-            List of dictionaries with parsed bookmark data
-        """
-        if not bookmarks:
-            log_handle.warning("No bookmarks provided to parse_bookmarks_from_list")
-            return []
-
-        log_handle.info("Starting LLM parsing for %s pre-extracted bookmarks", len(bookmarks))
-
-        indexed_titles = [
-            {"index": i, "page": item.get('page'), "title": item.get('title', '')}
-            for i, item in enumerate(bookmarks)
-        ]
-
-        all_extracted_data = []
-        total_batches = (len(indexed_titles) + batch_size - 1) // batch_size
-
-        log_handle.info("Processing %s bookmarks in %s batches of %s", len(indexed_titles), total_batches, batch_size)
-
-        for batch_num in range(total_batches):
-            start_idx = batch_num * batch_size
-            end_idx = min((batch_num + 1) * batch_size, len(indexed_titles))
-            batch = indexed_titles[start_idx:end_idx]
-
-            log_handle.info("Processing batch %s/%s (%s bookmarks)", batch_num + 1, total_batches, len(batch))
-
-            extracted_data = self.call_llm(batch)
-
-            if not extracted_data:
-                log_handle.error("Failed to extract data from LLM for batch %s/%s", batch_num + 1, total_batches)
-                return []
-
-            all_extracted_data.extend(extracted_data)
-            log_handle.info("Successfully processed batch %s/%s", batch_num + 1, total_batches)
-
-        log_handle.info("Successfully extracted data from all %s batches", total_batches)
-
-        result = self._merge_results(bookmarks, all_extracted_data)
-        log_handle.info("Bookmark parsing completed. Processed %s bookmarks", len(result))
-        return result
-
     def _extract_bookmarks_from_pdf(self, pdf_path: str) -> Dict[str, Any]:
         """
         Extract bookmarks from a PDF file and return as JSON.

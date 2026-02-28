@@ -4,7 +4,6 @@ Factory for creating PDF processors based on configuration.
 import logging
 
 from backend.config import Config
-from backend.crawler.pdf_processor import PDFProcessor
 from backend.crawler.advanced_pdf_processor import AdvancedPDFProcessor
 from backend.crawler.llm_pdf_processor import LLMPDFProcessor
 
@@ -47,5 +46,4 @@ def create_pdf_processor(config: Config, chunk_strategy: str = None,
         log_handle.info(f"Creating AdvancedPDFProcessor based on chunk_strategy={strategy}")
         return AdvancedPDFProcessor(config)
     else:
-        log_handle.info(f"Creating PDFProcessor based on chunk_strategy={strategy}")
-        return PDFProcessor(config)
+        raise ValueError(f"Unknown chunk_strategy: {strategy!r}")

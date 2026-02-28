@@ -2,11 +2,9 @@ import logging
 import os
 import shutil
 import traceback
-import uuid
 from concurrent.futures import ProcessPoolExecutor
 
 import fitz
-import pytesseract
 from PIL import Image
 from tqdm import tqdm
 
@@ -95,25 +93,6 @@ class PDFProcessor:
 
         log_handle.info(f"Generated OCR text files for {pdf_file} in dir {output_ocr_dir}")
         return True
-
-    def _write_output_to_file(self, output_ocr_dir: str, paragraphs: list[tuple[int, list[str]]]):
-        """
-        Writes the extracted paragraphs to files in the output directory.
-
-        Args:
-            output_ocr_dir: Directory where output files should be written
-            paragraphs: List of tuples (page_num, list of paragraph strings)
-        """
-        for page_num, page_paragraphs in paragraphs:
-            fname = f"{output_ocr_dir}/page_{page_num:04d}.txt"
-            content = "\n----\n".join(page_paragraphs)
-            try:
-                with open(fname, 'w', encoding='utf-8') as fh:
-                    fh.write(content)
-            except IOError as e:
-                traceback.print_exc()
-                log_handle.error(f"Failed to write OCR file {fname}: {e}")
-
 
     def _generate_paragraphs(
             self, pdf_file: str, page_list: list[int], scan_config: dict,
@@ -227,60 +206,3 @@ class PDFProcessor:
                 f"Error during PDF to image conversion with PyMuPDF: {pdf_error}")
             traceback.print_exc()
             return [], []
-
-    def read_paragraphs(self, ocr_dir: str, pages_list: list[int]) -> list[tuple[int, list[str]]]:
-        """
-        Reads OCR output files and returns paragraphs.
-
-        Args:
-            ocr_dir: Directory containing OCR output files
-            pages_list: List of page numbers to read
-
-        Returns:
-            List of tuples (page_num, list of paragraph strings)
-        """
-        paragraphs = []
-        for page_num in pages_list:
-            ocr_file = f"{ocr_dir}/page_{page_num:04d}.txt"
-            with open(ocr_file, 'r', encoding='utf-8') as f:
-                content = f.read()
-                page_paragraphs = content.split("\n----\n") if content.strip() else []
-                paragraphs.append((page_num, page_paragraphs))
-        return paragraphs
-
-    @staticmethod
-    def _process_single_page(args):
-        """
-        Worker function to process a single image with preprocessing for better OCR.
-        This function must be at the top level of the module for pickling.
-        """
-        # Backward compatible: support both 3-element and 4-element tuples
-        if len(args) == 3:
-            page_num, image, language_code = args
-            psm = 3  # Default PSM (current behavior)
-        else:
-            page_num, image, language_code, psm = args
-        try:
-            # 1. --- Image Preprocessing ---
-            # Convert the image to RGB for better processing
-            if image.mode != 'RGB':
-                processed_image = image.convert('RGB')
-            else:
-                processed_image = image
-
-            # 2. --- Perform OCR ---
-            # Use the preprocessed image and your existing configuration.
-            config = f'--psm {psm} -l {language_code}'
-            text = pytesseract.image_to_string(processed_image, config=config)
-
-            # 3. --- Clean Up Text ---
-            # Split text into paragraphs and clean them up
-            paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
-
-            return page_num, paragraphs
-
-        except Exception as page_error:
-            # Log the error and return an empty result for this page.
-            log_handle.error(f"An error occurred while processing page {page_num}: {page_error}")
-            traceback.print_exc()
-            return page_num, []

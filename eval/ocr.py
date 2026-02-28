@@ -1,11 +1,10 @@
 """
 OCR Service for Evaluation Module
 
-This module provides OCR functionality for the evaluation system by reusing:
-- PDFProcessor from backend/crawler/pdf_processor.py for core OCR processing
-- Job management and batch processing logic from ocr_utils/
-
-No modifications are made to the original PDFProcessor code.
+This module provides OCR functionality for the evaluation system using:
+- AdvancedPDFProcessor from backend/crawler/advanced_pdf_processor.py for PDF-to-image extraction
+- process_image_to_paragraphs from scratch/para_gen/para_gen.py for OCR and paragraph detection
+- Job management and batch processing logic for concurrent PDF processing
 """
 
 import os
@@ -19,15 +18,15 @@ import zipfile
 import shutil
 import uuid
 from typing import Dict, List, Optional, Tuple
-from PIL import Image
 
 # Add backend directory to path for PDFProcessor import
 backend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'backend')
 if backend_path not in sys.path:
     sys.path.insert(0, backend_path)
 
-from backend.crawler.pdf_processor import PDFProcessor
+from backend.crawler.advanced_pdf_processor import AdvancedPDFProcessor
 from backend.config import Config
+from scratch.para_gen.para_gen import process_image_to_paragraphs
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -125,48 +124,12 @@ class EvalOCRService:
     
     def __init__(self, config_path: str = "configs/config.yaml"):
         self.config = Config(config_path)
-        self.pdf_processor = PDFProcessor(self.config)
+        self.pdf_processor = AdvancedPDFProcessor(self.config)
         self.job_manager = EvalJobManager()
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
         
-    def process_single_page(self, image_file, language: str = "hin",
-                          crop_top: int = 0, crop_bottom: int = 0, psm: int = 6) -> List[str]:
-        """
-        Process a single image using PDFProcessor
-        Returns list of paragraphs
-        """
-        try:
-            # Convert API language to PDFProcessor language
-            lang_map = {"hin": "hi", "guj": "gu", "eng": "en"}
-            processor_lang = lang_map.get(language, "hi")
-            
-            # Load image
-            if isinstance(image_file, str):
-                pil_image = Image.open(image_file)
-            else:
-                pil_image = Image.open(image_file)
-            
-            # Apply cropping if specified
-            if crop_top > 0 or crop_bottom > 0:
-                width, height = pil_image.size
-                top_crop_pixels = int(height * crop_top / 100)
-                bottom_crop_pixels = int(height * crop_bottom / 100)
-                pil_image = pil_image.crop((0, top_crop_pixels, width, height - bottom_crop_pixels))
-            
-            # Use PDFProcessor's language mapping
-            processor_lang_code = self.pdf_processor._pytesseract_language_map[processor_lang]
-
-            # Process using PDFProcessor
-            page_num, paragraphs = PDFProcessor._process_single_page((1, pil_image, processor_lang_code, psm))
-
-            return paragraphs
-            
-        except Exception as e:
-            logger.error(f"Error processing single page: {e}")
-            return [""]
-    
     def start_batch_processing(self, pdf_content, language: str = "hin",
-                             use_google_ocr: bool = False, psm: int = 6) -> str:
+                             use_google_ocr: bool = False) -> str:
         """
         Start batch processing of a PDF file
         pdf_content can be bytes or a file path
@@ -177,12 +140,12 @@ class EvalOCRService:
         # Start processing in background
         future = self.executor.submit(
             self._process_pdf_batch,
-            job_id, pdf_content, language, use_google_ocr, psm
+            job_id, pdf_content, language, use_google_ocr
         )
         
         return job_id
     
-    def _process_pdf_batch(self, job_id: str, pdf_file, language: str, use_google_ocr: bool, psm: int):
+    def _process_pdf_batch(self, job_id: str, pdf_file, language: str, use_google_ocr: bool):
         """Background batch processing of PDF"""
         output_dir = None
         
@@ -256,21 +219,18 @@ class EvalOCRService:
                         raise Exception("Failed to extract pages from PDF")
                     
                     # Process pages in parallel using ThreadPoolExecutor
-                    processor_lang_code = self.pdf_processor._pytesseract_language_map[processor_lang]
-                    
+                    tesseract_lang = self.pdf_processor._pytesseract_language_map[processor_lang]
+
                     # Helper function for processing individual pages
                     def process_single_page_wrapper(args):
                         page_num, image = args
                         if self.job_manager.is_job_cancelled(job_id):
                             return None
 
-                        # Process page using PDFProcessor
-                        page_result_num, paragraphs = PDFProcessor._process_single_page(
-                            (page_num, image, processor_lang_code, psm)
+                        generated_paragraphs, _ = process_image_to_paragraphs(
+                            image, lang=tesseract_lang, page_num=page_num
                         )
-
-                        # Return results for file writing
-                        page_text = "\n\n----\n\n".join(paragraphs)
+                        page_text = "\n\n----\n\n".join(p.text for p in generated_paragraphs)
                         return page_num, page_text
                     
                     # Process pages in parallel (2 workers for page processing)
