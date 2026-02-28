@@ -6,8 +6,6 @@ import traceback
 import pytest
 
 from backend.crawler.index_generator import IndexGenerator
-from backend.crawler.paragraph_generator.factory import create_paragraph_generator
-from backend.crawler.paragraph_generator.language_meta import get_language_meta
 from backend.common.embedding_models import get_embedding_model_factory
 from backend.common.opensearch import get_opensearch_client
 from backend.common.opensearch import create_indices_if_not_exists
@@ -187,25 +185,6 @@ def get_pages_list(ocr_dir):
                 page_num = int(file.replace("page_", "").replace(extn, ""))
                 pages.append(page_num)
     return sorted(pages)
-
-def get_expected_paragraph_count(ocr_dir, pages_list, language, indexing_module):
-    """Calculate expected paragraph count by calling generate_paragraphs directly."""
-    paragraphs = []
-    scan_config = {}
-    for page_num in pages_list:
-        page_file = os.path.join(ocr_dir, f"page_{page_num:04d}.txt")
-        if os.path.exists(page_file):
-            with open(page_file, 'r', encoding='utf-8') as f:
-                content = f.read()
-            page_paragraphs = content.split("\n----\n") if content.strip() else []
-            paragraphs.append((page_num, page_paragraphs))
-
-    # Create paragraph generator with language-specific meta
-    language_meta = get_language_meta(language, scan_config)
-    paragraph_gen = create_paragraph_generator(indexing_module._config, language_meta)
-    processed_paras = paragraph_gen.generate_paragraphs(paragraphs, scan_config)
-
-    return len(processed_paras)
 
 def count_paragraphs_in_output_dir(output_dir):
     """Count total paragraphs written to output text directory."""

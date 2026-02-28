@@ -591,8 +591,23 @@ async def extract_bookmarks(request: BookmarkExtractionRequest):
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-        # Parse bookmarks using pre-extracted list (no PDF file needed)
-        bookmarks_data = extractor.parse_bookmarks_from_list(request.bookmarks)
+        # Parse bookmarks using pre-extracted list (no PDF file needed).
+        # Bookmarks are sent by the client (PDF.js); batch through call_llm directly.
+        bookmarks = request.bookmarks
+        batch_size = 100
+        indexed_titles = [
+            {"index": i, "page": item.get("page"), "title": item.get("title", "")}
+            for i, item in enumerate(bookmarks)
+        ]
+        all_extracted_data = []
+        total_batches = (len(indexed_titles) + batch_size - 1) // batch_size
+        for batch_num in range(total_batches):
+            batch = indexed_titles[batch_num * batch_size:(batch_num + 1) * batch_size]
+            extracted = extractor.call_llm(batch)
+            if not extracted:
+                raise HTTPException(status_code=500, detail=f"LLM failed on batch {batch_num + 1}/{total_batches}")
+            all_extracted_data.extend(extracted)
+        bookmarks_data = extractor._merge_results(bookmarks, all_extracted_data)
 
         log_handle.info(f"Successfully parsed {len(bookmarks_data)} bookmarks")
 
