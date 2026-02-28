@@ -1,0 +1,5 @@
+[run]
+omit =
+    backend/api/feedback_api.py
+    backend/crawler/llm_pdf_processor.py
+    backend/crawler/bookmark_extractor/ollama.py
