@@ -7,6 +7,13 @@ import { addPageNumbersToBookmarks } from '../utils/pdfUtils';
 
 const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
 
+const PARAGRAPH_TYPE_STYLES = {
+    STANDARD_PROSE: { label: 'Prose',       bg: 'bg-blue-50',   border: 'border-blue-200',   text: 'text-blue-800',   badge: 'bg-blue-100 text-blue-700' },
+    VERSE_BLOCK:    { label: 'Verse',        bg: 'bg-amber-50',  border: 'border-amber-200',  text: 'text-amber-800',  badge: 'bg-amber-100 text-amber-700' },
+    QA_BLOCK:       { label: 'Q&A',          bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-800', badge: 'bg-purple-100 text-purple-700' },
+};
+const DEFAULT_PARAGRAPH_STYLE = { label: null, bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-800', badge: '' };
+
 const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, baseDirectoryHandles, onPdfParentDirChange }) => {
     const [selectedFile, setSelectedFile] = useState(null);
     const [language, setLanguage] = useState('hin');
@@ -24,7 +31,6 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
     const [bookmarks, setBookmarks] = useState([]);
     const [showBookmarkModal, setShowBookmarkModal] = useState(false);
     const [useGoogleOCR, setUseGoogleOCR] = useState(false);
-    const [ocrMode, setOcrMode] = useState('psm6');
 
     // New state for batch processing
     const [batchJobId, setBatchJobId] = useState(null);
@@ -315,7 +321,7 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
             formData.append('language', language);
             formData.append('crop_top', cropTop);
             formData.append('crop_bottom', cropBottom);
-            formData.append('mode', ocrMode);
+            formData.append('mode', 'advanced');
 
             // Check if file was selected from browser (PDF file system)
             const isFromBrowser = propSelectedFile && propSelectedFile.relativePath &&
@@ -404,14 +410,10 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
         resetBatchState();
 
         try {
-            // Convert OCR mode to PSM number for batch API
-            const psmValue = ocrMode === 'psm3' ? 3 : 6;
-
             const formData = new FormData();
             formData.append('file', selectedFile);
             formData.append('language', language);
             formData.append('use_google_ocr', useGoogleOCR);
-            formData.append('psm', psmValue);
 
             const response = await fetch(`${API_BASE_URL}/eval/ocr/batch`, {
                 method: 'POST',
@@ -766,23 +768,6 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
                             </select>
                         </div>
 
-                        {/* OCR Mode Selection */}
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">
-                                OCR Mode
-                            </label>
-                            <select
-                                value={ocrMode}
-                                onChange={(e) => setOcrMode(e.target.value)}
-                                className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 text-sm"
-                                title="OCR processing mode"
-                            >
-                                <option value="psm6">PSM 6 - Single Block</option>
-                                <option value="psm3">PSM 3 - Auto Layout</option>
-                                <option value="advanced">Advanced - Smart Paragraphs (beta)</option>
-                            </select>
-                        </div>
-
                         {/* Crop Controls */}
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -1008,16 +993,25 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
                             <h3 className="text-lg font-semibold text-slate-800 mb-3">OCR Results</h3>
                             <div className="space-y-3 max-h-[700px] overflow-y-auto">
                                 {ocrResults?.paragraphs?.length > 0 ? (
-                                    ocrResults.paragraphs.map((paragraph, index) => (
+                                    ocrResults.paragraphs.map((paragraph, index) => {
+                                        const style = PARAGRAPH_TYPE_STYLES[paragraph.paragraph_type] || DEFAULT_PARAGRAPH_STYLE;
+                                        return (
                                         <div
                                             key={index}
                                             data-paragraph-index={index}
                                             onClick={() => handleParagraphClick(paragraph, index)}
-                                            className="paragraph-item bg-slate-50 border border-slate-200 rounded-lg p-3 cursor-pointer hover:bg-slate-100 transition-colors relative"
+                                            className={`paragraph-item ${style.bg} border ${style.border} rounded-lg p-3 cursor-pointer hover:opacity-80 transition-colors relative`}
                                         >
                                             <div className="flex items-center justify-between mb-2">
-                                                <div className="text-xs text-slate-500 font-semibold">
-                                                    Paragraph {index + 1}
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`text-xs font-semibold ${style.text}`}>
+                                                        Paragraph {index + 1}
+                                                    </span>
+                                                    {style.label && (
+                                                        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${style.badge}`}>
+                                                            {style.label}
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <button
                                                     onClick={(e) => handleCopyText(paragraph.text, e)}
@@ -1029,11 +1023,12 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
                                                     </svg>
                                                 </button>
                                             </div>
-                                            <div className="text-sm text-slate-800 whitespace-pre-wrap font-mono">
+                                            <div className={`text-sm ${style.text} whitespace-pre-wrap font-mono`}>
                                                 {paragraph.text}
                                             </div>
                                         </div>
-                                    ))
+                                        );
+                                    })
                                 ) : (
                                     <div className="text-center py-8 text-slate-500">
                                         No text detected in the image.

@@ -103,9 +103,9 @@ class LineClassifier:
         tags = set()
         speaker = None
 
-        is_indented = (x_start - self.avg_left_margin) > self.indent_threshold
         left_indent_amount = x_start - self.avg_left_margin
         right_indent_amount = self.avg_right_margin - x_end
+        is_indented = left_indent_amount > self.indent_threshold
         is_centered = (
                 is_indented and
                 right_indent_amount > self.center_threshold
@@ -114,20 +114,32 @@ class LineClassifier:
                 right_indent_amount > self.indent_threshold
         )
 
-        if is_centered:
-            tags.add('IS_CENTERED')
-        elif is_indented:
-            tags.add('IS_INDENTED')
+        stripped_text = text.strip()
+
+        # Check QA prefixes first — a recognised speaker tag takes priority over
+        # geometry. A short QA line can look "centered" but must not be treated
+        # as a verse.
+        for prefix in self.question_prefix + self.answer_prefix:
+            if stripped_text.startswith(prefix):
+                tags.add('IS_QA')
+                speaker = prefix
+                break
+
+        # Only apply geometry tags when the line is not already a QA line.
+        if 'IS_QA' not in tags:
+            if is_centered:
+                tags.add('IS_CENTERED')
+            elif is_indented:
+                tags.add('IS_INDENTED')
 
         # Debug logging for centered/indented lines
-        stripped_text = text.strip()
         if is_indented and not is_centered:
             log_handle.verbose(
                 f"Line {line_num}: INDENTED but NOT CENTERED - "
                 f"left_indent={left_indent_amount:.1f}, right_indent={right_indent_amount:.1f}, "
                 f"center_threshold={self.center_threshold}, text='{stripped_text}'"
             )
-        elif is_centered:
+        elif is_centered and 'IS_QA' not in tags:
             log_handle.verbose(
                 f"Line {line_num}: CENTERED - "
                 f"left_indent={left_indent_amount:.1f}, right_indent={right_indent_amount:.1f}, "
@@ -144,13 +156,6 @@ class LineClassifier:
         for pattern in self.header_regexes:
             if re.search(pattern, stripped_text):
                 tags.add('IS_HEADER_REGEX')
-                break
-
-        # Check if line starts with any QA prefix
-        for prefix in self.question_prefix + self.answer_prefix:
-            if stripped_text.startswith(prefix):
-                tags.add('IS_QA')
-                speaker = prefix
                 break
 
         if stripped_text.startswith(HEADING_MARKERS):
