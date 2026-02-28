@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from pydantic_core.core_schema import bool_schema
 
 from backend.crawler.bookmark_extractor.ollama import OllamaBookmarkExtractor
+from backend.crawler.bookmark_extractor.gemini import GeminiBookmarkExtractor
 from tests.backend.base import *
 from tests.backend.common import setup
 
@@ -21,12 +22,19 @@ def ollama_extractor():
     return OllamaBookmarkExtractor()
 
 
+@pytest.fixture(scope="module")
+def gemini_extractor():
+    if not os.environ.get("GEMINI_API_KEY"):
+        pytest.skip("GEMINI_API_KEY not set")
+    return GeminiBookmarkExtractor()
+
+
 def assert_extraction(extractor, input_string, expected_pravachan_no, expected_date):
     """
     Helper function to test bookmark extraction.
 
     Args:
-        extractor: OllamaBookmarkExtractor instance
+        extractor: BookmarkExtractor instance
         input_string: The bookmark title to parse
         expected_pravachan_no: Expected pravachan number (or None)
         expected_date: Expected date in DD-MM-YYYY format (or None)
@@ -54,7 +62,7 @@ def assert_extraction(extractor, input_string, expected_pravachan_no, expected_d
     log_handle.info(f"✓ Successfully extracted: {extracted}")
 
 
-@pytest.mark.parametrize("extractor_fixture", ["ollama_extractor"])
+@pytest.mark.parametrize("extractor_fixture", ["ollama_extractor", "gemini_extractor"])
 def test_bookmark_extraction(extractor_fixture, request):
     extractor = request.getfixturevalue(extractor_fixture)
 
@@ -85,7 +93,7 @@ def test_bookmark_extraction(extractor_fixture, request):
         "04-03-1985"
     )
 
-@pytest.mark.parametrize("extractor_fixture", ["ollama_extractor"])
+@pytest.mark.parametrize("extractor_fixture", ["ollama_extractor", "gemini_extractor"])
 def test_pdf_bookmarks(extractor_fixture, request):
     extractor = request.getfixturevalue(extractor_fixture)
     doc_ids = setup()

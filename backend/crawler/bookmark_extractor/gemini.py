@@ -16,10 +16,10 @@ class GeminiBookmarkExtractor(BookmarkExtractor):
     Requires GEMINI_API_KEY environment variable.
     """
 
-    def __init__(self, model: str = "gemini-2.0-flash"):
+    def __init__(self, model: str = "gemini-2.5-flash"):
         """
         Args:
-            model: Gemini model name (default: gemini-2.0-flash)
+            model: Gemini model name (default: gemini-2.5-flash)
         """
         super().__init__()
         genai.configure(api_key=os.environ.get("GEMINI_API_KEY", ""))
