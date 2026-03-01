@@ -174,16 +174,6 @@ class GranthIndexGenerator(IndexGenerator):
         i = 0
         for page_num, verses in verse_data:
             pravachan_data = page_to_pravachan_data.get(page_num, {})
-            pravachan_number = pravachan_data.get('pravachan_no')
-            date_str = pravachan_data.get('date')
-
-            date_iso = None
-            if date_str:
-                try:
-                    date_obj = datetime.strptime(date_str, "%d-%m-%Y")
-                    date_iso = date_obj.strftime("%Y-%m-%d")
-                except ValueError:
-                    log_handle.warning(f"Invalid date format for page {page_num}: {date_str}")
 
             for verse in verses:
                 verse_text = verse.get("text", "").strip()
@@ -198,8 +188,6 @@ class GranthIndexGenerator(IndexGenerator):
                     "verse_id": i,
                     "verse_type": verse.get("type"),
                     "metadata": metadata,
-                    "pravachan_number": pravachan_number,
-                    "date": date_iso,
                     "gatha": pravachan_data.get('gatha'),
                     "kalash": pravachan_data.get('kalash'),
                     "shlok": pravachan_data.get('shlok'),

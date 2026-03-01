@@ -131,6 +131,7 @@ def setup(copy_ocr_files=False, add_scan_config=False, add_bookmarks=True):
     cities_config = {"Anuyog": "city"}
     spiritual_config = {
         "Anuyog": "spiritual",
+        "Granth": "Songadh",
         "series_start_date": "1975-01-01",
         "series_end_date": "1977-12-31"
     }
@@ -146,8 +147,14 @@ def setup(copy_ocr_files=False, add_scan_config=False, add_bookmarks=True):
         write_config_file(f"{lang_base}/spiritual/config.json", spiritual_config)
         write_config_file(f"{lang_base}/history/config.json", history_config)
 
-    # Add file-specific config for thanjavur_gujarati with series dates
+    # Per-file Granth configs for history documents
+    write_config_file(f"{hindi_base}/history/hampi_hindi_config.json", {"Granth": "Hampi"})
+    write_config_file(f"{gujarati_base}/history/hampi_gujarati_config.json", {"Granth": "Hampi"})
+    write_config_file(f"{hindi_base}/history/thanjavur_hindi_config.json", {"Granth": "Thanjavur"})
+
+    # Add file-specific config for thanjavur_gujarati with series dates and Granth name
     thanjavur_gujarati_file_config = {
+        "Granth": "Thanjavur",
         "series_start_date": "1978-01-01",
         "series_end_date": "1983-12-31"
     }

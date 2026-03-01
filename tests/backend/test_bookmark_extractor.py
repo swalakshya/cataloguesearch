@@ -4,8 +4,7 @@ import pytest
 from dotenv import load_dotenv
 from pydantic_core.core_schema import bool_schema
 
-from backend.crawler.bookmark_extractor.ollama import OllamaBookmarkExtractor
-from backend.crawler.bookmark_extractor.gemini import GeminiBookmarkExtractor
+from backend.crawler.bookmark_extractor.factory import create_bookmark_extractor_by_name
 from tests.backend.base import *
 from tests.backend.common import setup
 
@@ -19,14 +18,14 @@ def ollama_extractor():
         _requests.get("http://localhost:11434/api/tags", timeout=2)
     except Exception:
         pytest.skip("Ollama not available")
-    return OllamaBookmarkExtractor()
+    return create_bookmark_extractor_by_name("ollama")
 
 
 @pytest.fixture(scope="module")
 def gemini_extractor():
     if not os.environ.get("GEMINI_API_KEY"):
         pytest.skip("GEMINI_API_KEY not set")
-    return GeminiBookmarkExtractor()
+    return create_bookmark_extractor_by_name("gemini")
 
 
 def assert_extraction(extractor, input_string, expected_pravachan_no, expected_date):

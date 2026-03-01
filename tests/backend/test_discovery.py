@@ -117,7 +117,7 @@ def test_get_metadata():
         datetime.datetime.now().isoformat()
     )
     meta = sfp._get_metadata()
-    assert meta == {'language': 'hi', 'category': 'Pravachan', 'Anuyog': 'history', 'file_url': ''}
+    assert meta == {'language': 'hi', 'category': 'Pravachan', 'Anuyog': 'history', 'Granth': 'Hampi', 'file_url': ''}
 
     # Test indore_hindi.pdf in hindi/cities/non_metro/ - should get language, category, and type
     sfp = SingleFileProcessor(
@@ -136,7 +136,8 @@ def test_get_metadata():
     )
     meta = sfp._get_metadata()
     assert meta == {'language': 'gu', 'category': 'Pravachan', 'Anuyog': 'spiritual',
-                    'series_end_date': '1977-12-31', 'series_start_date': '1975-01-01', 'file_url': '' }
+                    'Granth': 'Songadh', 'series_start_date': '1975-01-01',
+                    'series_end_date': '1977-12-31', 'file_url': ''}
 
 def test_crawl(initialise):
     config = Config()

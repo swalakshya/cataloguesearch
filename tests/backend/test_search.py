@@ -1297,3 +1297,80 @@ def test_reindex_metadata_only():
     log_handle.info(
         f"✓ index_document(reindex_metadata_only=True) correctly updated {len(hits_after)} chunks"
     )
+
+def test_filter_by_granth_songadh():
+    """Filter lexical search by Granth=Songadh — should return only songadh docs."""
+    config = Config()
+    index_searcher = IndexSearcher(config)
+
+    results, total_hits = index_searcher.perform_lexical_search(
+        keywords="सोनगढ़",
+        exact_match=False,
+        exclude_words=[],
+        categories={"Granth": ["Songadh"]},
+        detected_language="hi",
+        page_size=10,
+        page_number=1
+    )
+
+    assert total_hits > 0, "Expected results for Granth=Songadh filter"
+    for result in results:
+        assert result.get("metadata", {}).get("Granth") == "Songadh", \
+            f"Result has wrong Granth: {result.get('metadata', {}).get('Granth')}"
+    log_handle.info(f"✓ Granth=Songadh filter returned {total_hits} hits, all matching")
+
+
+def test_filter_by_granth_thanjavur():
+    """Filter lexical search by Granth=Thanjavur — should return only thanjavur docs."""
+    config = Config()
+    index_searcher = IndexSearcher(config)
+
+    results, total_hits = index_searcher.perform_lexical_search(
+        keywords="तंजावुर",
+        exact_match=False,
+        exclude_words=[],
+        categories={"Granth": ["Thanjavur"]},
+        detected_language="hi",
+        page_size=10,
+        page_number=1
+    )
+
+    assert total_hits > 0, "Expected results for Granth=Thanjavur filter"
+    for result in results:
+        assert result.get("metadata", {}).get("Granth") == "Thanjavur", \
+            f"Result has wrong Granth: {result.get('metadata', {}).get('Granth')}"
+    log_handle.info(f"✓ Granth=Thanjavur filter returned {total_hits} hits, all matching")
+
+
+def test_granth_date_ranges_in_metadata_index():
+    """Verify that the Granth_date_ranges doc was written correctly for Songadh and Thanjavur."""
+    config = Config()
+    opensearch_client = get_opensearch_client(config)
+
+    # Songadh spiritual series — Hindi
+    doc = opensearch_client.get(
+        index=config.OPENSEARCH_METADATA_INDEX_NAME,
+        id="Pravachan_Granth_date_ranges_hi"
+    )
+    date_ranges = doc["_source"]["date_ranges"]
+    assert "Songadh" in date_ranges, "Songadh missing from Granth_date_ranges_hi"
+    songadh_ranges = date_ranges["Songadh"]
+    assert any(
+        r["start_date"] == "1975-01-01" and r["end_date"] == "1977-12-31"
+        for r in songadh_ranges
+    ), f"Expected Songadh date range not found: {songadh_ranges}"
+
+    # Thanjavur gujarati — has its own file-level series dates
+    doc = opensearch_client.get(
+        index=config.OPENSEARCH_METADATA_INDEX_NAME,
+        id="Pravachan_Granth_date_ranges_gu"
+    )
+    date_ranges = doc["_source"]["date_ranges"]
+    assert "Thanjavur" in date_ranges, "Thanjavur missing from Granth_date_ranges_gu"
+    thanjavur_ranges = date_ranges["Thanjavur"]
+    assert any(
+        r["start_date"] == "1978-01-01" and r["end_date"] == "1983-12-31"
+        for r in thanjavur_ranges
+    ), f"Expected Thanjavur date range not found: {thanjavur_ranges}"
+
+    log_handle.info("✓ Granth_date_ranges docs verified for Songadh (hi) and Thanjavur (gu)")
