@@ -1,6 +1,7 @@
 import os
 import shutil
 import random
+import uuid
 
 import pytest
 
@@ -1227,3 +1228,72 @@ def test_search_prose_with_categories():
         log_handle.info(f"Found {len(results_with_wrong_author)} results with incorrect Author filter '{not_expected_author}'")
         assert len(results_with_wrong_author) == 0, f"Expected 0 results with incorrect Author '{not_expected_author}', got {len(results_with_wrong_author)}"
         log_handle.info(f"✓ Correctly found no results with incorrect Author: {not_expected_author}")
+
+
+def test_reindex_metadata_only():
+    """Verify that index_document with reindex_metadata_only=True updates metadata and
+    pravachan fields in-place without changing chunk count. Exercises the full
+    index_document path (read OCR → generate paragraphs → write text → update OS)."""
+    config = Config()
+    opensearch_client = get_opensearch_client(config)
+    index_generator = IndexGenerator(config, opensearch_client)
+
+    # hampi_hindi.pdf is always at relative path "hindi/history/hampi_hindi.pdf"
+    relative_path = "hindi/history/hampi_hindi.pdf"
+    doc_id = str(uuid.uuid5(uuid.NAMESPACE_URL, relative_path))
+
+    query = {"query": {"term": {"document_id": doc_id}}, "size": 500}
+    response = opensearch_client.search(index=config.OPENSEARCH_INDEX_NAME, body=query)
+    hits_before = response['hits']['hits']
+    assert len(hits_before) > 0, f"No chunks found for doc_id {doc_id}"
+
+    # Build page_to_pravachan_data with easily-verified sentinel values
+    page_numbers = {
+        h['_source']['page_number']
+        for h in hits_before
+        if h['_source'].get('page_number') is not None
+    }
+    page_to_pravachan_data = {
+        page: {"pravachan_no": f"REINDEX_P{page}", "date": "15-06-1990"}
+        for page in page_numbers
+    }
+
+    new_metadata = {
+        "language": "hi", "category": "Pravachan",
+        "Anuyog": "history", "file_url": "", "reindex_marker": "updated"
+    }
+
+    ocr_dir = os.path.join(config.BASE_OCR_PATH, "hindi", "history", "hampi_hindi")
+    output_text_dir = os.path.join(config.BASE_TEXT_PATH, "hindi", "history", "hampi_hindi")
+    scan_config = {"chunk_strategy": config.CHUNK_STRATEGY, "language": "hi"}
+
+    index_generator.index_document(
+        doc_id, relative_path, ocr_dir, output_text_dir, sorted(page_numbers),
+        new_metadata, scan_config, page_to_pravachan_data,
+        reindex_metadata_only=True, dry_run=False
+    )
+    opensearch_client.indices.refresh(index=config.OPENSEARCH_INDEX_NAME)
+
+    response = opensearch_client.search(index=config.OPENSEARCH_INDEX_NAME, body=query)
+    hits_after = response['hits']['hits']
+
+    assert len(hits_after) == len(hits_before), \
+        f"Chunk count changed: {len(hits_before)} before, {len(hits_after)} after"
+
+    for hit in hits_after:
+        src = hit['_source']
+        chunk_id = hit['_id']
+
+        assert src.get('metadata', {}).get('reindex_marker') == 'updated', \
+            f"metadata.reindex_marker not updated on chunk {chunk_id}"
+
+        page = src.get('page_number')
+        if page in page_numbers:
+            assert src.get('pravachan_number') == f"REINDEX_P{page}", \
+                f"pravachan_number wrong on chunk {chunk_id}"
+            assert src.get('date') == "1990-06-15", \
+                f"date not converted correctly on chunk {chunk_id}"
+
+    log_handle.info(
+        f"✓ index_document(reindex_metadata_only=True) correctly updated {len(hits_after)} chunks"
+    )
