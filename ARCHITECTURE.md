@@ -1,52 +1,206 @@
-# Discovery Module
+# CatalogueSearch — Architecture
 
-## Overview
+## System Overview
 
-The Discovery module is the core data processing pipeline of CatalogueSearch, responsible for discovering, processing, and indexing multilingual PDF documents into a searchable format. It implements a sophisticated ETL (Extract, Transform, Load) pipeline optimized for Hindi and Gujarati documents with advanced OCR capabilities and intelligent text processing.
+CatalogueSearch has three main concerns:
 
-## Architecture Overview
+1. **Crawling** — discovering PDF files, extracting text, chunking into paragraphs, generating vector embeddings, and writing to OpenSearch
+2. **Serving** — a FastAPI search API that runs hybrid (lexical + vector) search with reranking
+3. **Frontend** — a React UI served via nginx
 
-The Crawler module follows a modular, pipeline-based architecture with clear separation of concerns:
+A separate transliteration service ([varnmala-io](https://github.com/swalakshya/varnmala-io)) handles Romanized-to-Devanagari query conversion at search time.
+
+---
+
+## Components
+
+### Crawler
+
+The crawler is an ETL pipeline that processes two distinct document types. Each type has its own ingestion path.
+
+#### Pravachan path (PDF → Tesseract → OpenSearch)
 
 ```
-┌─────────────┐    ┌───────────────┐    ┌──────────────┐    ┌─────────────┐
-│  Discovery  │───▶│      PDF      │───▶│ Paragraph    │───▶│   Index     │
-│   Module    │    │   Processor   │    │  Generator   │    │ Generator   │
-└─────────────┘    └───────────────┘    └──────────────┘    └─────────────┘
-       │                    │                   │                   │
-       ▼                    ▼                   ▼                   ▼
-┌─────────────┐    ┌───────────────┐    ┌──────────────┐    ┌─────────────┐
-│ Index State │    │  OCR Engine   │    │ Language     │    │ OpenSearch  │
-│ Management  │    │ (Tesseract/   │    │ Processors   │    │   Index     │
-│             │    │ Google Vision)│    │ (Hi / Gu)    │    │             │
-└─────────────┘    └───────────────┘    └──────────────┘    └─────────────┘
+PDFs in cataloguesearch-configs/
+        │
+        ▼
+   Discovery Module          Scans for new/changed PDFs, tracks state in SQLite
+        │
+        ▼
+   PDF Processor             Converts PDF pages to images (Poppler/pdf2image)
+        │
+        ▼
+   Tesseract OCR             Extracts raw text (Hindi hin / Gujarati guj)
+        │
+        ▼
+   Paragraph Generator       Chunks text into searchable paragraphs
+                             Handles headers/footers, cross-page paragraphs,
+                             Q&A detection, language-specific rules
+        │
+        ▼
+   Index Generator           Generates vector embeddings (BAAI/bge-m3),
+                             writes chunks to OpenSearch
 ```
 
-Discovery Module and PDF Processing Engine are self-explanatory. 
+The **Discovery Module** maintains an SQLite database (`cataloguesearch.db`) tracking the indexing state of every document — whether it has been crawled, indexed, and when it was last modified.
 
-## Paragraph Generator
+The **Paragraph Generator** is the most critical component. Poor chunking degrades search quality. It handles:
+- Detection and removal of headers/footers
+- Paragraphs that span multiple pages
+- Q&A pairs kept together in one chunk
+- Stop words and section markers specific to each document type
+- Language-specific normalisation (Anusvar, Halant, etc.)
 
-Paragraph Generator is the heart of the system. Without efficient paragraph generation, quality of indices & search results will be poor.
-Hence, paragraph generation is carefully written to extract the paragraphs as accurately as they are present in the original PDF files.
+Entry point: `scripts/discovery_cli.py`
 
-This involves multiple strategies including
+#### Granth path (PDF → Gemini LLM → OpenSearch)
 
-* Accurate detection of headers & footers and ignoring them from the index designed specially to handle indic languages and the type of source PDF documents
-* Extensible framework to specify generic rules and extensible rules per category of PDF files
-* Efficient chunking of paragraphs to ensure Q&A chunks occur in a single paragraph 
-* Ensuring that paragraphs that span multiple pages are part of the same chunk
+Granth scripture texts require accurate Devanagari extraction that Tesseract cannot reliably provide. Gemini is used for OCR instead.
 
-More details here [https://github.com/rajatjain/cataloguesearch/issues/30](https://github.com/rajatjain/cataloguesearch/issues/30).
+```
+PDFs in cataloguesearch-configs/
+        │
+        ▼
+   LLM PDF Processor         Sends PDF pages to Gemini, outputs page_*.json files
+   (Gemini)                  with extracted text per page
+        │
+        ▼
+   GranthIndexGenerator      Creates two chunk types from page_*.json files:
+                             - Verse chunks (no embeddings)
+                             - Paragraph chunks (with embeddings, BAAI/bge-m3)
+        │
+        ▼
+   OpenSearch                cataloguesearch_prod_granth
+```
 
-## OpenSearch Index
-OpenSearch Index is also carefully designed to handle hybrid search tailored for indic content
+Entry point: `scripts/discovery_cli.py` (with `ocr_engine: llm` in scan config)
 
-* Allows proximity search
-* Liberal with typos
-* Handling of indic nuances like Anusvar & Halant (eg. शांति and शान्ति)
+---
 
-Vector Embeddings are part of the same index to allow
-* Hybrid Search
-* Support for using `reranker` models for higher quality of search results.
+### Search API
 
-More details here [https://github.com/rajatjain/cataloguesearch/issues/24](https://github.com/rajatjain/cataloguesearch/issues/24).
+FastAPI application (`backend/api/search_api.py`) running on port 8000.
+
+- **Hybrid search** — combines BM25 (lexical) and kNN (vector) results
+- **Reranking** — ONNX-optimised `BAAI/bge-reranker-base` scores and reorders results
+- **Metadata filtering** — pre-filters by Granth, Anuyog, Author, etc.
+- **Transliteration** — queries in Roman script are converted to Devanagari via varnmala-io before searching
+
+The reranker runs as ONNX (not PyTorch) for significantly faster inference. The ONNX model is bundled into the Docker image at build time from `models/bge-reranker-base-onnx/`.
+
+---
+
+### OpenSearch
+
+Custom Docker image (`docker/opensearch/Dockerfile`) based on `opensearchproject/opensearch:3.3.1` with two additional plugins:
+
+- `analysis-icu` — Unicode-aware tokenisation for Indic scripts
+- `repository-gcs` — GCS snapshot repository support
+
+Three indices:
+
+| Index | Content |
+|-------|---------|
+| `cataloguesearch_prod` | All document chunks — paragraphs with vector embeddings |
+| `cataloguesearch_prod_metadata` | Aggregated metadata values (Granth names, Authors, etc.) for filter dropdowns |
+| `cataloguesearch_prod_granth` | Granth verse and prose chunks |
+
+The main index is tuned for Indic content: proximity search, typo tolerance, and normalisation of common Devanagari variations (शांति / शान्ति).
+
+---
+
+### Transliteration Service (varnmala-io)
+
+A separate microservice ([github.com/swalakshya/varnmala-io](https://github.com/swalakshya/varnmala-io)) that converts Romanized Indic text to Devanagari. Runs on port 8500.
+
+The API calls this service before executing a search when the query appears to be in Roman script. This lets users type queries in English letters and get meaningful Devanagari search results.
+
+Not required for local development unless you are testing transliteration features.
+
+---
+
+### Frontend
+
+React application built with Tailwind CSS, served via nginx. In production, nginx also handles SSL termination (port 443) and proxies API requests to the backend container.
+
+A separate eval UI is available at the `/eval` route, served by a second FastAPI server on port 8001 (`eval/api.py`). It provides tooling for inspecting OCR output, paragraph generation quality, and LLM-extracted bookmarks.
+
+---
+
+## Configuration
+
+All runtime configuration lives in `configs/config.yaml`. This file is volume-mounted into the API container (not baked into the image), so it can be changed without a rebuild.
+
+Key sections:
+
+```yaml
+crawler:
+  base_pdf_path: ...          # path to cataloguesearch-configs/
+  ocr_engine: "tesseract"     # default OCR for Pravachan
+  bookmark_extractor_llm: "gemini"
+  default_llm_model: "gemini-2.5-flash"
+
+opensearch:
+  index_name: cataloguesearch_prod
+  metadata_index_name: cataloguesearch_prod_metadata
+  granth_index_name: cataloguesearch_prod_granth
+
+vector_embeddings:
+  embedding_model: BAAI/bge-m3
+  reranking_model: BAAI/bge-reranker-base
+  reranker_onnx_path: "{BASE_DIR}/models/bge-reranker-base-onnx"
+
+transliteration:
+  api_url: "http://localhost:8500"
+```
+
+Values in `{CURLY_BRACES}` are replaced at startup with environment variables.
+
+---
+
+## Deployment
+
+### Local development
+
+```
+docker-compose.yml
+  opensearch                    (port 9200)
+  cataloguesearch-api           (port 8000)
+  cataloguesearch-frontend      (port 3000)
+```
+
+### Production
+
+```
+docker-compose.prod.yml
+  opensearch                    (port 9200, internal)
+  varnmala-io                   (port 8500, internal)
+  cataloguesearch-api           (port 8000, internal)
+  cataloguesearch-frontend      (ports 80 + 443, external — handles SSL)
+```
+
+The production frontend image uses `docker/frontend/nginx.conf` which includes SSL config and proxies `/api` to the API container. The local image uses `docker/frontend/nginx-local.conf` (no SSL).
+
+---
+
+## Data Flow for a Search Query
+
+```
+User types query
+      │
+      ▼
+Frontend (React)
+      │  POST /api/search
+      ▼
+Search API
+      │  (if Roman script) → varnmala-io:8500 → Devanagari query
+      │
+      ├─ BM25 query  ──────────────┐
+      ├─ kNN vector query ─────────┤→ OpenSearch → merged results
+      │                            │
+      ▼                            │
+   Reranker (ONNX)  ←─────────────┘
+      │  scored and sorted
+      ▼
+   Response → Frontend
+```
