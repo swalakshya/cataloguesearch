@@ -1,0 +1,23 @@
+{
+  "page_num": 5,
+  "metadata": {
+    "avg_left_margin": 100,
+    "avg_right_margin": 1000,
+    "prose_left_margin": 100,
+    "prose_right_margin": 1000
+  },
+  "lines": [
+    {"line_num": 0, "text": "प्रश्न: पर्यावरण बचाने के मुख्य उपाय क्या हैं?", "x_start": 100, "x_end": 1000},
+    {"line_num": 1, "text": "उत्तर: वृक्षारोपण और जल संरक्षण", "x_start": 100, "x_end": 1000},
+    {"line_num": 2, "text": "प्रमुख उपाय हैं।।५।।", "x_start": 100, "x_end": 400},
+    {"line_num": 3, "text": "प्रश्न: शिक्षा का मुख्य उद्देश्य क्या है?", "x_start": 100, "x_end": 1000},
+    {"line_num": 4, "text": "उत्तर: शिक्षा व्यक्ति को सुसंस्कृत और", "x_start": 100, "x_end": 1000},
+    {"line_num": 5, "text": "विद्या विनयेन शोभते", "x_start": 300, "x_end": 700},
+    {"line_num": 6, "text": "नमता फलेन वृक्षाः।।", "x_start": 300, "x_end": 700},
+    {"line_num": 7, "text": "यह संस्कृत सूक्ति शिक्षा की", "x_start": 130, "x_end": 1000},
+    {"line_num": 8, "text": "महत्ता बताती है।", "x_start": 100, "x_end": 400},
+    {"line_num": 9, "text": "प्रश्न: मनुष्य का सबसे बड़ा शत्रु कौन है?", "x_start": 100, "x_end": 1000},
+    {"line_num": 10, "text": "उत्तर: अज्ञान ही मनुष्य का सबसे", "x_start": 100, "x_end": 1000},
+    {"line_num": 11, "text": "बड़ा शत्रु है।", "x_start": 130, "x_end": 1000}
+  ]
+}

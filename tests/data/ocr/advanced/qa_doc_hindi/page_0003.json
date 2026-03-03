@@ -1,0 +1,19 @@
+{
+  "page_num": 3,
+  "metadata": {
+    "avg_left_margin": 100,
+    "avg_right_margin": 1000,
+    "prose_left_margin": 100,
+    "prose_right_margin": 1000
+  },
+  "lines": [
+    {"line_num": 0, "text": "ज्ञान ही वह शक्ति है जो मानव को", "x_start": 130, "x_end": 1000},
+    {"line_num": 1, "text": "पशु से भिन्न करती है और उसे", "x_start": 100, "x_end": 1000},
+    {"line_num": 2, "text": "श्रेष्ठ बनाती है।।३।।", "x_start": 100, "x_end": 400},
+    {"line_num": 3, "text": "~ ~", "x_start": 450, "x_end": 550},
+    {"line_num": 4, "text": "आधुनिक तकनीक ने विश्व को एक वैश्विक", "x_start": 130, "x_end": 1000},
+    {"line_num": 5, "text": "ग्राम में परिवर्तित कर दिया है और", "x_start": 100, "x_end": 1000},
+    {"line_num": 6, "text": "ज्ञान दीप जलाते चलो", "x_start": 300, "x_end": 700},
+    {"line_num": 7, "text": "अंधकार मिटाते चलो।।", "x_start": 300, "x_end": 700}
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "page_num": 4,
+  "metadata": {
+    "avg_left_margin": 100,
+    "avg_right_margin": 1000,
+    "prose_left_margin": 100,
+    "prose_right_margin": 1000
+  },
+  "lines": [
+    {"line_num": 0, "text": "सत्य का पथ अपनाते चलो", "x_start": 300, "x_end": 700},
+    {"line_num": 1, "text": "जीवन को महकाते चलो।।", "x_start": 300, "x_end": 700},
+    {"line_num": 2, "text": "इन पंक्तियों से हमें सत्य और ज्ञान के", "x_start": 100, "x_end": 1000},
+    {"line_num": 3, "text": "मार्ग पर चलने की प्रेरणा मिलती है", "x_start": 100, "x_end": 1000},
+    {"line_num": 4, "text": "प्रश्न: संसार में सबसे कीमती क्या है?", "x_start": 100, "x_end": 1000},
+    {"line_num": 5, "text": "उत्तर: समय सबसे कीमती है क्योंकि", "x_start": 100, "x_end": 1000},
+    {"line_num": 6, "text": "खोया हुआ समय कभी वापस नहीं आता।", "x_start": 100, "x_end": 1000},
+    {"line_num": 7, "text": "प्रश्न: जीवन का सबसे बड़ा गुण क्या है?", "x_start": 100, "x_end": 1000},
+    {"line_num": 8, "text": "उत्तर: धैर्य और परिश्रम जीवन के सबसे", "x_start": 100, "x_end": 1000},
+    {"line_num": 9, "text": "महत्वपूर्ण गुण हैं।", "x_start": 100, "x_end": 400}
+  ]
+}

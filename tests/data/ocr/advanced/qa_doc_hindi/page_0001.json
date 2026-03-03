@@ -1,0 +1,17 @@
+{
+  "page_num": 1,
+  "metadata": {
+    "avg_left_margin": 100,
+    "avg_right_margin": 1000,
+    "prose_left_margin": 100,
+    "prose_right_margin": 1000
+  },
+  "lines": [
+    {"line_num": 0, "text": "वायु प्रदूषण आधुनिक युग की एक गंभीर समस्या है", "x_start": 130, "x_end": 1000},
+    {"line_num": 1, "text": "जो मानव स्वास्थ्य और पर्यावरण दोनों को", "x_start": 100, "x_end": 1000},
+    {"line_num": 2, "text": "प्रत्यक्ष रूप से प्रभावित करती है।", "x_start": 100, "x_end": 400},
+    {"line_num": 3, "text": "कारखानों और वाहनों से निकलने वाले धुएं में", "x_start": 130, "x_end": 1000},
+    {"line_num": 4, "text": "हानिकारक रसायन होते हैं जो वायुमंडल में मिलकर", "x_start": 100, "x_end": 1000},
+    {"line_num": 5, "text": "स्वास्थ्य को हानि पहुंचाते हैं।", "x_start": 100, "x_end": 400}
+  ]
+}

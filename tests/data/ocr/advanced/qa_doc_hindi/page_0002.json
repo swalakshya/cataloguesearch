@@ -1,0 +1,18 @@
+{
+  "page_num": 2,
+  "metadata": {
+    "avg_left_margin": 100,
+    "avg_right_margin": 1000,
+    "prose_left_margin": 100,
+    "prose_right_margin": 1000
+  },
+  "lines": [
+    {"line_num": 0, "text": "जल मानव जीवन का आधार है और इसका", "x_start": 100, "x_end": 1000},
+    {"line_num": 1, "text": "संरक्षण हमारी सामूहिक जिम्मेदारी है।", "x_start": 100, "x_end": 400},
+    {"line_num": 2, "text": "", "x_start": 0, "x_end": 0},
+    {"line_num": 3, "text": "जल बचाओ धरती बचाओ", "x_start": 300, "x_end": 700},
+    {"line_num": 4, "text": "बूंद-बूंद से जीवन पाओ।।", "x_start": 300, "x_end": 700},
+    {"line_num": 5, "text": "उपरोक्त पंक्तियों से प्रेरणा लेकर हमें", "x_start": 100, "x_end": 1000},
+    {"line_num": 6, "text": "जल संरक्षण का संकल्प लेना चाहिए।", "x_start": 100, "x_end": 400}
+  ]
+}
