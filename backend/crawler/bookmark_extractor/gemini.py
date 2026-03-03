@@ -1,7 +1,8 @@
 import json
 import logging
 import os
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from typing import List, Dict, Any, Optional
 
 from .base import BookmarkExtractor
@@ -12,7 +13,7 @@ log_handle = logging.getLogger(__name__)
 class GeminiBookmarkExtractor(BookmarkExtractor):
     """
     Gemini implementation for bookmark extraction.
-    Uses Google Gemini API via the google-generativeai package.
+    Uses Google Gemini API via the google-genai package.
     Requires GEMINI_API_KEY environment variable.
     """
 
@@ -22,11 +23,8 @@ class GeminiBookmarkExtractor(BookmarkExtractor):
             model: Gemini model name (default: gemini-2.5-flash)
         """
         super().__init__()
-        genai.configure(api_key=os.environ.get("GEMINI_API_KEY", ""))
-        self.model = genai.GenerativeModel(
-            model_name=model,
-            system_instruction=self.system_prompt,
-        )
+        self.client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY", ""))
+        self.model_name = model
         log_handle.info("Initialized GeminiBookmarkExtractor with model: %s", model)
 
     def call_llm(self, indexed_titles: List[Dict[str, Any]]) -> Optional[List[Dict[str, str]]]:
@@ -45,9 +43,13 @@ class GeminiBookmarkExtractor(BookmarkExtractor):
         )
 
         try:
-            response = self.model.generate_content(
-                user_message,
-                generation_config={"response_mime_type": "application/json"},
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=user_message,
+                config=types.GenerateContentConfig(
+                    system_instruction=self.system_prompt,
+                    response_mime_type="application/json",
+                ),
             )
 
             result = json.loads(response.text)

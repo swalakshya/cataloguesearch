@@ -627,6 +627,61 @@ async def proxy_pdf(url: str):
         raise HTTPException(status_code=500, detail=f"Error proxying PDF: {str(e)}")
 
 
+@router.get("/file/proxy")
+async def proxy_file(url: str):
+    """
+    Proxy file requests (PDF or image) to avoid CORS issues with external URLs.
+    """
+    try:
+        if not url or not (url.startswith('http://') or url.startswith('https://')):
+            raise HTTPException(status_code=400, detail="Invalid URL provided")
+
+        log_handle.info(f"Proxying file request for: {url}")
+
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+
+        response = requests.get(url, headers=headers, timeout=30, stream=True)
+        response.raise_for_status()
+
+        content_type = response.headers.get('content-type', '').lower().split(';')[0].strip()
+        url_path = url.lower().split('?')[0]
+
+        if 'pdf' in content_type or url_path.endswith('.pdf'):
+            media_type = 'application/pdf'
+        elif content_type.startswith('image/'):
+            media_type = content_type
+        elif url_path.endswith(('.jpg', '.jpeg')):
+            media_type = 'image/jpeg'
+        elif url_path.endswith('.png'):
+            media_type = 'image/png'
+        elif url_path.endswith('.webp'):
+            media_type = 'image/webp'
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported file type: {content_type}")
+
+        return Response(
+            content=response.content,
+            media_type=media_type,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET",
+                "Access-Control-Allow-Headers": "*",
+                "Cache-Control": "no-store",
+            }
+        )
+
+    except requests.RequestException as e:
+        log_handle.error(f"Error fetching file from {url}: {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Failed to fetch file: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_handle.error(f"Error proxying file: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error proxying file: {str(e)}")
+
+
 @router.post("/ocr-preview", response_model=OCRPreviewResponse)
 async def generate_ocr_preview(
     pdf_file: UploadFile = File(..., description="PDF file to preview"),

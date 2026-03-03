@@ -4,6 +4,7 @@ import ShowBookmarksButton from './ShowBookmarksButton';
 import BookmarksModal from './BookmarksModal';
 import ParseBookmarksControl from './ParseBookmarksControl';
 import { addPageNumbersToBookmarks } from '../utils/pdfUtils';
+import FileOrUrlInput from './eval/FileOrUrlInput';
 
 const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
 
@@ -43,7 +44,6 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
     // New state for cropped image preview
     const [croppedPreviewUrl, setCroppedPreviewUrl] = useState(null);
 
-    const fileInputRef = useRef(null);
     const imageContainerRef = useRef(null);
     const croppedImageContainerRef = useRef(null);
     const pollingIntervalRef = useRef(null);
@@ -171,17 +171,10 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
         // Reset batch state
         resetBatchState();
 
-        // Reset file input
-        if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-        }
     };
 
-    const handleFileSelect = async (event) => {
-        const file = event.target.files[0];
-        if (!file) return;
-
-        // Clear file browser selection when manual upload is used
+    const handleFileReady = async (file) => {
+        // Clear file browser selection when a new file is provided
         if (onFileSelect) {
             onFileSelect(null);
         }
@@ -684,31 +677,12 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
                                 File Selection
                             </label>
                             <div className="space-y-2">
-                                {/* File Upload Option */}
-                                <div className="relative">
-                                    <input
-                                        ref={fileInputRef}
-                                        type="file"
-                                        accept="image/*,application/pdf"
-                                        onChange={handleFileSelect}
-                                        className="sr-only"
-                                        id="file-upload"
-                                    />
-                                    <label
-                                        htmlFor="file-upload"
-                                        className="block w-full text-sm text-slate-500 border border-slate-300 rounded-md px-3 py-2 cursor-pointer bg-white hover:bg-slate-50 transition-colors"
-                                    >
-                                        <span className="inline-flex items-center">
-                                            <span className="bg-sky-50 text-sky-700 font-semibold px-2 py-1 rounded-md mr-2 hover:bg-sky-100 text-xs">
-                                                Upload
-                                            </span>
-                                            <span className="text-slate-500 text-xs truncate">
-                                                {selectedFile ? selectedFile.name : 'No file selected'}
-                                            </span>
-                                        </span>
-                                    </label>
-                                </div>
-                                
+                                <FileOrUrlInput
+                                    onFileReady={handleFileReady}
+                                    selectedFile={selectedFile}
+                                    inputId="file-upload"
+                                />
+
                                 {/* File Browser Info */}
                                 {propSelectedFile && (
                                     <div className={`p-1 border rounded-md text-xs ${

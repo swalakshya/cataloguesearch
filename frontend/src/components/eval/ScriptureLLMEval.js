@@ -1,9 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Spinner } from '../SharedComponents';
 import ShowBookmarksButton from '../ShowBookmarksButton';
 import BookmarksModal from '../BookmarksModal';
 import ParseBookmarksControl from '../ParseBookmarksControl';
 import { addPageNumbersToBookmarks } from '../../utils/pdfUtils';
+import FileOrUrlInput from './FileOrUrlInput';
 
 const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
 
@@ -47,8 +48,6 @@ const ScriptureLLMEval = ({ selectedFile: propSelectedFile, baseDirectoryHandles
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
     const [llmResults, setLlmResults] = useState(null); // { blocks, model, language, preview_image }
-
-    const fileInputRef = useRef(null);
 
     // Load PDF.js
     useEffect(() => {
@@ -160,10 +159,7 @@ const ScriptureLLMEval = ({ selectedFile: propSelectedFile, baseDirectoryHandles
         }
     };
 
-    const handleFileSelect = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
+    const handleFileReady = async (file) => {
         setError(null);
         setLlmResults(null);
         setSelectedFile(file);
@@ -367,29 +363,11 @@ const ScriptureLLMEval = ({ selectedFile: propSelectedFile, baseDirectoryHandles
                             File Selection
                         </label>
                         <div className="space-y-2">
-                            <div className="relative">
-                                <input
-                                    ref={fileInputRef}
-                                    type="file"
-                                    accept="image/*,application/pdf"
-                                    onChange={handleFileSelect}
-                                    className="sr-only"
-                                    id="scripture-llm-file-upload"
-                                />
-                                <label
-                                    htmlFor="scripture-llm-file-upload"
-                                    className="block w-full text-sm text-slate-500 border border-slate-300 rounded-md px-3 py-2 cursor-pointer bg-white hover:bg-slate-50 transition-colors"
-                                >
-                                    <span className="inline-flex items-center">
-                                        <span className="bg-sky-50 text-sky-700 font-semibold px-2 py-1 rounded-md mr-2 hover:bg-sky-100 text-xs">
-                                            Upload
-                                        </span>
-                                        <span className="text-slate-500 text-xs truncate">
-                                            {selectedFile ? selectedFile.name : 'No file selected'}
-                                        </span>
-                                    </span>
-                                </label>
-                            </div>
+                            <FileOrUrlInput
+                                onFileReady={handleFileReady}
+                                selectedFile={selectedFile}
+                                inputId="scripture-llm-file-upload"
+                            />
 
                             {/* File Browser Info */}
                             {propSelectedFile && (
