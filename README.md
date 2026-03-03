@@ -1,5 +1,7 @@
 # CatalogueSearch
 
+![Tests](./tests.svg) ![Coverage](./coverage.svg)
+
 CatalogueSearch is a search system for multilingual (Hindi/Gujarati) religious and scriptural texts. It ingests PDF documents and scripture texts, processes them through OCR and LLM-based extraction pipelines, and exposes a hybrid lexical + semantic search interface through a web UI.
 
 The system supports two document types:

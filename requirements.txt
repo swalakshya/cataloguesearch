@@ -14,3 +14,4 @@
 
 # Development/Testing only dependencies
 pytest-cov==5.0.0            # Coverage reporting for pytest
+coverage-badge==1.1.2        # Generate SVG coverage badge from .coverage data
