@@ -35,7 +35,7 @@ const ParseBookmarksControl = ({ isPDF, pdfDoc }) => {
     const [parsedBookmarks, setParsedBookmarks] = useState({ extracted: [], ignored: [] });
     const [showParsedBookmarkModal, setShowParsedBookmarkModal] = useState(false);
     const [isParsedBookmarksLoading, setIsParsedBookmarksLoading] = useState(false);
-    const [bookmarkLLM, setBookmarkLLM] = useState('ollama');
+    const [bookmarkLLM, setBookmarkLLM] = useState('gemini');
     const [error, setError] = useState(null);
 
     const handleFetchParsedBookmarks = async () => {
@@ -114,7 +114,6 @@ const ParseBookmarksControl = ({ isPDF, pdfDoc }) => {
                     disabled={isParsedBookmarksLoading}
                 >
                     <option value="ollama">Ollama (Local)</option>
-                    <option value="groq">Groq</option>
                     <option value="gemini">Gemini</option>
                 </select>
                 <button

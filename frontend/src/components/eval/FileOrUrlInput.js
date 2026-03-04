@@ -2,11 +2,23 @@ import React, { useState, useRef } from 'react';
 
 const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
 
+const LANGS = [
+    { value: 'hin', label: 'हिंदी' },
+    { value: 'guj', label: 'ગુજરાતી' },
+];
+
 /**
- * Drop-in replacement for the hidden <input type="file"> + Upload label pattern.
- * Renders an Upload / URL toggle and calls onFileReady(File) in both cases.
+ * URL/Upload toggle with embedded language selector and action button.
+ * Calls onFileReady(File) in both modes.
+ * Language state is controlled via `language` + `onLanguageChange` props.
  */
-const FileOrUrlInput = ({ onFileReady, selectedFile, inputId = 'file-or-url-input' }) => {
+const FileOrUrlInput = ({
+    onFileReady,
+    selectedFile,
+    inputId = 'file-or-url-input',
+    language = 'hin',
+    onLanguageChange,
+}) => {
     const [mode, setMode] = useState('url');
     const [urlValue, setUrlValue] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -21,7 +33,6 @@ const FileOrUrlInput = ({ onFileReady, selectedFile, inputId = 'file-or-url-inpu
     const handleUploadChange = (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        // Reset so the same file can be re-selected later
         e.target.value = '';
         onFileReady(file);
     };
@@ -29,10 +40,8 @@ const FileOrUrlInput = ({ onFileReady, selectedFile, inputId = 'file-or-url-inpu
     const handleLoad = async () => {
         const trimmed = urlValue.trim();
         if (!trimmed) return;
-
         setIsLoading(true);
         setUrlError(null);
-
         try {
             const res = await fetch(
                 `${API_BASE_URL}/eval/file/proxy?url=${encodeURIComponent(trimmed)}`
@@ -42,8 +51,7 @@ const FileOrUrlInput = ({ onFileReady, selectedFile, inputId = 'file-or-url-inpu
                 throw new Error(data.detail || `HTTP ${res.status}`);
             }
             const blob = await res.blob();
-            const filename =
-                trimmed.split('/').pop().split('?')[0] || 'remote-file';
+            const filename = trimmed.split('/').pop().split('?')[0] || 'remote-file';
             onFileReady(new File([blob], filename, { type: blob.type }));
         } catch (err) {
             setUrlError(err.message);
@@ -52,21 +60,29 @@ const FileOrUrlInput = ({ onFileReady, selectedFile, inputId = 'file-or-url-inpu
         }
     };
 
-    return (
-        <div className="space-y-2">
-            {/* Mode toggle */}
-            <div className="flex rounded-md border border-slate-200 bg-slate-100 p-0.5 w-fit text-xs">
+    const LangToggle = () => (
+        <div className="flex items-center rounded border border-slate-200 bg-slate-100 p-0.5 shrink-0">
+            {LANGS.map(({ value, label }) => (
                 <button
+                    key={value}
                     type="button"
-                    onClick={() => switchMode('upload')}
-                    className={`px-3 py-1 rounded transition-colors ${
-                        mode === 'upload'
+                    onClick={() => onLanguageChange?.(value)}
+                    className={`px-2 py-0.5 rounded text-xs transition-colors ${
+                        language === value
                             ? 'bg-white text-sky-700 font-semibold shadow-sm'
                             : 'text-slate-500 hover:text-slate-700'
                     }`}
                 >
-                    Upload
+                    {label}
                 </button>
+            ))}
+        </div>
+    );
+
+    return (
+        <div className="space-y-1.5 w-[600px] max-w-full">
+            {/* Mode toggle */}
+            <div className="flex rounded-md border border-slate-200 bg-slate-100 p-0.5 w-fit text-xs">
                 <button
                     type="button"
                     onClick={() => switchMode('url')}
@@ -78,60 +94,68 @@ const FileOrUrlInput = ({ onFileReady, selectedFile, inputId = 'file-or-url-inpu
                 >
                     URL
                 </button>
+                <button
+                    type="button"
+                    onClick={() => switchMode('upload')}
+                    className={`px-3 py-1 rounded transition-colors ${
+                        mode === 'upload'
+                            ? 'bg-white text-sky-700 font-semibold shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                >
+                    Upload
+                </button>
             </div>
 
-            {mode === 'upload' ? (
+            {/* Input bar */}
+            {mode === 'url' ? (
                 <>
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*,application/pdf"
-                        onChange={handleUploadChange}
-                        className="sr-only"
-                        id={inputId}
-                    />
-                    <label
-                        htmlFor={inputId}
-                        className="block w-full text-sm text-slate-500 border border-slate-300 rounded-md px-3 py-2 cursor-pointer bg-white hover:bg-slate-50 transition-colors"
-                    >
-                        <span className="inline-flex items-center">
-                            <span className="bg-sky-50 text-sky-700 font-semibold px-2 py-1 rounded-md mr-2 hover:bg-sky-100 text-xs">
-                                Browse
-                            </span>
-                            <span className="text-slate-500 text-xs truncate">
-                                {selectedFile ? selectedFile.name : 'No file selected'}
-                            </span>
-                        </span>
-                    </label>
-                </>
-            ) : (
-                <>
-                    <div className="flex gap-1">
+                    <div className="flex items-center gap-2 border border-slate-300 rounded-lg bg-white px-3 focus-within:ring-1 focus-within:ring-sky-500 focus-within:border-sky-500">
                         <input
                             type="url"
                             value={urlValue}
                             onChange={(e) => setUrlValue(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleLoad()}
                             placeholder="https://example.com/file.pdf"
-                            className="flex-1 min-w-0 text-xs border border-slate-300 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500"
+                            className="flex-1 min-w-0 text-xs py-2 outline-none bg-transparent"
                         />
+                        <LangToggle />
                         <button
                             type="button"
                             onClick={handleLoad}
                             disabled={!urlValue.trim() || isLoading}
-                            className="text-xs px-3 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                            title="Load"
+                            className="shrink-0 text-base text-slate-400 hover:text-sky-600 disabled:text-slate-300 disabled:cursor-not-allowed transition-colors leading-none"
                         >
-                            {isLoading ? '...' : 'Load'}
+                            {isLoading ? '…' : '↵'}
                         </button>
                     </div>
-                    {selectedFile && (
-                        <p className="text-xs text-slate-500 truncate">
-                            {selectedFile.name}
-                        </p>
-                    )}
                     {urlError && (
                         <p className="text-xs text-red-600">{urlError}</p>
                     )}
+                </>
+            ) : (
+                <>
+                    <div className="flex items-center gap-2 border border-slate-300 rounded-lg bg-white px-3">
+                        <span className="flex-1 min-w-0 text-xs py-2 text-slate-400 truncate">
+                            {selectedFile ? selectedFile.name : 'No file selected'}
+                        </span>
+                        <LangToggle />
+                        <label
+                            htmlFor={inputId}
+                            className="shrink-0 text-xs px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded cursor-pointer transition-colors whitespace-nowrap"
+                        >
+                            Browse
+                        </label>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*,application/pdf"
+                            onChange={handleUploadChange}
+                            className="sr-only"
+                            id={inputId}
+                        />
+                    </div>
                 </>
             )}
         </div>

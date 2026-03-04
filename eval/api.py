@@ -125,6 +125,7 @@ class ScriptureLLMResponse(BaseModel):
     model: str
     language: str
     preview_image: str  # Base64 encoded cropped page image
+    scan_config: Optional[Dict] = None
 
 class PreviewPageData(BaseModel):
     page_number: int
@@ -197,6 +198,23 @@ _LANG_TO_FOLDER = {
     "hi": "hindi", "hin": "hindi",
     "gu": "gujarati", "guj": "gujarati",
 }
+
+def _load_default_scan_config(language: str, subfolder: str) -> dict:
+    """
+    Load and flatten a default scan_config by passing a dummy PDF path
+    inside BASE_PDF_PATH/<subfolder>/<lang_folder>/ to get_scan_config(),
+    which handles the 'default' key extraction and hierarchy merging.
+    """
+    lang_folder = _LANG_TO_FOLDER.get(language.lower())
+    if not lang_folder:
+        return {}
+    try:
+        config = Config("configs/config.yaml")
+        dummy_pdf = os.path.join(config.BASE_PDF_PATH, subfolder, lang_folder, "dummy.pdf")
+        return get_scan_config(dummy_pdf, config.BASE_PDF_PATH)
+    except Exception as e:
+        log_handle.warning(f"Failed to load default scan_config from {subfolder}/{lang_folder}: {e}")
+        return {}
 
 @router.post("/ocr", response_model=OCRResponse)
 async def process_ocr(
@@ -841,6 +859,7 @@ async def process_scripture_llm(
     model_name: str = Form("gemini-2.5-flash", description="Gemini model to use"),
     crop_top: float = Form(0, description="Percentage to crop from top (0-50)"),
     crop_bottom: float = Form(0, description="Percentage to crop from bottom (0-50)"),
+    use_default_scan_config: bool = Form(False, description="Load scan_config from Granth/llm_extract/<language>/"),
 ):
     """
     Process a scripture page using Gemini LLM for text extraction and categorisation.
@@ -865,10 +884,12 @@ async def process_scripture_llm(
             temp_file.write(content)
             temp_path = temp_file.name
 
-        # Build scan_config for cropping
-        scan_config = {}
+        # Build scan_config
+        scan_config = _load_default_scan_config(language, "Granth/llm_extract") if use_default_scan_config else {}
         if crop_top > 0 or crop_bottom > 0:
-            scan_config["crop"] = {"top": crop_top, "bottom": crop_bottom}
+            scan_config.setdefault("crop", {})
+            scan_config["crop"]["top"] = crop_top
+            scan_config["crop"]["bottom"] = crop_bottom
 
         if is_pdf:
             # Extract the specified page from PDF
@@ -905,6 +926,7 @@ async def process_scripture_llm(
             model=model_name,
             language=language,
             preview_image=preview_base64,
+            scan_config=scan_config if scan_config else None,
         )
 
     except HTTPException:
