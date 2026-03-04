@@ -18,6 +18,7 @@ const DEFAULT_PARAGRAPH_STYLE = { label: null, bg: 'bg-slate-50', border: 'borde
 const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, baseDirectoryHandles, onPdfParentDirChange }) => {
     const [selectedFile, setSelectedFile] = useState(null);
     const [language, setLanguage] = useState('hin');
+    const [useDefaultScanConfig, setUseDefaultScanConfig] = useState(true);
     const [cropTop, setCropTop] = useState(0);
     const [cropBottom, setCropBottom] = useState(0);
     const [showOutlines, setShowOutlines] = useState(false);
@@ -43,6 +44,12 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
 
     // New state for cropped image preview
     const [croppedPreviewUrl, setCroppedPreviewUrl] = useState(null);
+
+    // Right-pane tab state
+    const [activeResultTab, setActiveResultTab] = useState('preview');
+
+    // Jump-to-page
+    const [jumpPageNumber, setJumpPageNumber] = useState('');
 
     const imageContainerRef = useRef(null);
     const croppedImageContainerRef = useRef(null);
@@ -238,19 +245,41 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
             const page = await pdf.getPage(pageNum);
             const scale = 1.5;
             const viewport = page.getViewport({ scale });
-            
+
             const canvas = document.createElement('canvas');
             const context = canvas.getContext('2d');
             canvas.height = viewport.height;
             canvas.width = viewport.width;
-            
+
             await page.render({ canvasContext: context, viewport: viewport }).promise;
-            
+
             const dataUrl = canvas.toDataURL('image/png');
             setPreviewUrl(dataUrl);
+            return dataUrl;
         } catch (err) {
             setError(`Error rendering PDF page: ${err.message}`);
+            return null;
         }
+    };
+
+    const applyCropToDataUrl = (dataUrl, cropTopPct, cropBottomPct) => {
+        if (!dataUrl || (cropTopPct === 0 && cropBottomPct === 0)) {
+            setCroppedPreviewUrl(null);
+            return;
+        }
+        const img = new Image();
+        img.onload = () => {
+            const { width, height } = img;
+            const topPx = Math.floor(height * cropTopPct / 100);
+            const bottomPx = Math.floor(height * cropBottomPct / 100);
+            const croppedHeight = height - topPx - bottomPx;
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = croppedHeight;
+            canvas.getContext('2d').drawImage(img, 0, topPx, width, croppedHeight, 0, 0, width, croppedHeight);
+            setCroppedPreviewUrl(canvas.toDataURL('image/png'));
+        };
+        img.src = dataUrl;
     };
 
     const handlePageNavigation = async (direction) => {
@@ -265,10 +294,20 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
         
         if (newPage !== currentPage) {
             setCurrentPage(newPage);
-            await renderPDFPage(pdfDoc, newPage);
+            const dataUrl = await renderPDFPage(pdfDoc, newPage);
             setOcrResults(null);
-            setCroppedPreviewUrl(null);
+            applyCropToDataUrl(dataUrl, cropTop, cropBottom);
         }
+    };
+
+    const jumpToPage = async () => {
+        const page = parseInt(jumpPageNumber, 10);
+        if (!pdfDoc || isNaN(page) || page < 1 || page > totalPages || page === currentPage) return;
+        setCurrentPage(page);
+        const dataUrl = await renderPDFPage(pdfDoc, page);
+        setOcrResults(null);
+        applyCropToDataUrl(dataUrl, cropTop, cropBottom);
+        setJumpPageNumber('');
     };
 
     const convertCurrentPageToImage = async () => {
@@ -339,6 +378,7 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
                 }
 
                 formData.append('image', fileToProcess);
+                formData.append('use_default_scan_config', useDefaultScanConfig);
                 console.log(`Using upload mode with ${isPDF ? 'converted PDF page' : 'image file'}`);
             }
 
@@ -354,6 +394,7 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
             }
 
             setOcrResults(data);
+            setActiveResultTab('paragraphs');
         } catch (err) {
             setError(`OCR processing failed: ${err.message}`);
             console.error('OCR Error:', err);
@@ -669,214 +710,128 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
                 </div>
 
                 {/* Controls */}
-                <div className="p-4 border-b border-slate-200 bg-slate-50">
-                    <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                        {/* File Input */}
-                        <div className="col-span-1 md:col-span-2 lg:col-span-3">
-                            <label className="block text-sm font-medium text-slate-700 mb-2">
-                                File Selection
-                            </label>
-                            <div className="space-y-2">
-                                <FileOrUrlInput
-                                    onFileReady={handleFileReady}
-                                    selectedFile={selectedFile}
-                                    inputId="file-upload"
-                                />
+                <div className="px-4 pt-3 pb-2 border-b border-slate-200 bg-slate-50 space-y-2">
 
-                                {/* File Browser Info */}
-                                {propSelectedFile && (
-                                    <div className={`p-1 border rounded-md text-xs ${
-                                        selectedFile && selectedFile.name === propSelectedFile.selectedPDFFile 
-                                            ? 'bg-green-50 border-green-200' 
-                                            : 'bg-blue-50 border-blue-200'
-                                    }`}>
-                                        <div className="flex items-center">
-                                            <svg className={`w-3 h-3 mr-1 ${
-                                                selectedFile && selectedFile.name === propSelectedFile.selectedPDFFile 
-                                                    ? 'text-green-600' 
-                                                    : 'text-blue-600'
-                                            }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                {selectedFile && selectedFile.name === propSelectedFile.selectedPDFFile ? (
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                ) : (
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
-                                                )}
-                                            </svg>
-                                            <span className={`font-medium truncate ${
-                                                selectedFile && selectedFile.name === propSelectedFile.selectedPDFFile 
-                                                    ? 'text-green-800' 
-                                                    : 'text-blue-800'
-                                            }`}>
-                                                {selectedFile && selectedFile.name === propSelectedFile.selectedPDFFile 
-                                                    ? 'Browser:' 
-                                                    : 'Browser:'}
-                                                {' '}
-                                                {propSelectedFile.selectedPDFFile || 'Unknown'}
-                                            </span>
-                                        </div>
-                                        {!(selectedFile && selectedFile.name === propSelectedFile.selectedPDFFile) && (
-                                            <div className="text-xs text-blue-600">
-                                                {baseDirectoryHandles?.pdf 
-                                                    ? 'Loading...' 
-                                                    : 'Need permissions'}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
+                    {/* Line 1: File input + Language */}
+                    <div className="flex items-end gap-2">
+                        <div className="min-w-0 flex-1">
+                            <FileOrUrlInput
+                                onFileReady={handleFileReady}
+                                selectedFile={selectedFile}
+                                inputId="file-upload"
+                            />
+                            {propSelectedFile && (
+                                <div className={`mt-1 px-2 py-0.5 border rounded text-xs ${
+                                    selectedFile?.name === propSelectedFile.selectedPDFFile
+                                        ? 'bg-green-50 border-green-200 text-green-800'
+                                        : 'bg-blue-50 border-blue-200 text-blue-700'
+                                }`}>
+                                    {propSelectedFile.selectedPDFFile || 'Unknown'}
+                                </div>
+                            )}
                         </div>
-
-                        {/* Language Selection */}
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">
-                                Language
-                            </label>
+                        <div className="shrink-0">
                             <select
                                 value={language}
                                 onChange={(e) => setLanguage(e.target.value)}
-                                className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                className="text-sm px-2 py-1.5 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
                             >
-                                <option value="hin">Hindi</option>
-                                <option value="guj">Gujarati</option>
-                                <option value="eng">English</option>
+                                <option value="hin">हिंदी</option>
+                                <option value="guj">ગુજરાતી</option>
                             </select>
-                        </div>
-
-                        {/* Crop Controls */}
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">
-                                Crop Top (%)
-                            </label>
-                            <input
-                                type="number"
-                                step="0.1"
-                                min="0"
-                                max="50"
-                                value={cropTop}
-                                onChange={(e) => setCropTop(parseFloat(e.target.value) || 0)}
-                                className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">
-                                Crop Bottom (%)
-                            </label>
-                            <input
-                                type="number"
-                                step="0.1"
-                                min="0"
-                                max="50"
-                                value={cropBottom}
-                                onChange={(e) => setCropBottom(parseFloat(e.target.value) || 0)}
-                                className="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
-                            />
                         </div>
                     </div>
 
-                    {/* Additional Controls */}
-                    <div className="flex items-center justify-between mt-4">
-                        <div className="flex items-center space-x-4">
-                            {/* Outline Toggle */}
-                            <label className="flex items-center text-sm text-slate-700">
+                    {/* Line 2: Crop + scan config + Apply */}
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1">
+                            <label className="text-xs text-slate-500 whitespace-nowrap">Top %</label>
+                            <input
+                                type="number" step="0.1" min="0" max="50"
+                                value={cropTop}
+                                onChange={(e) => setCropTop(parseFloat(e.target.value) || 0)}
+                                className="w-16 text-xs px-2 py-1 border border-slate-300 rounded-md focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                            />
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <label className="text-xs text-slate-500 whitespace-nowrap">Bottom %</label>
+                            <input
+                                type="number" step="0.1" min="0" max="50"
+                                value={cropBottom}
+                                onChange={(e) => setCropBottom(parseFloat(e.target.value) || 0)}
+                                className="w-16 text-xs px-2 py-1 border border-slate-300 rounded-md focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                            />
+                        </div>
+                        {!propSelectedFile?.relativePath && (
+                            <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
                                 <input
                                     type="checkbox"
-                                    checked={showOutlines}
-                                    onChange={(e) => setShowOutlines(e.target.checked)}
-                                    className="mr-2 h-4 w-4 text-sky-600 focus:ring-sky-500 border-slate-300 rounded"
+                                    id="use-default-scan-config"
+                                    checked={useDefaultScanConfig}
+                                    onChange={(e) => setUseDefaultScanConfig(e.target.checked)}
+                                    className="h-3.5 w-3.5 text-sky-600 border-slate-300 rounded"
                                 />
-                                Show text outlines
+                                Default scan config
                             </label>
+                        )}
+                        <button
+                            disabled={!selectedFile}
+                            onClick={async () => {
+                                if (cropTop > 0 || cropBottom > 0) {
+                                    await handlePreviewCroppedImage();
+                                } else {
+                                    setCroppedPreviewUrl(null);
+                                }
+                                setActiveResultTab('preview');
+                            }}
+                            className="text-xs px-3 py-1.5 bg-slate-600 text-white rounded-md hover:bg-slate-700 transition duration-200 disabled:bg-slate-300 disabled:cursor-not-allowed"
+                        >
+                            Apply
+                        </button>
+                    </div>
 
-                            {/* Google OCR Toggle */}
-                            <label className="flex items-center text-sm text-slate-700">
-                                <input
-                                    type="checkbox"
-                                    checked={useGoogleOCR}
-                                    onChange={(e) => setUseGoogleOCR(e.target.checked)}
-                                    className="mr-2 h-4 w-4 text-sky-600 focus:ring-sky-500 border-slate-300 rounded"
-                                />
-                                Use Google OCR (₹0.13 per page)
-                            </label>
-
-                            {/* PDF Navigation */}
+                    {/* Line 3: Page nav + go-to + bookmarks + parse + Process */}
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
                             {isPDF && pdfDoc && (
-                                <div className="flex items-center space-x-2 text-sm">
+                                <>
                                     <button
                                         onClick={() => handlePageNavigation('prev')}
                                         disabled={currentPage === 1}
-                                        className="px-2 py-1 bg-slate-200 text-slate-700 rounded disabled:opacity-50 hover:bg-slate-300"
-                                    >
-                                        ←
-                                    </button>
-                                    <span className="text-slate-600">
-                                        Page {currentPage} of {totalPages}
-                                    </span>
+                                        className="px-2 py-1 text-xs bg-slate-200 text-slate-700 rounded disabled:opacity-40 hover:bg-slate-300"
+                                    >←</button>
+                                    <span className="text-xs text-slate-600">{currentPage} / {totalPages}</span>
                                     <button
                                         onClick={() => handlePageNavigation('next')}
                                         disabled={currentPage === totalPages}
-                                        className="px-2 py-1 bg-slate-200 text-slate-700 rounded disabled:opacity-50 hover:bg-slate-300"
-                                    >
-                                        →
-                                    </button>
-                                </div>
+                                        className="px-2 py-1 text-xs bg-slate-200 text-slate-700 rounded disabled:opacity-40 hover:bg-slate-300"
+                                    >→</button>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max={totalPages}
+                                        value={jumpPageNumber}
+                                        onChange={(e) => setJumpPageNumber(e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && jumpToPage()}
+                                        placeholder="Go to"
+                                        className="w-16 text-xs px-2 py-1 border border-slate-300 rounded-md focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+                                    />
+                                </>
                             )}
-
-                            {/* Show bookmarks toggle */}
                             <ShowBookmarksButton
                                 hasBookmarks={isPDF && bookmarks.length > 0}
                                 onClick={() => setShowBookmarkModal(true)}
                             />
-
-                            {/* Parse Bookmarks control with LLM selector */}
-                            <ParseBookmarksControl
-                                isPDF={isPDF}
-                                pdfDoc={pdfDoc}
-                            />
+                            <ParseBookmarksControl isPDF={isPDF} pdfDoc={pdfDoc} />
                         </div>
 
-                        {/* Action Buttons */}
-                        <div className="flex items-center space-x-2">
-                            {(cropTop > 0 || cropBottom > 0) && selectedFile && (
-                                <button
-                                    onClick={handlePreviewCroppedImage}
-                                    disabled={isLoading}
-                                    className="bg-orange-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-orange-700 transition duration-200 disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center"
-                                >
-                                    Preview Cropped Image
-                                </button>
-                            )}
-                            {isPDF && (
-                                <button
-                                    onClick={handleBatchOCRProcess}
-                                    disabled={!selectedFile || isLoading}
-                                    className="bg-green-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-green-700 transition duration-200 disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center"
-                                >
-                                    {isLoading && batchJobId ? (
-                                        <>
-                                            <Spinner />
-                                            <span className="ml-2">Processing PDF...</span>
-                                        </>
-                                    ) : (
-                                        'Download Full PDF Text'
-                                    )}
-                                </button>
-                            )}
-                            <button
-                                onClick={handleOCRProcess}
-                                disabled={!selectedFile || isLoading}
-                                className="bg-sky-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-sky-700 transition duration-200 disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center"
-                            >
-                                {isLoading && !batchJobId ? (
-                                    <>
-                                        <Spinner />
-                                        <span className="ml-2">Processing...</span>
-                                    </>
-                                ) : (
-                                    'Run OCR on Current Page'
-                                )}
-                            </button>
-                        </div>
+                        <button
+                            onClick={handleOCRProcess}
+                            disabled={!selectedFile || isLoading}
+                            className="text-xs px-3 py-1.5 bg-sky-600 text-white font-semibold rounded-md hover:bg-sky-700 transition duration-200 disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-1"
+                        >
+                            {isLoading && !batchJobId ? <><Spinner /><span>Processing…</span></> : 'Process'}
+                        </button>
                     </div>
                 </div>
 
@@ -912,15 +867,6 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
                         {(batchJobStatus === 'processing' || batchJobStatus === 'queued' || batchJobStatus === 'preparing') && (
                             <ProgressBar progress={batchProgress} total={batchTotalPages} />
                         )}
-                        {batchJobStatus === 'completed' && (
-                             <a
-                                href={`${API_BASE_URL}/eval/ocr/batch/download/${batchJobId}`}
-                                download={batchZipFilename || 'extracted_text.zip'}
-                                className="inline-block bg-sky-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-sky-700 transition duration-200"
-                            >
-                                Download Zip File
-                            </a>
-                        )}
                     </div>
                 )}
 
@@ -931,12 +877,12 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
                     </div>
                 )}
 
-                {/* Content Panels - Only show 2 panels at a time */}
+                {/* Content Panels */}
                 <div className="flex flex-col lg:flex-row">
-                    {/* Image Preview Panel - Always shown */}
+                    {/* Left: Image Preview - always shown */}
                     <div className="flex-1 p-4">
                         <h3 className="text-lg font-semibold text-slate-800 mb-3">Preview</h3>
-                        <div 
+                        <div
                             ref={imageContainerRef}
                             className="relative border border-slate-300 rounded-lg overflow-hidden bg-slate-50 w-full h-[700px]"
                         >
@@ -960,97 +906,167 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
                         </div>
                     </div>
 
-                    {/* Conditional Second Panel: Show OCR Results OR Cropped Preview */}
-                    {ocrResults ? (
-                        /* Results Panel - Show when OCR results exist */
-                        <div className="flex-1 p-4 border-l border-slate-200">
-                            <h3 className="text-lg font-semibold text-slate-800 mb-3">OCR Results</h3>
-                            <div className="space-y-3 max-h-[700px] overflow-y-auto">
+                    {/* Right: Tabbed results panel */}
+                    <div className="flex-1 p-4 border-l border-slate-200">
+                        {/* Tab bar */}
+                        <div className="flex border-b border-slate-200 mb-3 gap-1">
+                            {[
+                                { id: 'preview',    label: 'OCR Preview' },
+                                { id: 'ocr-json',   label: 'Raw OCR JSON' },
+                                { id: 'scan-config',label: 'Scan Config' },
+                                { id: 'paragraphs', label: 'Paragraphs' },
+                            ].map(({ id, label }) => (
+                                <button
+                                    key={id}
+                                    onClick={() => setActiveResultTab(id)}
+                                    className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                                        activeResultTab === id
+                                            ? 'border-sky-600 text-sky-600'
+                                            : 'border-transparent text-slate-500 hover:text-slate-700'
+                                    }`}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Tab: OCR Preview */}
+                        {activeResultTab === 'preview' && (
+                            <div
+                                ref={croppedImageContainerRef}
+                                className="relative border border-slate-300 rounded-lg overflow-hidden bg-slate-50 w-full h-[660px]"
+                            >
+                                {croppedPreviewUrl ? (
+                                    <img src={croppedPreviewUrl} alt="Cropped Preview" className="w-full h-full object-contain" />
+                                ) : previewUrl ? (
+                                    <img src={previewUrl} alt="Preview" className="w-full h-full object-contain" />
+                                ) : (
+                                    <div className="flex items-center justify-center h-full text-slate-400 text-sm">
+                                        Select a file to see preview
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Tab: Raw OCR JSON */}
+                        {activeResultTab === 'ocr-json' && (
+                            <div className="relative h-[660px] overflow-auto border border-slate-200 rounded-lg bg-slate-50 p-3">
+                                {ocrResults?.ocr_json ? (
+                                    <>
+                                        <button
+                                            onClick={(e) => handleCopyText(JSON.stringify(ocrResults.ocr_json, null, 2), e)}
+                                            className="absolute top-2 right-2 p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded transition-colors"
+                                            title="Copy JSON"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                            </svg>
+                                        </button>
+                                        <pre className="text-xs font-mono text-slate-700 whitespace-pre-wrap">
+                                            {JSON.stringify(ocrResults.ocr_json, null, 2)}
+                                        </pre>
+                                    </>
+                                ) : (
+                                    <div className="flex items-center justify-center h-full text-slate-400 text-sm">
+                                        Run OCR to see raw Tesseract output
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Tab: Scan Config */}
+                        {activeResultTab === 'scan-config' && (
+                            <div className="relative h-[660px] overflow-auto border border-slate-200 rounded-lg bg-slate-50 p-3">
+                                {ocrResults ? (
+                                    <>
+                                        <button
+                                            onClick={(e) => handleCopyText(JSON.stringify(ocrResults.scan_config ?? {}, null, 2), e)}
+                                            className="absolute top-2 right-2 p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded transition-colors"
+                                            title="Copy JSON"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                            </svg>
+                                        </button>
+                                        <pre className="text-xs font-mono text-slate-700 whitespace-pre-wrap">
+                                            {JSON.stringify(ocrResults.scan_config ?? {}, null, 2)}
+                                        </pre>
+                                    </>
+                                ) : (
+                                    <div className="flex items-center justify-center h-full text-slate-400 text-sm">
+                                        Run OCR to see effective scan config
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Tab: Paragraphs */}
+                        {activeResultTab === 'paragraphs' && (
+                            <div className="space-y-3 h-[660px] overflow-y-auto">
                                 {ocrResults?.paragraphs?.length > 0 ? (
                                     ocrResults.paragraphs.map((paragraph, index) => {
                                         const style = PARAGRAPH_TYPE_STYLES[paragraph.paragraph_type] || DEFAULT_PARAGRAPH_STYLE;
                                         return (
-                                        <div
-                                            key={index}
-                                            data-paragraph-index={index}
-                                            onClick={() => handleParagraphClick(paragraph, index)}
-                                            className={`paragraph-item ${style.bg} border ${style.border} rounded-lg p-3 cursor-pointer hover:opacity-80 transition-colors relative`}
-                                        >
-                                            <div className="flex items-center justify-between mb-2">
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`text-xs font-semibold ${style.text}`}>
-                                                        Paragraph {index + 1}
-                                                    </span>
-                                                    {style.label && (
-                                                        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${style.badge}`}>
-                                                            {style.label}
+                                            <div
+                                                key={index}
+                                                data-paragraph-index={index}
+                                                onClick={() => handleParagraphClick(paragraph, index)}
+                                                className={`paragraph-item ${style.bg} border ${style.border} rounded-lg p-3 cursor-pointer hover:opacity-80 transition-colors relative`}
+                                            >
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`text-xs font-semibold ${style.text}`}>
+                                                            Paragraph {index + 1}
                                                         </span>
-                                                    )}
+                                                        {style.label && (
+                                                            <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${style.badge}`}>
+                                                                {style.label}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <button
+                                                        onClick={(e) => handleCopyText(paragraph.text, e)}
+                                                        className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded transition-colors"
+                                                        title="Copy paragraph text"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                        </svg>
+                                                    </button>
                                                 </div>
-                                                <button
-                                                    onClick={(e) => handleCopyText(paragraph.text, e)}
-                                                    className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded transition-colors"
-                                                    title="Copy paragraph text"
-                                                >
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                                    </svg>
-                                                </button>
+                                                <div className={`text-sm ${style.text} whitespace-pre-wrap font-mono`}>
+                                                    {paragraph.text}
+                                                </div>
                                             </div>
-                                            <div className={`text-sm ${style.text} whitespace-pre-wrap font-mono`}>
-                                                {paragraph.text}
-                                            </div>
-                                        </div>
                                         );
                                     })
+                                ) : ocrResults ? (
+                                    <div className="text-center py-8 text-slate-500">No text detected in the image.</div>
                                 ) : (
-                                    <div className="text-center py-8 text-slate-500">
-                                        No text detected in the image.
+                                    <div className="flex items-center justify-center h-full text-slate-400 text-sm">
+                                        Run OCR to see paragraph output
                                     </div>
                                 )}
                             </div>
-                        </div>
-                    ) : (
-                        /* Cropped Image Preview Panel - Show when no OCR results */
-                        <div className="flex-1 p-4 border-l border-slate-200">
-                            <h3 className="text-lg font-semibold text-slate-800 mb-3">
-                                {croppedPreviewUrl ? 'Cropped Preview' : 'Cropped Preview / OCR Results'}
-                            </h3>
-                            <div 
-                                ref={croppedImageContainerRef}
-                                className="relative border border-slate-300 rounded-lg overflow-hidden bg-slate-50 w-full h-[700px]"
-                            >
-                                {croppedPreviewUrl ? (
-                                    <img
-                                        src={croppedPreviewUrl}
-                                        alt="Cropped Preview"
-                                        className="w-full h-full object-contain"
-                                    />
-                                ) : (
-                                    <div className="flex items-center justify-center h-full text-slate-500">
-                                        <div className="text-center">
-                                            <svg className="mx-auto h-12 w-12 text-slate-400 mb-3" stroke="currentColor" fill="none" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                            </svg>
-                                            <p className="mt-2 mb-4">
-                                                {(cropTop > 0 || cropBottom > 0) && selectedFile 
-                                                    ? 'Click "Preview Cropped Image" to see cropped version'
-                                                    : 'Set crop values and select a file to preview cropped image'
-                                                }
-                                            </p>
-                                            <div className="border-t border-slate-300 pt-4">
-                                                <svg className="mx-auto h-12 w-12 text-slate-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                                </svg>
-                                                <p className="text-slate-400 text-sm">Or run OCR to see extracted text results</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
+
+                {/* Download PDF footer */}
+                {isPDF && batchJobStatus === 'completed' && batchJobId && (
+                    <div className="px-4 py-3 border-t border-slate-200 flex items-center justify-end">
+                        <a
+                            href={`${API_BASE_URL}/eval/ocr/batch/download/${batchJobId}`}
+                            download={batchZipFilename || 'extracted_text.zip'}
+                            className="flex items-center gap-2 text-xs px-3 py-1.5 bg-slate-700 text-white rounded-md hover:bg-slate-800 transition duration-200"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            Download PDF
+                        </a>
+                    </div>
+                )}
 
                 <style>{`
                     .highlight-box {

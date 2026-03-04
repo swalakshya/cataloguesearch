@@ -17,6 +17,7 @@ const UIEval = () => {
     const [selectedFolder, setSelectedFolder] = useState(null);
     const [baseDirectoryHandles, setBaseDirectoryHandles] = useState(null);
     const [expiredHandles, setExpiredHandles] = useState(null); // stored but permissions lapsed
+    const [pendingHandles, setPendingHandles] = useState({ pdf: null, ocr: null, text: null });
     const [pdfParentDirPath, setPdfParentDirPath] = useState('');
 
     // Debug activeTab changes
@@ -131,45 +132,37 @@ const UIEval = () => {
         }
     };
 
-    const requestBaseDirectoryPermissions = async () => {
-        if (!basePaths) return;
+    const pickerActiveRef = React.useRef(false);
 
+    const pickDirectory = async (key) => {
+        if (pickerActiveRef.current) return;
+        if (!window.showDirectoryPicker) {
+            alert('File System Access API is not supported in this browser. Please use Google Chrome for the best experience.');
+            return;
+        }
+        pickerActiveRef.current = true;
         try {
-            if (!window.showDirectoryPicker) {
-                alert('File System Access API is not supported in this browser. Please use Google Chrome for the best experience.');
-                return;
-            }
-
-            // Step 1 — configs + PDFs
-            alert(`Step 1 of 3: Select the configs & PDFs directory.\n\nNavigate to:\n${basePaths.base_pdf_path}`);
-            const pdfHandle = await window.showDirectoryPicker();
-
-            // Step 2 — OCR output
-            alert(`Step 2 of 3: Select the OCR output directory.\n\nNavigate to:\n${basePaths.base_ocr_path}`);
-            const ocrHandle = await window.showDirectoryPicker();
-
-            // Step 3 — Text output
-            alert(`Step 3 of 3: Select the Text output directory.\n\nNavigate to:\n${basePaths.base_text_path}`);
-            const textHandle = await window.showDirectoryPicker();
-
-            const handles = { pdf: pdfHandle, ocr: ocrHandle, text: textHandle };
-            setBaseDirectoryHandles(handles);
-            setExpiredHandles(null);
-
-            try {
-                await storeDirectoryHandles(handles);
-                console.log('Directory handles stored successfully');
-            } catch (storageErr) {
-                console.warn('Could not persist directory handles:', storageErr);
-            }
-
+            const handle = await window.showDirectoryPicker();
+            setPendingHandles(prev => ({ ...prev, [key]: handle }));
         } catch (err) {
-            if (err.name === 'AbortError') {
-                console.log('User cancelled directory selection');
-            } else {
-                console.error('Error requesting directory permissions:', err);
-                alert(`Error accessing directories: ${err.message}`);
+            if (err.name !== 'AbortError') {
+                console.error('Error picking directory:', err);
             }
+        } finally {
+            pickerActiveRef.current = false;
+        }
+    };
+
+    const confirmDirectories = async () => {
+        const handles = { ...pendingHandles };
+        setBaseDirectoryHandles(handles);
+        setExpiredHandles(null);
+        setPendingHandles({ pdf: null, ocr: null, text: null });
+        try {
+            await storeDirectoryHandles(handles);
+            console.log('Directory handles stored successfully');
+        } catch (storageErr) {
+            console.warn('Could not persist directory handles:', storageErr);
         }
     };
 
@@ -380,7 +373,7 @@ const UIEval = () => {
                                                 </div>
                                             </div>
                                         ) : (
-                                            // State 3 — first time, step-by-step setup
+                                            // State 3 — first time, pick each directory independently
                                             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
                                                 <div className="flex items-start">
                                                     <svg className="w-5 h-5 text-amber-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -389,19 +382,40 @@ const UIEval = () => {
                                                     <div className="flex-1">
                                                         <p className="text-amber-800 font-medium text-sm">Directory access required</p>
                                                         <p className="text-amber-700 text-sm mt-1">
-                                                            Three folder pickers will open in sequence. Navigate to each path below:
+                                                            Select each directory individually, then click Confirm.
                                                         </p>
-                                                        <div className="mt-2 text-xs text-amber-800 space-y-1">
-                                                            <div className="flex gap-2"><span className="font-semibold w-4">1.</span><span>Configs &amp; PDFs: <span className="font-mono bg-amber-100 px-1 rounded">{basePaths.base_pdf_path}</span></span></div>
-                                                            <div className="flex gap-2"><span className="font-semibold w-4">2.</span><span>OCR Output: <span className="font-mono bg-amber-100 px-1 rounded">{basePaths.base_ocr_path}</span></span></div>
-                                                            <div className="flex gap-2"><span className="font-semibold w-4">3.</span><span>Text Output: <span className="font-mono bg-amber-100 px-1 rounded">{basePaths.base_text_path}</span></span></div>
+                                                        <div className="mt-3 space-y-2">
+                                                            {[
+                                                                { key: 'pdf', label: 'Configs & PDFs', path: basePaths.base_pdf_path },
+                                                                { key: 'ocr', label: 'OCR Output', path: basePaths.base_ocr_path },
+                                                                { key: 'text', label: 'Text Output', path: basePaths.base_text_path },
+                                                            ].map(({ key, label, path }) => (
+                                                                <div key={key} className="flex items-center gap-3">
+                                                                    <button
+                                                                        onClick={() => pickDirectory(key)}
+                                                                        className="bg-amber-600 text-white text-xs font-semibold py-1.5 px-3 rounded-md hover:bg-amber-700 transition duration-200 whitespace-nowrap"
+                                                                    >
+                                                                        Select
+                                                                    </button>
+                                                                    <div className="text-xs">
+                                                                        <span className="font-medium text-amber-800">{label}:</span>
+                                                                        {pendingHandles[key] ? (
+                                                                            <span className="text-green-700 ml-1">✓ {pendingHandles[key].name}</span>
+                                                                        ) : (
+                                                                            <span className="font-mono text-amber-600 ml-1">{path}</span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            ))}
                                                         </div>
-                                                        <button
-                                                            onClick={requestBaseDirectoryPermissions}
-                                                            className="mt-3 bg-amber-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-amber-700 transition duration-200"
-                                                        >
-                                                            Grant Directory Permissions (3 steps)
-                                                        </button>
+                                                        {pendingHandles.pdf && pendingHandles.ocr && pendingHandles.text && (
+                                                            <button
+                                                                onClick={confirmDirectories}
+                                                                className="mt-3 bg-green-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-green-700 transition duration-200"
+                                                            >
+                                                                Confirm &amp; Save
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>

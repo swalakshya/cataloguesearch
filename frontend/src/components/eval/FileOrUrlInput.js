@@ -7,7 +7,7 @@ const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
  * Renders an Upload / URL toggle and calls onFileReady(File) in both cases.
  */
 const FileOrUrlInput = ({ onFileReady, selectedFile, inputId = 'file-or-url-input' }) => {
-    const [mode, setMode] = useState('upload');
+    const [mode, setMode] = useState('url');
     const [urlValue, setUrlValue] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [urlError, setUrlError] = useState(null);

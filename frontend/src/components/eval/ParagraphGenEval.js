@@ -36,6 +36,8 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
         text: null
     });
     const [permissionsGranted, setPermissionsGranted] = useState(!!parentBaseDirectoryHandles);
+    const [pendingHandles, setPendingHandles] = useState({ pdf: null, ocr: null, text: null });
+    const pickerActiveRef = useRef(false);
     
     // Bookmarks functionality
     const [bookmarks, setBookmarks] = useState([]);
@@ -122,46 +124,34 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
         }
     }, [parentBasePaths]);
 
-    // Request base directory permissions when component loads
-    const requestBaseDirectoryPermissions = async () => {
-        if (!basePaths) return;
-        
+    const pickDirectory = async (key) => {
+        if (pickerActiveRef.current) return;
+        if (!window.showDirectoryPicker) {
+            setError('File System Access API is not supported in this browser. Please use Google Chrome for the best experience.');
+            return;
+        }
+        pickerActiveRef.current = true;
         try {
-            setIsLoading(true);
-            setError(null);
-            
-            // Check if File System Access API is available
-            if (!window.showDirectoryPicker) {
-                throw new Error('File System Access API is not supported in this browser. Please use Google Chrome for the best experience.');
-            }
-            
-            // Request PDF directory
-            const pdfHandle = await window.showDirectoryPicker();
-            
-            // Request OCR directory
-            const ocrHandle = await window.showDirectoryPicker();
-            
-            // Request Text directory
-            const textHandle = await window.showDirectoryPicker();
-            
-            // Store all handles
-            const handles = {
-                pdf: pdfHandle,
-                ocr: ocrHandle,
-                text: textHandle
-            };
-            setBaseDirectoryHandles(handles);
-            setPermissionsGranted(true);
-            
-            // Store in IndexedDB for persistence
-            await storeDirectoryHandles(handles);
-            
+            const handle = await window.showDirectoryPicker();
+            setPendingHandles(prev => ({ ...prev, [key]: handle }));
         } catch (err) {
             if (err.name !== 'AbortError') {
-                setError(`Error requesting directory permissions: ${err.message}`);
+                setError(`Error picking directory: ${err.message}`);
             }
         } finally {
-            setIsLoading(false);
+            pickerActiveRef.current = false;
+        }
+    };
+
+    const confirmDirectories = async () => {
+        const handles = { ...pendingHandles };
+        setBaseDirectoryHandles(handles);
+        setPermissionsGranted(true);
+        setPendingHandles({ pdf: null, ocr: null, text: null });
+        try {
+            await storeDirectoryHandles(handles);
+        } catch (err) {
+            console.warn('Could not persist directory handles:', err);
         }
     };
 
@@ -587,16 +577,42 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                     <div className="flex flex-col gap-4 max-w-md mx-auto">
                         {!permissionsGranted && (
                             <div className="mb-4">
-                                <p className="text-sm text-slate-600 mb-4">
-                                    First, grant permissions to your base directories for seamless operation.
+                                <p className="text-sm text-slate-600 mb-3">
+                                    Select each base directory individually, then click Confirm.
                                 </p>
-                                <button
-                                    onClick={requestBaseDirectoryPermissions}
-                                    disabled={isLoading || !basePaths}
-                                    className="w-full bg-sky-600 text-white font-semibold py-3 px-4 rounded-md hover:bg-sky-700 transition duration-200 disabled:bg-slate-400"
-                                >
-                                    {isLoading ? 'Setting up...' : 'Grant Directory Permissions'}
-                                </button>
+                                <div className="space-y-2">
+                                    {[
+                                        { key: 'pdf', label: 'Configs & PDFs', path: basePaths?.base_pdf_path },
+                                        { key: 'ocr', label: 'OCR Output', path: basePaths?.base_ocr_path },
+                                        { key: 'text', label: 'Text Output', path: basePaths?.base_text_path },
+                                    ].map(({ key, label, path }) => (
+                                        <div key={key} className="flex items-center gap-3">
+                                            <button
+                                                onClick={() => pickDirectory(key)}
+                                                disabled={!basePaths}
+                                                className="bg-sky-600 text-white text-xs font-semibold py-1.5 px-3 rounded-md hover:bg-sky-700 transition duration-200 whitespace-nowrap disabled:bg-slate-400"
+                                            >
+                                                Select
+                                            </button>
+                                            <div className="text-xs">
+                                                <span className="font-medium text-slate-700">{label}:</span>
+                                                {pendingHandles[key] ? (
+                                                    <span className="text-green-700 ml-1">✓ {pendingHandles[key].name}</span>
+                                                ) : (
+                                                    <span className="font-mono text-slate-500 ml-1">{path}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                {pendingHandles.pdf && pendingHandles.ocr && pendingHandles.text && (
+                                    <button
+                                        onClick={confirmDirectories}
+                                        className="mt-3 bg-green-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-green-700 transition duration-200"
+                                    >
+                                        Confirm &amp; Save
+                                    </button>
+                                )}
                             </div>
                         )}
                         

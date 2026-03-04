@@ -4,6 +4,7 @@ from fastapi.responses import FileResponse, Response
 from utils.logger import setup_logging, VERBOSE_LEVEL_NUM
 from pydantic import BaseModel, Field
 from typing import Any, Dict, List, Optional
+import json
 import os
 import sys
 import tempfile
@@ -28,8 +29,9 @@ from backend.crawler.markdown_parser import MarkdownParser
 from backend.common.scan_config import get_scan_config
 from backend.crawler.bookmark_extractor.factory import create_bookmark_extractor_by_name
 from backend.crawler.llm_pdf_processor import extract_indic_text
+from backend.crawler.paragraph_generator.advanced import AdvancedParagraphGenerator
+from backend.crawler.paragraph_generator.language_meta import get_language_meta
 from .ocr import get_ocr_service
-from scratch.para_gen.para_gen import process_image_to_paragraphs
 
 log_handle = logging.getLogger(__name__)
 
@@ -61,6 +63,8 @@ class OCRResponse(BaseModel):
     boxes: List[TextBox]
     paragraphs: List[Paragraph]
     language: str
+    ocr_json: Optional[Dict] = None
+    scan_config: Optional[Dict] = None
 
 class HealthResponse(BaseModel):
     status: str
@@ -189,14 +193,20 @@ async def get_file_scan_config(relative_path: str):
         log_handle.error(f"Error getting scan config: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error getting scan config: {str(e)}")
 
+_LANG_TO_FOLDER = {
+    "hi": "hindi", "hin": "hindi",
+    "gu": "gujarati", "guj": "gujarati",
+}
+
 @router.post("/ocr", response_model=OCRResponse)
 async def process_ocr(
     image: UploadFile = File(None, description="Image file to process (not needed if relative_path and page_number are provided)"),
-    language: str = Form("hin", description="Language code for OCR (hin, guj, eng)"),
+    language: str = Form("hin", description="Language code for OCR (hin, guj)"),
     crop_top: float = Form(0, description="Percentage to crop from top (0-50)"),
     crop_bottom: float = Form(0, description="Percentage to crop from bottom (0-50)"),
     relative_path: Optional[str] = Form(None, description="Relative path to PDF file from base folder"),
-    page_number: Optional[int] = Form(None, description="Page number to extract from PDF (1-indexed, requires relative_path)")
+    page_number: Optional[int] = Form(None, description="Page number to extract from PDF (1-indexed, requires relative_path)"),
+    use_default_scan_config: bool = Form(False, description="Load scan_config.json from base_dir/<language>/ when no relative_path is given")
 ):
     """
     Process OCR on an image.
@@ -235,6 +245,20 @@ async def process_ocr(
                 log_handle.info(f"Loaded scan_config for {relative_path}: {scan_config.keys()}")
         except Exception as e:
             log_handle.warning(f"Failed to load scan_config for {relative_path}: {e}")
+
+    # Upload/URL mode: load default scan_config from base_dir/Pravachans/<language>/
+    elif use_default_scan_config:
+        lang_folder = _LANG_TO_FOLDER.get(language.lower())
+        if lang_folder:
+            try:
+                config = Config("configs/config.yaml")
+                # Pass a dummy PDF path inside the language folder so get_scan_config
+                # walks the hierarchy and correctly flattens the "default" key.
+                dummy_pdf = os.path.join(config.BASE_PDF_PATH, "Pravachans", lang_folder, "dummy.pdf")
+                scan_config = get_scan_config(dummy_pdf, config.BASE_PDF_PATH)
+                log_handle.info(f"Loaded default scan_config for {lang_folder}: {list(scan_config.keys())}")
+            except Exception as e:
+                log_handle.warning(f"Failed to load default scan_config for language '{language}': {e}")
 
     # Merge crop settings (these override scan_config crop if both present)
     if crop_top > 0 or crop_bottom > 0:
@@ -307,19 +331,36 @@ async def process_ocr(
 
             source_description = f"uploaded file {image.filename}"
 
-        # --- OCR and Paragraph Logic ---
-        log_handle.info(f"Processing OCR for {source_description} using para_gen logic...")
+        # --- OCR via AdvancedPDFProcessor ---
+        log_handle.info(f"Processing OCR for {source_description}...")
         tesseract_lang = language.replace(' ', '+')
 
-        generated_paragraphs, _ = process_image_to_paragraphs(
-            pil_image, lang=tesseract_lang, page_num=page_num, scan_config=scan_config
+        _, json_strings = AdvancedPDFProcessor._process_single_page(
+            (page_num, pil_image, tesseract_lang, 6)
         )
+        page_data = json.loads(json_strings[0])
 
-        api_paragraphs = [Paragraph(text=p.text, boxes=[], paragraph_type=p.paragraph_type.name) for p in generated_paragraphs]
-        extracted_text = '\n\n----\n\n'.join([p.text for p in api_paragraphs])
+        # --- Paragraph generation via AdvancedParagraphGenerator ---
+        lang_code = "gu" if language.lower() in ("guj", "gu") else "hi"
+        para_gen = AdvancedParagraphGenerator(config, get_language_meta(lang_code, scan_config))
+        phase1 = para_gen._phase1_lines_to_typed_paragraphs([page_data], scan_config)
+        typed_paragraphs = para_gen._phase2_combine_by_type(phase1)
+
+        api_paragraphs = [
+            Paragraph(text=text, boxes=[], paragraph_type=state.name)
+            for _, text, state in typed_paragraphs
+        ]
+        extracted_text = '\n\n----\n\n'.join(p.text for p in api_paragraphs)
         log_handle.info(f"OCR processing completed: {len(api_paragraphs)} paragraphs")
 
-        return OCRResponse(text=extracted_text, boxes=[], paragraphs=api_paragraphs, language=language)
+        return OCRResponse(
+            text=extracted_text,
+            boxes=[],
+            paragraphs=api_paragraphs,
+            language=language,
+            ocr_json=page_data,
+            scan_config=scan_config,
+        )
 
     except HTTPException:
         raise
