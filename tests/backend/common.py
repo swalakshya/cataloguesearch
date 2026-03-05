@@ -329,118 +329,6 @@ def are_dicts_same(dict1: dict[str, list[str]], dict2: dict[str, list[str]]) -> 
 
     return True
 
-# ========================================================================
-# Utils for granth
-
-def setup_granth():
-    config = Config()
-    base_dir = tempfile.mkdtemp(prefix="test_granth_")
-    pdf_dir = "%s/data/pdfs" % base_dir
-    log_handle.info(f"Using base dir: {base_dir}, pdf_dir: {pdf_dir}")
-    config.settings()["crawler"]["base_pdf_path"] = pdf_dir
-
-    granth_dir = f"{pdf_dir}/Granth"
-
-    languages = ["hindi", "gujarati"]
-    lang_codes = {
-        "hindi": "hi",
-        "gujarati": "gu"
-    }
-
-    granth_files = dict()
-
-    for lang in languages:
-        # Create directories for each MD file
-        simple_md_dir = f"{pdf_dir}/Granth/{lang}/simple_md"
-        adhikar_md_dir = f"{pdf_dir}/Granth/{lang}/adhikar_md"
-        mixed_md_dir = f"{pdf_dir}/Granth/{lang}/mixed_md"
-        prose_md_dir = f"{pdf_dir}/Granth/{lang}/prose_md"
-
-        os.makedirs(simple_md_dir, exist_ok=True)
-        os.makedirs(adhikar_md_dir, exist_ok=True)
-        os.makedirs(mixed_md_dir, exist_ok=True)
-        os.makedirs(prose_md_dir, exist_ok=True)
-
-        # Config for simple_granth.md
-        simple_md_config = {
-            "name": "Simple",
-            "Anuyog": "Simple Anuyog",
-            "Author": "Simple Author",
-            "Teekakar": "Simple Teekakar",
-            "language": lang_codes[lang],
-            "file_url": f"http://simple_file_{lang}_url"
-        }
-        write_config_file(f"{simple_md_dir}/config.json", simple_md_config)
-
-        # Config for adhikar_granth.md
-        adhikar_md_config = {
-            "name": "Adhikar",
-            "Anuyog": "Charitra Anuyog",
-            "Author": "Acharya Kundkund",
-            "Teekakar": "Acharya Nemichandra",
-            "language": lang_codes[lang],
-            "file_url": f"http://adhikar_file_{lang}_url"
-        }
-        write_config_file(f"{adhikar_md_dir}/config.json", adhikar_md_config)
-
-        # Config for mixed_granth.md
-        mixed_md_config = {
-            "name": "Mixed",
-            "Anuyog": "Dravya Anuyog",
-            "Author": "Acharya Haribhadra",
-            "Teekakar": "Pandit Todarmal",
-            "language": lang_codes[lang],
-            "file_url": f"http://mixed_file_{lang}_url"
-        }
-        write_config_file(f"{mixed_md_dir}/config.json", mixed_md_config)
-
-        # Config for adhikar_prose_granth.md
-        prose_md_config = {
-            "name": "Prose Granth",
-            "Anuyog": "Prose Anuyog",
-            "Author": "Prose Author",
-            "Teekakar": "Prose Teekakar",
-            "language": lang_codes[lang],
-            "file_url": f"http://prose_file_{lang}_url"
-        }
-        write_config_file(f"{prose_md_dir}/config.json", prose_md_config)
-
-        # Copy test MD files to their directories
-        TEST_BASE_DIR = os.getenv("TEST_BASE_DIR")
-        test_md_path = os.path.join(TEST_BASE_DIR, "data", "md", lang)
-
-        simple_granth_path = f"{simple_md_dir}/simple_granth.md"
-        adhikar_granth_path = f"{adhikar_md_dir}/adhikar_granth.md"
-        mixed_granth_path = f"{mixed_md_dir}/mixed_granth.md"
-        prose_granth_path = f"{prose_md_dir}/adhikar_prose_granth.md"
-
-        shutil.copy(os.path.join(test_md_path, "simple_granth.md"), simple_granth_path)
-        shutil.copy(os.path.join(test_md_path, "adhikar_granth.md"), adhikar_granth_path)
-        shutil.copy(os.path.join(test_md_path, "mixed_granth.md"), mixed_granth_path)
-        shutil.copy(os.path.join(test_md_path, "adhikar_prose_granth.md"), prose_granth_path)
-
-        granth_files[f"simple_granth_{lang_codes[lang]}"] = {
-            "file_path": simple_granth_path,
-            "config": simple_md_config
-        }
-        granth_files[f"adhikar_granth_{lang_codes[lang]}"] = {
-            "file_path": adhikar_granth_path,
-            "config": adhikar_md_config
-        }
-        granth_files[f"mixed_granth_{lang_codes[lang]}"] = {
-            "file_path": mixed_granth_path,
-            "config": mixed_md_config
-        }
-        granth_files[f"prose_granth_{lang_codes[lang]}"] = {
-            "file_path": prose_granth_path,
-            "config": prose_md_config
-        }
-
-    # Return the structure
-    return {
-        "base_dir": pdf_dir,
-        "granth_files": granth_files
-    }
 
 def add_bookmarks_to_pdf(file_name, bookmarks_list):
     """
@@ -452,23 +340,14 @@ def add_bookmarks_to_pdf(file_name, bookmarks_list):
     """
     doc = fitz.open(file_name)
 
-    # Convert bookmarks_list to TOC (Table of Contents) format
-    # TOC format: [[level, title, page_num], ...]
-    # level is the hierarchy level (1 for top level)
     toc = []
     for page_num, bookmark_str in bookmarks_list:
         toc.append([1, bookmark_str, page_num])
 
-    # Set the TOC (this adds bookmarks to the PDF)
     doc.set_toc(toc)
 
-    # Save to a temporary file first, then replace the original
-    # This avoids issues with incremental saves and encryption
     temp_file = f"{file_name}.tmp"
     doc.save(temp_file, encryption=fitz.PDF_ENCRYPT_NONE)
     doc.close()
 
-    # Replace original file with the temp file
     os.replace(temp_file, file_name)
-
-    log_handle.info(f"Added {len(bookmarks_list)} bookmarks to {file_name}")

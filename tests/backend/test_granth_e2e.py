@@ -132,11 +132,10 @@ def indexed(config, opensearch_client):
     """
     global _ALPHA_DOC_ID, _BETA_A_DOC_ID, _BETA_B_DOC_ID
 
-    all_indices = [idx for idx in [
+    all_indices = [
         config.OPENSEARCH_INDEX_NAME,
         config.OPENSEARCH_METADATA_INDEX_NAME,
-        getattr(config, "OPENSEARCH_GRANTH_INDEX_NAME", None),
-    ] if idx]
+    ]
 
     # ── clean slate ───────────────────────────────────────────────────────────
     for idx in all_indices:

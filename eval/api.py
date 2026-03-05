@@ -25,7 +25,6 @@ from PIL import Image
 
 from backend.config import Config
 from backend.crawler.advanced_pdf_processor import AdvancedPDFProcessor
-from backend.crawler.markdown_parser import MarkdownParser
 from backend.common.scan_config import get_scan_config
 from backend.crawler.bookmark_extractor.factory import create_bookmark_extractor_by_name
 from backend.crawler.llm_pdf_processor import extract_indic_text
@@ -91,10 +90,6 @@ class CostCalculationResponse(BaseModel):
     cost: str
     pages: int
     currency: str = "₹"
-
-# --- Scripture Eval Request Model ---
-class ScriptureEvalRequest(BaseModel):
-    relative_path: str
 
 # --- Bookmark Extraction Models ---
 class BookmarkExtractionRequest(BaseModel):
@@ -526,45 +521,6 @@ try:
     asyncio.create_task(cleanup_old_jobs_task())
 except Exception:
     pass  # Ignore if no event loop is running
-
-@router.post("/scripture")
-async def process_scripture(request: ScriptureEvalRequest):
-    """
-    Process a markdown scripture file and return the parsed Granth object.
-    """
-    try:
-        # Initialize config to get base paths
-        config = Config("configs/config.yaml")
-
-        # Construct the full path to the markdown file
-        # Assuming the relative path is relative to the base markdown directory
-        base_path = getattr(config, 'BASE_MARKDOWN_PATH', config.BASE_PDF_PATH)  # fallback to PDF path if markdown path not defined
-        full_file_path = os.path.join(base_path, request.relative_path)
-
-        # Validate file exists and is a markdown file
-        if not os.path.exists(full_file_path):
-            raise HTTPException(status_code=404, detail=f"Markdown file not found: {request.relative_path}")
-
-        if not full_file_path.lower().endswith('.md'):
-            raise HTTPException(status_code=400, detail="File must be a markdown (.md) file")
-
-        log_handle.info(f"Processing scripture file: {full_file_path}")
-
-        # Parse the markdown file using MarkdownParser
-        # Pass the base directory so it can find config files
-        parser = MarkdownParser(base_folder=base_path)
-        granth = parser.parse_file(full_file_path)
-
-        log_handle.info(f"Successfully parsed Granth: {granth._name} with {len(granth._verses)} verses")
-
-        # Return the Granth object as HTTP response
-        return granth.get_http_response()
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        log_handle.error(f"Error processing scripture file: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error processing scripture file: {str(e)}")
 
 @router.post("/bookmarks/extract", response_model=BookmarkExtractionResponse)
 async def extract_bookmarks(request: BookmarkExtractionRequest):

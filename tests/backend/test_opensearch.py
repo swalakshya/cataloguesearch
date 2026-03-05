@@ -8,7 +8,6 @@ from opensearchpy import ConnectionError
 from backend.common.opensearch import (
     get_opensearch_config,
     get_metadata_index_config,
-    get_granth_index_config,
     get_opensearch_client,
     create_indices_if_not_exists,
     delete_index,
@@ -137,32 +136,6 @@ class TestOpenSearchConfig:
         # Should return empty dict when section is missing
         assert isinstance(metadata_config, dict)
 
-    def test_get_granth_index_config_valid(self, initialise):
-        """Test loading granth index configuration."""
-        config = Config()
-        granth_config = get_granth_index_config(config)
-
-        assert isinstance(granth_config, dict)
-
-        # If granth_index is configured, check expected structure
-        if granth_config:
-            assert 'mappings' in granth_config
-            assert 'settings' in granth_config
-
-            # Check for mixed language analyzer
-            if 'settings' in granth_config and 'analysis' in granth_config['settings']:
-                analysis = granth_config['settings']['analysis']
-                if 'analyzer' in analysis:
-                    assert 'mixed_indic_analyzer' in analysis['analyzer']
-
-    def test_get_granth_index_config_missing_section(self, initialise):
-        """Test granth config when section is missing."""
-        config = Config()
-        granth_config = get_granth_index_config(config)
-
-        # Should return empty dict when section is missing
-        assert isinstance(granth_config, dict)
-
 
 class TestOpenSearchClient:
     """Test OpenSearch client operations."""
@@ -248,22 +221,16 @@ class TestIndexOperations:
         # Ensure indices don't exist
         assert not client.indices.exists(config.OPENSEARCH_INDEX_NAME)
         assert not client.indices.exists(config.OPENSEARCH_METADATA_INDEX_NAME)
-        assert not client.indices.exists(config.OPENSEARCH_GRANTH_INDEX_NAME)
-
         # Create indices
         create_indices_if_not_exists(config, client)
 
         # Verify indices exist
         assert client.indices.exists(config.OPENSEARCH_INDEX_NAME)
         assert client.indices.exists(config.OPENSEARCH_METADATA_INDEX_NAME)
-        assert client.indices.exists(config.OPENSEARCH_GRANTH_INDEX_NAME)
-
         # Test idempotency - should not raise error if indices already exist
         create_indices_if_not_exists(config, client)
         assert client.indices.exists(config.OPENSEARCH_INDEX_NAME)
         assert client.indices.exists(config.OPENSEARCH_METADATA_INDEX_NAME)
-        assert client.indices.exists(config.OPENSEARCH_GRANTH_INDEX_NAME)
-
     def test_create_index_if_not_exists_empty_body(self, opensearch_client_and_config):
         """Test _create_index_if_not_exists with empty index body."""
         client, config = opensearch_client_and_config
@@ -282,15 +249,12 @@ class TestIndexOperations:
         create_indices_if_not_exists(config, client)
         assert client.indices.exists(config.OPENSEARCH_INDEX_NAME)
         assert client.indices.exists(config.OPENSEARCH_METADATA_INDEX_NAME)
-        assert client.indices.exists(config.OPENSEARCH_GRANTH_INDEX_NAME)
-
         # Delete indices
         delete_index(config)
 
         # Verify indices are deleted
         assert not client.indices.exists(config.OPENSEARCH_INDEX_NAME)
         assert not client.indices.exists(config.OPENSEARCH_METADATA_INDEX_NAME)
-        assert not client.indices.exists(config.OPENSEARCH_GRANTH_INDEX_NAME)
 
         # Test deleting non-existent indices (should not raise error)
         delete_index(config)

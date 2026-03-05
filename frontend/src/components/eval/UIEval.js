@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import OCRUtils from '../OCRUtils';
 import ParagraphGenEval from './ParagraphGenEval';
-import ScriptureEval from './ScriptureEval';
 import OCRPreview from './OCRPreview';
 import ScriptureLLMEval from './ScriptureLLMEval';
 import FileBrowser from './FileBrowser';
@@ -243,12 +242,6 @@ const UIEval = () => {
                                         onClick={setActiveTab}
                                     />
                                     <NavButton
-                                        id="scripture-eval"
-                                        label="Scripture Eval"
-                                        isActive={activeTab === 'scripture-eval'}
-                                        onClick={setActiveTab}
-                                    />
-                                    <NavButton
                                         id="scripture-llm-eval"
                                         label="Scripture LLM Eval"
                                         isActive={activeTab === 'scripture-llm-eval'}
@@ -257,7 +250,7 @@ const UIEval = () => {
                                 </div>
 
                                 {/* File Browser Button */}
-                                {(activeTab === 'ocr-eval' || activeTab === 'ocr-preview' || activeTab === 'paragraph-eval' || activeTab === 'scripture-eval' || activeTab === 'scripture-llm-eval') && (
+                                {(activeTab === 'ocr-eval' || activeTab === 'ocr-preview' || activeTab === 'paragraph-eval' || activeTab === 'scripture-llm-eval') && (
                                     <button
                                         onClick={handleBrowseFiles}
                                         className="bg-green-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-green-700 transition-colors flex items-center"
@@ -508,15 +501,6 @@ const UIEval = () => {
                         {activeTab === 'ocr-preview' && (
                             <OCRPreview
                                 selectedFile={selectedFile}
-                                baseDirectoryHandles={baseDirectoryHandles}
-                            />
-                        )}
-
-                        {activeTab === 'scripture-eval' && basePaths && (
-                            <ScriptureEval
-                                selectedFile={selectedFile}
-                                onFileSelect={handleFileSelect}
-                                basePaths={basePaths}
                                 baseDirectoryHandles={baseDirectoryHandles}
                             />
                         )}

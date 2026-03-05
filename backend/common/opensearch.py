@@ -93,20 +93,6 @@ def get_metadata_index_config(config: Config) -> dict:
 
     return metadata_config
 
-def get_granth_index_config(config: Config) -> dict:
-    """Loads the OpenSearch configuration for the granth index."""
-    opensearch_config_path = config.OPENSEARCH_CONFIG_PATH
-    with open(opensearch_config_path, 'r', encoding='utf-8') as f:
-        full_config = yaml.safe_load(f)
-
-    granth_config = full_config.get('granth_index', {})
-
-    if not granth_config:
-        log_handle.warning(f"granth_index configuration not found in {opensearch_config_path}")
-        return {}
-
-    return granth_config
-
 def _create_index_if_not_exists(opensearch_client: OpenSearch, index_name: str, index_body: dict):
     """Helper to create a single index if it doesn't exist."""
     if not index_body:
@@ -125,7 +111,7 @@ def _create_index_if_not_exists(opensearch_client: OpenSearch, index_name: str, 
 
 def create_indices_if_not_exists(config: Config, opensearch_client: OpenSearch):
     """
-    Creates all required OpenSearch indices (main, metadata, and granth) if they don't exist.
+    Creates all required OpenSearch indices (main and metadata) if they don't exist.
     """
     # 1. Create main document index
     main_index_config = get_opensearch_config(config)
@@ -136,11 +122,6 @@ def create_indices_if_not_exists(config: Config, opensearch_client: OpenSearch):
     metadata_index_config = get_metadata_index_config(config)
     metadata_index_name = config.OPENSEARCH_METADATA_INDEX_NAME
     _create_index_if_not_exists(opensearch_client, metadata_index_name, metadata_index_config)
-
-    # 3. Create granth index
-    granth_index_config = get_granth_index_config(config)
-    granth_index_name = config.OPENSEARCH_GRANTH_INDEX_NAME
-    _create_index_if_not_exists(opensearch_client, granth_index_name, granth_index_config)
 
 def delete_index(config: Config):
     """
@@ -160,7 +141,6 @@ def delete_index(config: Config):
     indices_to_delete = [
         config.OPENSEARCH_INDEX_NAME,
         config.OPENSEARCH_METADATA_INDEX_NAME,
-        config.OPENSEARCH_GRANTH_INDEX_NAME
     ]
 
     for index_name in indices_to_delete:
