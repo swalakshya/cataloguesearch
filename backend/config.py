@@ -113,8 +113,6 @@ class Config:
             return self._settings.get("opensearch", {}).get("index_name", "document_chunks")
         elif name == "OPENSEARCH_METADATA_INDEX_NAME":
             return self._settings.get("opensearch", {}).get("metadata_index_name", "document_metadata")
-        elif name == "OPENSEARCH_GRANTH_INDEX_NAME":
-            return self._settings.get("opensearch", {}).get("granth_index_name", "granth_index")
         elif name == "EMBEDDING_MODEL_NAME":
             return self._settings.get("vector_embeddings", {}).get("embedding_model", "BAAI/bge-m3")
         elif name == "RERANKING_MODEL_NAME":

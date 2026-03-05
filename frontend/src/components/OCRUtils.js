@@ -3,8 +3,8 @@ import { Spinner } from './SharedComponents';
 import ShowBookmarksButton from './ShowBookmarksButton';
 import BookmarksModal from './BookmarksModal';
 import ParseBookmarksControl from './ParseBookmarksControl';
-import { addPageNumbersToBookmarks } from '../utils/pdfUtils';
 import FileOrUrlInput from './eval/FileOrUrlInput';
+import usePDFViewer from '../hooks/usePDFViewer';
 
 const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
 
@@ -26,13 +26,11 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
     const [ocrResults, setOcrResults] = useState(null);
     const [error, setError] = useState(null);
     const [isPDF, setIsPDF] = useState(false);
-    const [currentPage, setCurrentPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
-    const [pdfDoc, setPdfDoc] = useState(null);
-    const [previewUrl, setPreviewUrl] = useState(null);
-    const [bookmarks, setBookmarks] = useState([]);
     const [showBookmarkModal, setShowBookmarkModal] = useState(false);
     const [useGoogleOCR, setUseGoogleOCR] = useState(false);
+
+    const pdfViewer = usePDFViewer({ setError });
+    const { pdfDoc, currentPage, totalPages, previewUrl, croppedPreviewUrl, bookmarks, setCroppedPreviewUrl } = pdfViewer;
 
     // New state for batch processing
     const [batchJobId, setBatchJobId] = useState(null);
@@ -41,9 +39,6 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
     const [batchTotalPages, setBatchTotalPages] = useState(0);
     const [batchZipFilename, setBatchZipFilename] = useState(null);
     const [batchElapsedTime, setBatchElapsedTime] = useState(null);
-
-    // New state for cropped image preview
-    const [croppedPreviewUrl, setCroppedPreviewUrl] = useState(null);
 
     // Right-pane tab state
     const [activeResultTab, setActiveResultTab] = useState('preview');
@@ -55,36 +50,8 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
     const croppedImageContainerRef = useRef(null);
     const pollingIntervalRef = useRef(null);
 
-    // PDF.js dynamic loading
+    // Cleanup polling on component unmount
     useEffect(() => {
-        const loadPdfJs = async () => {
-            if (!window.pdfjsLib) {
-                try {
-                    const script = document.createElement('script');
-                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-                    script.async = true;
-                    
-                    await new Promise((resolve, reject) => {
-                        script.onload = resolve;
-                        script.onerror = reject;
-                        document.head.appendChild(script);
-                    });
-                }
-                catch (error) {
-                    console.error('Failed to load PDF.js:', error);
-                    setError('Failed to load PDF.js library. PDF functionality will not be available.');
-                }
-            }
-            
-            if (window.pdfjsLib) {
-                window.pdfjsLib.GlobalWorkerOptions.workerSrc = 
-                    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-            }
-        };
-
-        loadPdfJs();
-
-        // Cleanup polling on component unmount
         return () => {
             if (pollingIntervalRef.current) {
                 clearInterval(pollingIntervalRef.current);
@@ -129,7 +96,7 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
                         setIsPDF(true);
 
                         // Load the PDF
-                        await loadPDF(pdfFile);
+                        await pdfViewer.loadPDF(pdfFile);
 
                         setIsLoading(false);
                     } else if (propSelectedFile.selectedPDFFile) {
@@ -159,25 +126,13 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
     };
 
     const resetAllState = () => {
-        // Reset file state
         setSelectedFile(null);
         setIsPDF(false);
-        setPdfDoc(null);
-        setPreviewUrl(null);
-        setCurrentPage(1);
-        setTotalPages(1);
-        setBookmarks([]);
         setShowBookmarkModal(false);
-
-        // Reset OCR state
         setOcrResults(null);
-        setCroppedPreviewUrl(null);
         setError(null);
         setIsLoading(false);
-
-        // Reset batch state
         resetBatchState();
-
     };
 
     const handleFileReady = async (file) => {
@@ -195,118 +150,18 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
         setIsPDF(fileType === 'application/pdf');
 
         if (fileType === 'application/pdf') {
-            await loadPDF(file);
+            await pdfViewer.loadPDF(file);
         } else {
-            loadImagePreview(file);
+            pdfViewer.loadImagePreview(file);
         }
-    };
-
-    const loadImagePreview = (file) => {
-        const url = URL.createObjectURL(file);
-        setPreviewUrl(url);
-    };
-
-    const loadPDF = async (file) => {
-        if (!window.pdfjsLib) {
-            setError('PDF.js library not loaded. Please refresh the page.');
-            return;
-        }
-
-        try {
-            const arrayBuffer = await file.arrayBuffer();
-            const pdf = await window.pdfjsLib.getDocument(arrayBuffer).promise;
-            setPdfDoc(pdf);
-            setTotalPages(pdf.numPages);
-            setCurrentPage(1);
-            
-            try {
-                const outline = await pdf.getOutline();
-                if (outline && outline.length > 0) {
-                    // Add page numbers to all bookmarks
-                    const bookmarksWithPages = await addPageNumbersToBookmarks(outline, pdf);
-                    setBookmarks(bookmarksWithPages);
-                } else {
-                    setBookmarks([]);
-                }
-            } catch (outlineErr) {
-                console.warn('Could not load PDF outline:', outlineErr);
-                setBookmarks([]);
-            }
-            
-            await renderPDFPage(pdf, 1);
-        } catch (err) {
-            setError(`Error loading PDF: ${err.message}`);
-            console.error('PDF loading error:', err);
-        }
-    };
-
-    const renderPDFPage = async (pdf, pageNum) => {
-        try {
-            const page = await pdf.getPage(pageNum);
-            const scale = 1.5;
-            const viewport = page.getViewport({ scale });
-
-            const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d');
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-
-            await page.render({ canvasContext: context, viewport: viewport }).promise;
-
-            const dataUrl = canvas.toDataURL('image/png');
-            setPreviewUrl(dataUrl);
-            return dataUrl;
-        } catch (err) {
-            setError(`Error rendering PDF page: ${err.message}`);
-            return null;
-        }
-    };
-
-    const applyCropToDataUrl = (dataUrl, cropTopPct, cropBottomPct) => {
-        if (!dataUrl || (cropTopPct === 0 && cropBottomPct === 0)) {
-            setCroppedPreviewUrl(null);
-            return;
-        }
-        const img = new Image();
-        img.onload = () => {
-            const { width, height } = img;
-            const topPx = Math.floor(height * cropTopPct / 100);
-            const bottomPx = Math.floor(height * cropBottomPct / 100);
-            const croppedHeight = height - topPx - bottomPx;
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = croppedHeight;
-            canvas.getContext('2d').drawImage(img, 0, topPx, width, croppedHeight, 0, 0, width, croppedHeight);
-            setCroppedPreviewUrl(canvas.toDataURL('image/png'));
-        };
-        img.src = dataUrl;
     };
 
     const handlePageNavigation = async (direction) => {
-        if (!pdfDoc) return;
-        
-        let newPage = currentPage;
-        if (direction === 'prev' && currentPage > 1) {
-            newPage = currentPage - 1;
-        } else if (direction === 'next' && currentPage < totalPages) {
-            newPage = currentPage + 1;
-        }
-        
-        if (newPage !== currentPage) {
-            setCurrentPage(newPage);
-            const dataUrl = await renderPDFPage(pdfDoc, newPage);
-            setOcrResults(null);
-            applyCropToDataUrl(dataUrl, cropTop, cropBottom);
-        }
+        await pdfViewer.handlePageNavigation(direction, cropTop, cropBottom, () => setOcrResults(null));
     };
 
     const jumpToPage = async () => {
-        const page = parseInt(jumpPageNumber, 10);
-        if (!pdfDoc || isNaN(page) || page < 1 || page > totalPages || page === currentPage) return;
-        setCurrentPage(page);
-        const dataUrl = await renderPDFPage(pdfDoc, page);
-        setOcrResults(null);
-        applyCropToDataUrl(dataUrl, cropTop, cropBottom);
+        await pdfViewer.jumpToPage(jumpPageNumber, cropTop, cropBottom, () => setOcrResults(null));
         setJumpPageNumber('');
     };
 
@@ -531,58 +386,10 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
         };
     }, [batchJobId, batchJobStatus]);
 
-    const handlePreviewCroppedImage = async () => {
-        if (!selectedFile || (cropTop === 0 && cropBottom === 0)) return;
-
-        setError(null);
-
-        try {
-            let imageSource = selectedFile;
-            
-            if (isPDF) {
-                imageSource = await convertCurrentPageToImage();
-                if (!imageSource) {
-                    throw new Error('Failed to convert PDF page to image');
-                }
-            }
-
-            const img = new Image();
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-
-            return new Promise((resolve, reject) => {
-                img.onload = () => {
-                    const { width, height } = img;
-                    
-                    const topCropPixels = Math.floor(height * cropTop / 100);
-                    const bottomCropPixels = Math.floor(height * cropBottom / 100);
-                    
-                    const croppedHeight = height - topCropPixels - bottomCropPixels;
-                    
-                    canvas.width = width;
-                    canvas.height = croppedHeight;
-                    
-                    ctx.drawImage(img, 0, topCropPixels, width, croppedHeight, 0, 0, width, croppedHeight);
-                    
-                    const croppedDataUrl = canvas.toDataURL('image/png');
-                    setCroppedPreviewUrl(croppedDataUrl);
-                    setOcrResults(null);
-                    resolve();
-                };
-                
-                img.onerror = () => reject(new Error('Failed to load image'));
-                
-                if (isPDF) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => img.src = e.target.result;
-                    reader.readAsDataURL(imageSource);
-                } else {
-                    img.src = URL.createObjectURL(imageSource);
-                }
-            });
-        } catch (err) {
-            setError(`Failed to generate cropped preview: ${err.message}`);
-        }
+    const handlePreviewCroppedImage = () => {
+        if (!selectedFile) return;
+        pdfViewer.applyCropToDataUrl(previewUrl, cropTop, cropBottom);
+        setOcrResults(null);
     };
 
     const clearHighlights = () => {
@@ -654,29 +461,8 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [showOutlines, ocrResults]);
 
-    const handleBookmarkClick = async (bookmark) => {
-        if (!pdfDoc || !bookmark.dest) return;
-
-        try {
-            let dest = bookmark.dest;
-            if (typeof dest === 'string') {
-                dest = await pdfDoc.getDestination(dest);
-            }
-
-            if (dest && dest.length > 0) {
-                const pageRef = dest[0];
-                const pageNumber = await pdfDoc.getPageIndex(pageRef) + 1;
-
-                if (pageNumber !== currentPage) {
-                    setCurrentPage(pageNumber);
-                    await renderPDFPage(pdfDoc, pageNumber);
-                    setOcrResults(null);
-                    setCroppedPreviewUrl(null);
-                }
-            }
-        } catch (err) {
-            console.error('Error navigating to bookmark:', err);
-        }
+    const handleBookmarkClick = (bookmark) => {
+        pdfViewer.navigateToBookmark(bookmark, () => setOcrResults(null));
     };
 
     const ProgressBar = ({ progress, total }) => {
@@ -712,34 +498,24 @@ const OCRUtils = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, bas
                 {/* Controls */}
                 <div className="px-4 pt-3 pb-2 border-b border-slate-200 bg-slate-50 space-y-2">
 
-                    {/* Line 1: File input + Language */}
-                    <div className="flex items-end gap-2">
-                        <div className="min-w-0 flex-1">
-                            <FileOrUrlInput
-                                onFileReady={handleFileReady}
-                                selectedFile={selectedFile}
-                                inputId="file-upload"
-                            />
-                            {propSelectedFile && (
-                                <div className={`mt-1 px-2 py-0.5 border rounded text-xs ${
-                                    selectedFile?.name === propSelectedFile.selectedPDFFile
-                                        ? 'bg-green-50 border-green-200 text-green-800'
-                                        : 'bg-blue-50 border-blue-200 text-blue-700'
-                                }`}>
-                                    {propSelectedFile.selectedPDFFile || 'Unknown'}
-                                </div>
-                            )}
-                        </div>
-                        <div className="shrink-0">
-                            <select
-                                value={language}
-                                onChange={(e) => setLanguage(e.target.value)}
-                                className="text-sm px-2 py-1.5 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
-                            >
-                                <option value="hin">हिंदी</option>
-                                <option value="guj">ગુજરાતી</option>
-                            </select>
-                        </div>
+                    {/* Line 1: File input (with embedded language toggle) */}
+                    <div>
+                        <FileOrUrlInput
+                            onFileReady={handleFileReady}
+                            selectedFile={selectedFile}
+                            inputId="file-upload"
+                            language={language}
+                            onLanguageChange={setLanguage}
+                        />
+                        {propSelectedFile && (
+                            <div className={`mt-1 px-2 py-0.5 border rounded text-xs ${
+                                selectedFile?.name === propSelectedFile.selectedPDFFile
+                                    ? 'bg-green-50 border-green-200 text-green-800'
+                                    : 'bg-blue-50 border-blue-200 text-blue-700'
+                            }`}>
+                                {propSelectedFile.selectedPDFFile || 'Unknown'}
+                            </div>
+                        )}
                     </div>
 
                     {/* Line 2: Crop + scan config + Apply */}

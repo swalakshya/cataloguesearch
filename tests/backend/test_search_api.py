@@ -13,10 +13,8 @@ from backend.crawler.discovery import Discovery
 from backend.crawler.index_state import IndexState
 from backend.crawler.index_generator import IndexGenerator
 from backend.crawler.pdf_factory import create_pdf_processor
-from backend.crawler.granth_index import GranthIndexer
-from backend.crawler.markdown_parser import MarkdownParser
 from backend.search.index_searcher import IndexSearcher
-from tests.backend.common import setup, get_all_documents, setup_granth
+from tests.backend.common import setup, get_all_documents
 from tests.backend.base import *
 
 log_handle = logging.getLogger(__name__)
@@ -86,10 +84,10 @@ def build_index(initialise):
 
     # Initialize OpenSearch client and ensure clean index state
     opensearch_client = get_opensearch_client(config)
+    indices_to_delete = [config.OPENSEARCH_INDEX_NAME, config.OPENSEARCH_METADATA_INDEX_NAME]
 
     # Explicitly delete indices to ensure clean state and proper mapping creation
     log_handle.info("Deleting existing indices to ensure clean state for vector search")
-    indices_to_delete = [config.OPENSEARCH_INDEX_NAME, config.OPENSEARCH_METADATA_INDEX_NAME, config.OPENSEARCH_GRANTH_INDEX_NAME]
     for index_name in indices_to_delete:
         if index_name and opensearch_client.indices.exists(index=index_name):
             opensearch_client.indices.delete(index=index_name)
@@ -117,33 +115,9 @@ def build_index(initialise):
     doc_count = len(os_all_docs)
     log_handle.info(f"Indexed {doc_count} documents")
 
-    # Index granth markdown files
-    log_handle.info("Setting up granth directory structure")
-    granth_setup = setup_granth()
-    base_dir = granth_setup["base_dir"]
-    granth_files = granth_setup["granth_files"]
-
-    # Parse markdown files and index them
-    parser = MarkdownParser(base_folder=base_dir)
-    indexer = GranthIndexer(config, opensearch_client)
-
-    log_handle.info("Parsing and indexing granth markdown files")
-    for granth_name, file_info in granth_files.items():
-        file_path = file_info["file_path"]
-        log_handle.info(f"Parsing {granth_name} from {file_path}")
-
-        granth = parser.parse_file(file_path)
-        assert granth is not None, f"Failed to parse {file_path}"
-
-        log_handle.info(f"Indexing {granth_name} with {len(granth._verses)} verses")
-        indexer.index_granth(granth, dry_run=False)
-
-    # Refresh indices to make data available for search
-    opensearch_client.indices.refresh(index=config.OPENSEARCH_GRANTH_INDEX_NAME)
+    # Refresh indices to make all data available for search
     opensearch_client.indices.refresh(index=config.OPENSEARCH_INDEX_NAME)
     opensearch_client.indices.refresh(index=config.OPENSEARCH_METADATA_INDEX_NAME)
-
-    log_handle.info("Granth indexing complete")
 
     yield
 
@@ -275,24 +249,17 @@ def test_api_metadata_endpoint(api_server):
     assert isinstance(data, dict)
 
     # Check new content-type-specific structure
-    expected_content_types = {"Pravachan", "Granth"}
+    expected_content_types = {"Pravachan"}
     actual_keys = set(data.keys())
 
-    # Should have both content type keys
+    # Should have the Pravachan content type key
     assert expected_content_types.issubset(actual_keys), f"Expected content type keys {expected_content_types} in metadata, got {actual_keys}"
 
-    # Expected values based on granth setup in tests/backend/common.py
-    # Separate expected values for each content type
+    # Expected values for each content type
     expected_values_by_content_type = {
         "Pravachan": {
             "Anuyog": {'city', 'history', 'spiritual'},
-            # Granth field may or may not be present for Pravachan
         },
-        "Granth": {
-            "Anuyog": {'Charitra Anuyog', 'Dravya Anuyog', 'Prose Anuyog', 'Simple Anuyog'},
-            "Granth": {"Adhikar", "Mixed", "Prose Granth", "Simple"},
-            "Author": {"Acharya Haribhadra", "Acharya Kundkund", "Prose Author", "Simple Author"}
-        }
     }
 
     # Each content type should have its own metadata dictionary with composite keys
@@ -322,8 +289,8 @@ def test_api_metadata_endpoint(api_server):
             # Pravachan has Anuyog, Granth, Year; Granth content type has Author, Granth, Anuyog
             if content_type == "Pravachan":
                 expected_metadata_keys = {"Anuyog"}  # Granth and Year are optional
-            else:  # Granth content type
-                expected_metadata_keys = {"Granth", "Anuyog"}  # Author may or may not be present
+            else:
+                expected_metadata_keys = set()
 
             for key in expected_metadata_keys:
                 if key in lang_metadata:  # Some keys may be optional
@@ -1077,320 +1044,8 @@ def test_cache_invalidation(api_server):
     # Data should be the same (no change in underlying OpenSearch data)
     assert metadata_before == metadata_after
     assert "Pravachan" in metadata_after
-    assert "Granth" in metadata_after
 
     log_handle.info("✓ Cache invalidation test passed - metadata consistent after cache invalidation")
-
-def test_get_granth_verse(api_server):
-    """Test the /api/granth/verse endpoint with Hindi and Gujarati exact match queries."""
-    test_cases = [
-        {
-            "query": "पर्यावरण संरक्षण",
-            "language": "hi",
-            "expected_file_pattern": "simple_granth.md",
-            "expected_seq_num": 3,  # Shlok 3
-            "expected_type": "Shlok",
-            "expected_type_start_num": 3,
-            "expected_type_end_num": 3,
-            "expected_page_num": 18,
-            "granth_filter": ["Simple"]
-        },
-        {
-            "query": "જ્ઞાન ક્યારેય",
-            "language": "gu",
-            "expected_file_pattern": "simple_granth.md",
-            "expected_seq_num": 4,  # Shlok 4
-            "expected_type": "Shlok",
-            "expected_type_start_num": 4,
-            "expected_type_end_num": 4,
-            "expected_page_num": 22,
-            "granth_filter": ["Simple"]
-        },
-        {
-            "query": "नियमित अध्ययन से बुद्धि का विकास",
-            "language": "hi",
-            "expected_file_pattern": "adhikar_granth.md",
-            "expected_seq_num": 3,  # Shlok 3-8 (range)
-            "expected_type": "Shlok",
-            "expected_type_start_num": 3,
-            "expected_type_end_num": 8,
-            "expected_page_num": 15,
-            "granth_filter": ["Adhikar"]
-        },
-        {
-            "query": "નિયમિત અભ્યાસથી બુદ્ધિનો વિકાસ",
-            "language": "gu",
-            "expected_file_pattern": "adhikar_granth.md",
-            "expected_seq_num": 3,  # Shlok 3-8 (range)
-            "expected_type": "Shlok",
-            "expected_type_start_num": 3,
-            "expected_type_end_num": 8,
-            "expected_page_num": 15,
-            "granth_filter": ["Adhikar"]
-        }
-    ]
-
-    for i, test_case in enumerate(test_cases):
-        # Step 1: Issue exact match search query to get a single granth result
-        search_payload = {
-            "query": test_case["query"],
-            "language": test_case["language"],
-            "exact_match": True,
-            "exclude_words": [],
-            "categories": {
-                "Granth": test_case["granth_filter"]
-            },
-            "search_types": {
-                "Pravachan": {
-                    "enabled": False,
-                    "page_size": 10,
-                    "page_number": 1
-                },
-                "Granth": {
-                    "enabled": True,
-                    "page_size": 10,
-                    "page_number": 1
-                }
-            },
-            "enable_reranking": True
-        }
-
-        search_response = requests.post(
-            f"http://{api_server.host}:{api_server.port}/api/search",
-            json=search_payload
-        )
-
-        assert search_response.status_code == 200
-        search_data = search_response.json()
-        log_handle.info(f"Search response for '{test_case['query']}': {json_dumps(search_data, truncate_fields=['vector_embedding'])}")
-
-        # Validate we have exactly one granth result (exact match)
-        assert search_data["granth_results"]["total_hits"] > 0, f"Expected granth results for '{test_case['query']}'"
-
-        # Get the first result
-        first_result = search_data["granth_results"]["results"][0]
-        assert test_case["expected_file_pattern"] in first_result["original_filename"], \
-            f"Expected result from file containing '{test_case['expected_file_pattern']}'"
-
-        # Extract metadata from search result
-        search_metadata = first_result.get("metadata", {})
-        search_doc_id = first_result.get("document_id")
-        search_seq_num = search_metadata.get("verse_seq_num")
-        search_type = search_metadata.get("verse_type")
-        search_type_start_num = search_metadata.get("verse_type_start_num")
-        search_type_end_num = search_metadata.get("verse_type_end_num")
-        search_page_num = first_result.get("page_number")
-
-        assert search_seq_num is not None, "Expected verse_seq_num in search result metadata"
-
-        # Step 2: Issue get_granth_verse API call
-        original_filename = first_result["original_filename"]
-        verse_response = requests.get(
-            f"http://{api_server.host}:{api_server.port}/api/granth/verse",
-            params={
-                "original_filename": original_filename,
-                "verse_seq_num": search_seq_num
-            }
-        )
-
-        assert verse_response.status_code == 200, f"Granth verse API should return 200 for {original_filename}, seq_num={search_seq_num}"
-        verse_data = verse_response.json()
-        log_handle.info(f"Granth verse response: {json_dumps(verse_data)}")
-
-        # Step 3: Validate response structure
-        assert "verse" in verse_data, "Expected 'verse' in granth verse response"
-        assert "granth_id" in verse_data, "Expected 'granth_id' in granth verse response"
-        assert "granth_name" in verse_data, "Expected 'granth_name' in granth verse response"
-        assert "metadata" in verse_data, "Expected 'metadata' in granth verse response"
-
-        verse = verse_data["verse"]
-
-        # Step 4: Validate that seq_num, type_start_num, type_end_num, page_num match between search result and get_granth_verse
-        assert verse.get("seq_num") == search_seq_num, \
-            f"Expected seq_num {search_seq_num} in verse, got {verse.get('seq_num')}"
-        assert verse.get("type") == search_type, \
-            f"Expected type '{search_type}' in verse, got '{verse.get('type')}'"
-        assert verse.get("type_start_num") == search_type_start_num, \
-            f"Expected type_start_num {search_type_start_num} in verse, got {verse.get('type_start_num')}"
-        assert verse.get("type_end_num") == search_type_end_num, \
-            f"Expected type_end_num {search_type_end_num} in verse, got {verse.get('type_end_num')}"
-        assert verse.get("page_num") == search_page_num, \
-            f"Expected page_num {search_page_num} in verse, got {verse.get('page_num')}"
-
-        # Step 5: Validate against expected values from test case
-        assert verse.get("seq_num") == test_case["expected_seq_num"], \
-            f"Expected seq_num {test_case['expected_seq_num']}, got {verse.get('seq_num')}"
-        assert verse.get("type") == test_case["expected_type"], \
-            f"Expected type '{test_case['expected_type']}', got '{verse.get('type')}'"
-        assert verse.get("type_start_num") == test_case["expected_type_start_num"], \
-            f"Expected type_start_num {test_case['expected_type_start_num']}, got {verse.get('type_start_num')}"
-        assert verse.get("type_end_num") == test_case["expected_type_end_num"], \
-            f"Expected type_end_num {test_case['expected_type_end_num']}, got {verse.get('type_end_num')}"
-        assert verse.get("page_num") == test_case["expected_page_num"], \
-            f"Expected page_num {test_case['expected_page_num']}, got {verse.get('page_num')}"
-
-        # Step 6: Validate verse content fields exist (not empty)
-        assert verse.get("verse") and verse.get("verse").strip(), "Expected non-empty verse content"
-
-        log_handle.info(f"✓ {test_case['language']} get_granth_verse test passed - "
-                       f"original_filename: {original_filename}, "
-                       f"seq_num: {verse.get('seq_num')}, "
-                       f"type: {verse.get('type')}, "
-                       f"type_start_num: {verse.get('type_start_num')}, "
-                       f"type_end_num: {verse.get('type_end_num')}, "
-                       f"page_num: {verse.get('page_num')}")
-
-    log_handle.info("✓ All get_granth_verse tests passed")
-
-
-def test_get_granth_prose(api_server):
-    """Test the /api/granth/prose endpoint with Hindi and Gujarati queries for both main and subsection prose content."""
-    test_cases = [
-        # Hindi - Main prose section
-        {
-            "query": "प्रकृति संसार का आधार है",
-            "language": "hi",
-            "expected_file_pattern": "prose_granth.md",
-            "expected_seq_num": 2,
-            "expected_heading": "प्रकृति का सार",
-            "expected_content_type": "main",
-            "is_subsection": False
-        },
-        # Hindi - Subsection
-        {
-            "query": "पंच तत्व प्रकृति के मूल आधार हैं",
-            "language": "hi",
-            "expected_file_pattern": "prose_granth.md",
-            "expected_seq_num": 3,
-            "expected_heading": "प्रकृति के तत्व",
-            "expected_content_type": "subsection",
-            "is_subsection": True,
-            "expected_parent_seq_num": 2,
-            "expected_parent_heading": "प्रकृति का सार"
-        },
-        # Gujarati - Main prose section
-        {
-            "query": "પ્રકૃતિ સંસારનો આધાર છે",
-            "language": "gu",
-            "expected_file_pattern": "prose_granth.md",
-            "expected_seq_num": 2,
-            "expected_heading": "પ્રકૃતિનો સાર",
-            "expected_content_type": "main",
-            "is_subsection": False
-        },
-        # Gujarati - Subsection
-        {
-            "query": "પંચતત્વો પ્રકૃતિના મૂળભૂત આધાર છે",
-            "language": "gu",
-            "expected_file_pattern": "prose_granth.md",
-            "expected_seq_num": 3,
-            "expected_heading": "પ્રકૃતિના તત્વો",
-            "expected_content_type": "subsection",
-            "is_subsection": True,
-            "expected_parent_seq_num": 2,
-            "expected_parent_heading": "પ્રકૃતિનો સાર"
-        }
-    ]
-
-    for i, test_case in enumerate(test_cases):
-        # Step 1: Issue search query to get a granth prose result
-        search_payload = {
-            "query": test_case["query"],
-            "language": test_case["language"],
-            "exact_match": False,
-            "exclude_words": [],
-            "categories": {},
-            "search_types": {
-                "Pravachan": {
-                    "enabled": False,
-                    "page_size": 10,
-                    "page_number": 1
-                },
-                "Granth": {
-                    "enabled": True,
-                    "page_size": 10,
-                    "page_number": 1
-                }
-            },
-            "enable_reranking": True
-        }
-
-        search_response = requests.post(
-            f"http://{api_server.host}:{api_server.port}/api/search",
-            json=search_payload
-        )
-
-        assert search_response.status_code == 200
-        search_data = search_response.json()
-        log_handle.info(f"Search response for '{test_case['query']}': {json_dumps(search_data, truncate_fields=['vector_embedding'])}")
-
-        # Validate we have granth results
-        assert search_data["granth_results"]["total_hits"] > 0, f"Expected granth results for '{test_case['query']}'"
-
-        # Get the first result
-        first_result = search_data["granth_results"]["results"][0]
-        assert test_case["expected_file_pattern"] in first_result["original_filename"], \
-            f"Expected result from file containing '{test_case['expected_file_pattern']}'"
-
-        # Extract metadata from search result
-        search_metadata = first_result.get("metadata", {})
-        search_prose_seq_num = search_metadata.get("prose_seq_num")
-        search_prose_heading = search_metadata.get("prose_heading")
-        search_prose_content_type = search_metadata.get("prose_content_type")
-
-        assert search_prose_seq_num is not None, "Expected prose_seq_num in search result metadata"
-
-        # Step 2: Issue get_granth_prose API call
-        original_filename = first_result["original_filename"]
-        prose_response = requests.get(
-            f"http://{api_server.host}:{api_server.port}/api/granth/prose",
-            params={
-                "original_filename": original_filename,
-                "prose_seq_num": search_prose_seq_num
-            }
-        )
-
-        assert prose_response.status_code == 200, f"Granth prose API should return 200 for {original_filename}, prose_seq_num={search_prose_seq_num}"
-        prose_data = prose_response.json()
-        log_handle.info(f"Granth prose response: {json_dumps(prose_data)}")
-
-        # Step 3: Validate response structure
-        assert "prose" in prose_data, "Expected 'prose' in granth prose response"
-        assert "granth_id" in prose_data, "Expected 'granth_id' in granth prose response"
-        assert "granth_name" in prose_data, "Expected 'granth_name' in granth prose response"
-        assert "metadata" in prose_data, "Expected 'metadata' in granth prose response"
-
-        prose = prose_data["prose"]
-
-        # Step 4: Validate that seq_num and heading match between search result and get_granth_prose
-        assert prose.get("seq_num") == search_prose_seq_num, \
-            f"Expected seq_num {search_prose_seq_num} in prose, got {prose.get('seq_num')}"
-        assert prose.get("heading") == search_prose_heading, \
-            f"Expected heading '{search_prose_heading}' in prose, got '{prose.get('heading')}'"
-
-        # Step 5: Validate against expected values from test case
-        assert prose.get("seq_num") == test_case["expected_seq_num"], \
-            f"Expected seq_num {test_case['expected_seq_num']}, got {prose.get('seq_num')}"
-        assert prose.get("heading") == test_case["expected_heading"], \
-            f"Expected heading '{test_case['expected_heading']}', got '{prose.get('heading')}'"
-
-        # Step 6: Validate subsection-specific fields
-        if test_case["is_subsection"]:
-            assert prose.get("parent_seq_num") == test_case["expected_parent_seq_num"], \
-                f"Expected parent_seq_num {test_case['expected_parent_seq_num']}, got {prose.get('parent_seq_num')}"
-            assert prose.get("parent_heading") == test_case["expected_parent_heading"], \
-                f"Expected parent_heading '{test_case['expected_parent_heading']}', got '{prose.get('parent_heading')}'"
-
-        # Step 7: Validate prose content exists (not empty)
-        assert prose.get("content") and len(prose.get("content")) > 0, "Expected non-empty prose content"
-
-        log_handle.info(f"✓ {test_case['language']} get_granth_prose test passed - "
-                       f"original_filename: {original_filename}, "
-                       f"seq_num: {prose.get('seq_num')}, "
-                       f"heading: {prose.get('heading')}, "
-                       f"content_type: {test_case['expected_content_type']}")
-
-    log_handle.info("✓ All get_granth_prose tests passed")
 
 
 def validate_result_schema(data, lexical_results):
