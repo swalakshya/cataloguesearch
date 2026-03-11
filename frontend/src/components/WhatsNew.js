@@ -26,7 +26,17 @@ const WhatsNew = () => {
 
     const updates = [
         {
-            date: "February 28, 2025",
+            date: "March 11, 2026",
+            newContent: [
+                "New Granths added: Samaysaar Kalash Tika,",
+                "Kartikeya Anupreksha and Padmanandi Panchvinchhati"
+            ],
+            newFeatures: [
+                "None"
+            ]
+        },
+        {
+            date: "February 28, 2026",
             newContent: [
                 "Total 11 new Granths added, including Panch Parmagams.",
                 "Look at the Content page to see the list of available Granths"

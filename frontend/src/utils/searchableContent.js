@@ -261,7 +261,23 @@ export const searchableGranths = [
   },
   {
     name: "Samadhi Tantra",
-    author: "Shrimad Pujyapaad Swami"
+    author: "Shrimad Pujyapaad Swami",
+    status: "searchable"
+  },
+  {
+    name: "Padmanandi Panchvinchhati",
+    author: "Acharya Padmanandi",
+    status: "searchable"
+  },
+  {
+    name: "Kartikeya Anupreksha",
+    author: "Swami Kartikeya",
+    status: "searchable"
+  },
+  {
+    name: "Samaysaar Kalash Tika",
+    author: "Acharya Amritchandra",
+    status: "searchable"
   }
 ];
 
