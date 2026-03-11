@@ -59,7 +59,8 @@ SNAPSHOTS = [
     "cataloguesearch_prod_metadata",
 ]
 
-SNAPSHOTS_DIR = Path(__file__).parent.parent / "snapshots"
+# Resolved in main() — see _resolve_snapshots_dir()
+SNAPSHOTS_DIR: Path = Path()  # placeholder, overwritten before use
 
 # How long to wait between health / restore-status polls (seconds)
 POLL_INTERVAL     = 5
@@ -188,8 +189,33 @@ def _os_request(method: str, path: str, body: dict | None = None) -> tuple[int, 
 
 
 # ---------------------------------------------------------------------------
-# Pre-flight: validate local snapshots directory
+# Pre-flight: resolve + validate local snapshots directory
 # ---------------------------------------------------------------------------
+
+def _resolve_snapshots_dir(explicit: str | None) -> Path:
+    """
+    Determine the snapshots directory path.
+
+    Priority:
+      1. --snapshots-dir CLI argument (explicit override)
+      2. <script_dir>/../snapshots  (works when run from inside the repo)
+      3. <cwd>/snapshots            (works when script is copied standalone)
+    """
+    if explicit:
+        return Path(explicit).expanduser().resolve()
+
+    candidates = [
+        Path(__file__).parent.parent / "snapshots",
+        Path.cwd() / "snapshots",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+
+    # Neither exists; return the repo-relative path so the error message is
+    # familiar to in-repo users, and the CWD-relative path for standalone use.
+    return candidates[1]  # cwd/snapshots — will fail validation with a clear message
+
 
 def _validate_snapshots_dir():
     log_handle.info("🔍 Validating snapshots directory: %s", SNAPSHOTS_DIR)
@@ -585,9 +611,22 @@ def main():
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.parse_args()
+    parser.add_argument(
+        "--snapshots-dir",
+        metavar="PATH",
+        default=None,
+        help=(
+            "Path to the OpenSearch snapshots directory. "
+            "If omitted, the script looks for 'snapshots/' next to the repo root "
+            "or in the current working directory."
+        ),
+    )
+    args = parser.parse_args()
 
     _setup_logging()
+
+    global SNAPSHOTS_DIR
+    SNAPSHOTS_DIR = _resolve_snapshots_dir(args.snapshots_dir)
 
     try:
         _validate_snapshots_dir()
