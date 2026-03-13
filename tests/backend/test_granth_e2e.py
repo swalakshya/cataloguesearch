@@ -1,5 +1,5 @@
 """
-End-to-end integration tests for GranthIndexGenerator via Discovery.
+End-to-end integration tests for LLMIndexGenerator via Discovery.
 
 Alpha : flat — all 13 pages indexed as a single document
 Beta  : sub-sectioned — pages 1-7  as Beta Sec A,

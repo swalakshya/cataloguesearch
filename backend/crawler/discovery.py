@@ -16,7 +16,7 @@ from backend.utils import json_dumps
 from backend.common.scan_config import get_scan_config
 from backend.config import Config
 from backend.crawler.index_generator import IndexGenerator
-from backend.crawler.granth_index_generator import GranthIndexGenerator
+from backend.crawler.llm_index_generator import LLMIndexGenerator
 from backend.crawler.index_state import IndexState
 from backend.common.utils import get_merged_config
 
@@ -80,13 +80,13 @@ class SingleFileProcessor:
         """
         Returns the appropriate IndexGenerator for this document.
 
-        Uses GranthIndexGenerator for LLM-extracted documents (ocr_engine == "llm"),
+        Uses LLMIndexGenerator for LLM-extracted documents (ocr_engine == "llm"),
         which additionally writes verses_NNNN.json files alongside paragraphs.
         Falls back to the shared indexing module for all other documents.
         """
         ocr_engine = self._scan_config.get("ocr_engine", self._config.OCR_ENGINE)
         if ocr_engine == "llm":
-            return GranthIndexGenerator(
+            return LLMIndexGenerator(
                 self._config, self._indexing_module._opensearch_client)
         return self._indexing_module
 

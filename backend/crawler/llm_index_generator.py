@@ -15,9 +15,9 @@ log_handle = logging.getLogger(__name__)
 _VERSE_BLOCK_TYPES = {"hindi_verse", "prakrit_verse", "sanskrit_verse"}
 
 
-class GranthIndexGenerator(IndexGenerator):
+class LLMIndexGenerator(IndexGenerator):
     """
-    IndexGenerator subclass for Granth (Jain scripture) LLM-extracted documents.
+    IndexGenerator subclass for LLM-extracted documents (any category).
 
     Paragraph path (pages_*.txt):
         Handled entirely by the base class — text + vector embeddings + metadata.

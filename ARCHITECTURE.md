@@ -65,7 +65,7 @@ PDFs in cataloguesearch-configs/
    (Gemini)                  with extracted text per page
         │
         ▼
-   GranthIndexGenerator      Creates two chunk types from page_*.json files:
+   LLMIndexGenerator         Creates two chunk types from page_*.json files:
                              - Verse chunks (no embeddings)
                              - Paragraph chunks (with embeddings, BAAI/bge-m3)
         │

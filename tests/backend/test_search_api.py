@@ -78,6 +78,11 @@ def build_index(initialise):
     Setup test data and build search index.
     Process PDFs and index them to support both 'paragraph' and 'advanced' CHUNK_STRATEGY.
     """
+    try:
+        requests.get("http://localhost:11434", timeout=2)
+    except requests.exceptions.ConnectionError:
+        pytest.fail("Ollama server is not running on localhost:11434. Start it with 'ollama serve'.")
+
     # Setup test environment with scan_config files (don't copy OCR files, we'll process PDFs)
     setup(copy_ocr_files=True, add_scan_config=True)
     config = Config()

@@ -1,13 +1,13 @@
 import pytest
 
 from backend.config import Config
-from backend.crawler.granth_index_generator import GranthIndexGenerator
+from backend.crawler.llm_index_generator import LLMIndexGenerator
 from tests.backend.base import initialise  # noqa: F401 — required for Config to load test settings
 
 
 @pytest.fixture(scope="module")
 def gen(initialise):  # noqa: F811
-    return GranthIndexGenerator(Config(), None)
+    return LLMIndexGenerator(Config(), None)
 
 
 @pytest.mark.parametrize("input_text, expected", [

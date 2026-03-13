@@ -1,5 +1,5 @@
 """
-Tests for GranthIndexGenerator — paragraph generation and verse file writing.
+Tests for LLMIndexGenerator — paragraph generation and verse file writing.
 
 No OpenSearch required (dry_run=True throughout).
 All assertions use structural / indicator checks, not full-string matching:
@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from backend.config import Config
-from backend.crawler.granth_index_generator import GranthIndexGenerator
+from backend.crawler.llm_index_generator import LLMIndexGenerator
 from tests.backend.base import *  # brings in module-scoped autouse `initialise` fixture
 
 # ── paths ─────────────────────────────────────────────────────────────────────
@@ -26,7 +26,7 @@ _BETA_DIR  = os.path.join(_DATA_DIR, "beta")
 # ── scan config ───────────────────────────────────────────────────────────────
 _SCAN_CONFIG = {
     "chunk_strategy": "llm",
-    "ocr_engine":     "llm",       # ensures GranthParagraphGenerator is selected
+    "ocr_engine":     "llm",       # ensures LLMParagraphGenerator is selected
     "stop_words":      ["विशेष"],
     "question_prefix": ["प्रश्न"],
     "answer_prefix":   ["उत्तर"],
@@ -57,7 +57,7 @@ class _DirectProcessor:
 
 
 def _make_gen():
-    return GranthIndexGenerator(Config(), MagicMock())
+    return LLMIndexGenerator(Config(), MagicMock())
 
 
 def _run_index(ocr_dir, text_dir, pages=None, clean=True):
@@ -249,7 +249,7 @@ class TestAlphaVerseFiles:
 # ═════════════════════════════════════════════════════════════════════════════
 
 class TestPrepareEmbeddingText:
-    """GranthIndexGenerator strips [bracket] glosses before embedding."""
+    """LLMIndexGenerator strips [bracket] glosses before embedding."""
 
     @pytest.fixture(scope="class")
     def gen(self):
