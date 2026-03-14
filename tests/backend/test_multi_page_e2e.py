@@ -44,7 +44,7 @@ _BANGALORE_PAGE_MAP = {str(k): v for k, v in {
     1: 1, 2: 1, 3: 2, 4: 2, 5: 3, 6: 3, 7: 4, 8: 4,
 }.items()}
 _SONGADH_PAGE_MAP = {str(k): v for k, v in {
-    1: 1, 2: 1, 3: 2, 4: 2, 5: 3, 6: 3,
+    1: 1, 2: 2, 3: 2, 4: 3, 5: 3,
 }.items()}
 
 # ── module globals set by `indexed` fixture ────────────────────────────────────
@@ -166,14 +166,14 @@ def indexed(config, opensearch_client):
             "psm":             6,
         },
         "bangalore_hindi": {
-            "start_page":  1,
-            "end_page":    _BANGALORE_PDF_PAGES,
-            "start_side":  "left",
+            "start_page":      1,
+            "end_page":        _BANGALORE_PDF_PAGES,
+            "book_start_side": "left",
         },
         "songadh_hindi": {
-            "start_page":  1,
-            "end_page":    _SONGADH_PDF_PAGES,
-            "start_side":  "right",
+            "start_page":      1,
+            "end_page":        _SONGADH_PDF_PAGES,
+            "book_start_side": "right",
         },
     })
 
@@ -263,8 +263,12 @@ class TestPageMappingStructure:
         """Each PDF page contributes exactly two logical pages."""
         assert len(bangalore_mapping) % 2 == 0
 
-    def test_songadh_mapping_has_even_key_count(self, songadh_mapping):
-        assert len(songadh_mapping) % 2 == 0
+    def test_songadh_mapping_has_5_entries(self, songadh_mapping):
+        """
+        book_start_side="right": the left half of PDF page 1 is not a book page,
+        so 3 PDF pages yield only 5 logical pages (not 6).
+        """
+        assert len(songadh_mapping) == 5
 
     def test_bangalore_mapping_consecutive_logical_pages(self, bangalore_mapping):
         """Logical page keys form a gapless sequence starting at 1."""
@@ -285,10 +289,12 @@ class TestPageMappingStructure:
             )
 
     def test_songadh_pairs_share_pdf_page(self, songadh_mapping):
-        keys = sorted(int(k) for k in songadh_mapping)
-        for i in range(0, len(keys), 2):
-            a, b = str(keys[i]), str(keys[i + 1])
-            assert songadh_mapping[a] == songadh_mapping[b]
+        """
+        With book_start_side="right", logical page 1 is alone (no sibling on PDF page 1).
+        Pairs (2,3) and (4,5) must each map to the same PDF page.
+        """
+        assert songadh_mapping["2"] == songadh_mapping["3"]
+        assert songadh_mapping["4"] == songadh_mapping["5"]
 
     def test_bangalore_pdf_page_numbers_are_non_decreasing(self, bangalore_mapping):
         """PDF page numbers in order of logical page: 1,1,2,2,3,3,4,4."""
@@ -367,10 +373,10 @@ class TestPdfPageNumberField:
         )
 
     def test_most_songadh_logical_pages_are_indexed(self, songadh_chunks):
-        """At least 4 of 6 logical pages must have indexed chunks."""
+        """At least 3 of 5 logical pages must have indexed chunks."""
         indexed_pages = {doc["_source"]["page_number"] for doc in songadh_chunks}
-        assert len(indexed_pages) >= 4, (
-            f"Only {len(indexed_pages)} logical pages indexed; expected ≥4. "
+        assert len(indexed_pages) >= 3, (
+            f"Only {len(indexed_pages)} logical pages indexed; expected ≥3. "
             f"Indexed: {sorted(indexed_pages)}"
         )
 
@@ -401,19 +407,22 @@ class TestPdfPageNumberField:
         )
 
     def test_songadh_sibling_pages_share_pdf_page_number(self, songadh_chunks):
-        """Same sibling invariant for songadh (3 PDF pages → pairs 1&2, 3&4, 5&6)."""
+        """
+        With book_start_side="right", sibling pairs are (2,3) and (4,5).
+        Logical page 1 has no sibling (it is the sole page on PDF page 1).
+        """
         page_to_pdf = {}
         for doc in songadh_chunks:
             src = doc["_source"]
             page_to_pdf[src["page_number"]] = src["pdf_page_number"]
 
         verified_pairs = 0
-        for odd in range(1, 7, 2):
-            even = odd + 1
-            if odd in page_to_pdf and even in page_to_pdf:
-                assert page_to_pdf[odd] == page_to_pdf[even], (
-                    f"Sibling logical pages {odd} and {even} have different pdf_page_number: "
-                    f"{page_to_pdf[odd]} vs {page_to_pdf[even]}"
+        for pair in [(2, 3), (4, 5)]:
+            a, b = pair
+            if a in page_to_pdf and b in page_to_pdf:
+                assert page_to_pdf[a] == page_to_pdf[b], (
+                    f"Sibling logical pages {a} and {b} have different pdf_page_number: "
+                    f"{page_to_pdf[a]} vs {page_to_pdf[b]}"
                 )
                 verified_pairs += 1
 
@@ -451,11 +460,11 @@ class TestSearchResultsPageNumbers:
             assert 1 <= doc["_source"]["page_number"] <= 8
 
     def test_songadh_page_numbers_in_valid_range(self, indexed, config, opensearch_client):
-        """All songadh chunks must have logical page_number in 1..6."""
+        """All songadh chunks must have logical page_number in 1..5."""
         chunks = _docs_for(opensearch_client, config.OPENSEARCH_INDEX_NAME, _SONGADH_DOC_ID)
         assert len(chunks) > 0
         for doc in chunks:
-            assert 1 <= doc["_source"]["page_number"] <= 6
+            assert 1 <= doc["_source"]["page_number"] <= 5
 
     def test_two_docs_have_distinct_document_ids(self, indexed):
         assert _BANGALORE_DOC_ID is not None
@@ -611,9 +620,9 @@ class TestSubSectionSideBounds:
                 "psm":              6,
             },
             "bangalore_hindi": {
-                "start_page":  1,
-                "end_page":    _BANGALORE_PDF_PAGES,
-                "start_side":  "left",
+                "start_page":      1,
+                "end_page":        _BANGALORE_PDF_PAGES,
+                "book_start_side": "left",
                 "sub_sections": [
                     {
                         "field":      "half",
@@ -805,30 +814,33 @@ class TestSubSectionSideBounds:
 
 class TestSharedPageBoundary:
     """
-    Verify start_side trim fires correctly when two sub-sections share a PDF page.
+    Verify start_side/end_side trim fires correctly when two sub-sections share a PDF page.
 
-    Uses songadh_hindi.pdf (3 PDF pages, first_page_side="right"):
-      PDF page 1 → logical 1 (right/primary), 2 (left/secondary)
-      PDF page 2 → logical 3 (right/primary), 4 (left/secondary)  ← shared
-      PDF page 3 → logical 5 (right/primary), 6 (left/secondary)
+    Uses songadh_hindi.pdf (3 PDF pages, book_start_side="right"):
+      With book_start_side="right", spreads after the first read left-to-right
+      (left=lower page number, right=higher):
+        PDF page 1 → logical 1 only (right; left of PDF 1 is not a book page)
+        PDF page 2 → logical 2 (left), 3 (right)  ← shared
+        PDF page 3 → logical 4 (left), 5 (right)
 
-    Sec A: PDF pages 1–2, end_side="right"   → logical [1, 2, 3]
-    Sec B: PDF pages 2–3, start_side="left"  → logical [4, 5, 6]
-      • start trim fires on PDF page 2: logical 3 (right) < start_lp=4 (left) → skipped
+    Sec A: PDF pages 1–2, end_side="left"    → logical [1, 2]
+    Sec B: PDF pages 2–3, start_side="right" → logical [3, 4, 5]
+      • end trim:   PDF page 2, end_lp=left=2   → excludes right=3 from Sec A
+      • start trim: PDF page 2, start_lp=right=3 → excludes left=2 from Sec B
 
-    Logical page 3 → Sec A only.
-    Logical page 4 → Sec B only.
+    Logical page 2 → Sec A only.
+    Logical page 3 → Sec B only.
     Both map to PDF page 2 in page_mapping.json.
     """
 
-    # Expected logical→PDF page mappings
+    # Expected logical→PDF page mappings (5 entries: page 1 alone, pairs 2-3 and 4-5)
     _SONGADH_SHARED_PAGE_MAP = {
-        "1": 1, "2": 1,
-        "3": 2, "4": 2,   # shared PDF page
-        "5": 3, "6": 3,
+        "1": 1,
+        "2": 2, "3": 2,   # shared PDF page
+        "4": 3, "5": 3,
     }
-    _SHARED_SEC_A_PAGE_MAP = {"1": 1, "2": 1, "3": 2}
-    _SHARED_SEC_B_PAGE_MAP = {"4": 2, "5": 3, "6": 3}
+    _SHARED_SEC_A_PAGE_MAP = {"1": 1, "2": 2}
+    _SHARED_SEC_B_PAGE_MAP = {"3": 2, "4": 3, "5": 3}
 
     @pytest.fixture(scope="class")
     def shared_page_setup(self, config, opensearch_client):
@@ -863,9 +875,9 @@ class TestSharedPageBoundary:
                 "psm":              6,
             },
             "songadh_hindi": {
-                "start_page":  1,
-                "end_page":    _SONGADH_PDF_PAGES,
-                "start_side":  "right",
+                "start_page":      1,
+                "end_page":        _SONGADH_PDF_PAGES,
+                "book_start_side": "right",
                 "sub_sections": [
                     {
                         "field":      "half",
@@ -873,15 +885,15 @@ class TestSharedPageBoundary:
                         "start_page": 1,
                         "start_side": "right",
                         "end_page":   2,
-                        "end_side":   "right",  # right of page 2 = logical 3 (last in Sec A)
+                        "end_side":   "left",   # left of page 2 = logical 2 (last in Sec A)
                     },
                     {
                         "field":      "half",
                         "name":       "Sec B",
                         "start_page": 2,
-                        "start_side": "left",   # left of page 2 = logical 4 (first in Sec B)
+                        "start_side": "right",  # right of page 2 = logical 3 (first in Sec B)
                         "end_page":   3,
-                        "end_side":   "left",   # logical pages 4, 5, 6
+                        "end_side":   "right",  # logical pages 3, 4, 5
                     },
                 ],
             },
@@ -920,27 +932,28 @@ class TestSharedPageBoundary:
     # ── OCR file assertions ────────────────────────────────────────────────────
 
     def test_all_logical_ocr_files_exist(self, shared_page_setup):
-        """All 6 logical page files must exist (OCR ran on all 3 PDF pages)."""
+        """5 logical page files must exist: pages 1–5 (PDF page 1 gives only 1 page)."""
         ocr_dir = shared_page_setup["ocr_dir"]
-        for lp in range(1, 7):
+        for lp in range(1, 6):
             path = os.path.join(ocr_dir, f"page_{lp:04d}.json")
             assert os.path.exists(path), f"Missing OCR file: page_{lp:04d}.json"
+        assert not os.path.exists(os.path.join(ocr_dir, "page_0006.json"))
 
     # ── page_mapping.json assertions ──────────────────────────────────────────
 
-    def test_page_mapping_has_6_entries(self, shared_page_setup):
+    def test_page_mapping_has_5_entries(self, shared_page_setup):
         ocr_dir = shared_page_setup["ocr_dir"]
         with open(os.path.join(ocr_dir, "page_mapping.json")) as fh:
             mapping = json.load(fh)
-        assert len(mapping) == 6
+        assert len(mapping) == 5
 
     def test_page_mapping_shared_page(self, shared_page_setup):
-        """Logical pages 3 and 4 both map to PDF page 2 (the shared page)."""
+        """Logical pages 2 and 3 both map to PDF page 2 (the shared page)."""
         ocr_dir = shared_page_setup["ocr_dir"]
         with open(os.path.join(ocr_dir, "page_mapping.json")) as fh:
             mapping = json.load(fh)
+        assert mapping["2"] == 2
         assert mapping["3"] == 2
-        assert mapping["4"] == 2
 
     def test_page_mapping_exact(self, shared_page_setup):
         ocr_dir = shared_page_setup["ocr_dir"]
@@ -965,31 +978,29 @@ class TestSharedPageBoundary:
         assert len(shared_sec_b_chunks) > 0, "Shared Sec B has no indexed chunks"
 
     def test_sec_a_page_numbers_in_range(self, shared_sec_a_chunks):
-        """Sec A may only contain logical pages 1, 2, 3."""
+        """Sec A may only contain logical pages 1, 2."""
         for doc in shared_sec_a_chunks:
             pn = doc["_source"]["page_number"]
-            assert pn in (1, 2, 3), f"Sec A chunk has unexpected page_number={pn}"
+            assert pn in (1, 2), f"Sec A chunk has unexpected page_number={pn}"
 
     def test_sec_b_page_numbers_in_range(self, shared_sec_b_chunks):
-        """Sec B may only contain logical pages 4, 5, 6."""
+        """Sec B may only contain logical pages 3, 4, 5."""
         for doc in shared_sec_b_chunks:
             pn = doc["_source"]["page_number"]
-            assert pn in (4, 5, 6), f"Sec B chunk has unexpected page_number={pn}"
+            assert pn in (3, 4, 5), f"Sec B chunk has unexpected page_number={pn}"
 
     def test_shared_page_boundary_sec_a(self, shared_sec_a_chunks):
-        """Logical page 3 (right of PDF page 2) must be in Sec A, not Sec B."""
+        """Logical page 2 (left of PDF page 2) must be in Sec A.
+        Logical page 3 (right of PDF page 2) must NOT leak into Sec A."""
         pages = [doc["_source"]["page_number"] for doc in shared_sec_a_chunks]
-        assert 3 not in pages or any(p == 3 for p in pages), \
-            "Logical page 3 absent from Sec A — start trim may have over-trimmed"
-        assert 4 not in pages, "Logical page 4 (left of PDF page 2) leaked into Sec A"
+        assert 3 not in pages, "Logical page 3 (right of PDF page 2) leaked into Sec A"
 
     def test_shared_page_boundary_sec_b(self, shared_sec_b_chunks):
-        """Logical page 4 (left of PDF page 2) must be in Sec B, not Sec A.
-        This is the key assertion: the start_side='left' trim must have excluded
-        logical page 3 (right of PDF page 2) from Sec B."""
+        """Logical page 3 (right of PDF page 2) must be in Sec B.
+        Logical page 2 (left of PDF page 2) must NOT leak into Sec B."""
         pages = [doc["_source"]["page_number"] for doc in shared_sec_b_chunks]
-        assert 3 not in pages, (
-            "Logical page 3 (right of PDF page 2) leaked into Sec B — "
+        assert 2 not in pages, (
+            "Logical page 2 (left of PDF page 2) leaked into Sec B — "
             "start_side trim did not fire correctly"
         )
 
@@ -1058,7 +1069,8 @@ class TestBookStartAnchor:
         write_config_file(os.path.join(pdf_dir, "config.json"),
                           {"language": "hi", "category": "Pravachan"})
 
-        # start_page=3 means: scan PDF pages 3–4; logical page 1 is anchored to PDF page 3.
+        # book_start_page=3: logical page 1 is anchored to PDF page 3.
+        # start_page=3, end_page=4: OCR range — only PDF pages 3–4 are processed.
         write_config_file(os.path.join(pdf_dir, "scan_config.json"), {
             "default": {
                 "chunk_strategy":   "advanced",
@@ -1068,9 +1080,10 @@ class TestBookStartAnchor:
                 "psm":              6,
             },
             "bangalore_hindi": {
-                "start_page":  3,
-                "end_page":    4,
-                "start_side":  "left",
+                "book_start_page": 3,
+                "book_start_side": "left",
+                "start_page":      3,
+                "end_page":        4,
             },
         })
 

@@ -29,9 +29,9 @@ class MultiPagePDFProcessor:
 
     Configuration (from scan_config):
         split_percentage  (int,  default 50):     % from left where the vertical split occurs
-        start_page        (int,  default 1):      PDF page number where the book content begins;
+        book_start_page   (int,  default 1):      PDF page number where the book content begins;
                                                   logical page 1 is the primary half of this page
-        start_side        (str,  default "left"): which physical side of start_page carries
+        book_start_side   (str,  default "left"): which physical side of book_start_page carries
                                                   logical page 1 ("left" or "right")
     """
 
@@ -43,10 +43,8 @@ class MultiPagePDFProcessor:
         # start_page doubles as the PDF range start and the logical page anchor.
         # start_side replaces first_page_side; fall back to first_page_side for
         # backward compatibility with existing scan_config.json files.
-        self._book_start_page = scan_config.get("start_page", 1)
-        self._book_start_side = scan_config.get(
-            "start_side", scan_config.get("first_page_side", "left")
-        )
+        self._book_start_page = scan_config.get("book_start_page", 1)
+        self._book_start_side = scan_config.get("book_start_side", "left")
 
     def get_output_file_extension(self) -> str:
         return self._inner.get_output_file_extension()
@@ -61,7 +59,7 @@ class MultiPagePDFProcessor:
         logical = []
         for pdf_page in pdf_pages:
             primary, secondary = self._logical_pages(pdf_page)
-            logical.extend([primary, secondary])
+            logical.extend([p for p in [primary, secondary] if p > 0])
         return logical
 
     def expand_pages_with_bounds(
@@ -94,6 +92,8 @@ class MultiPagePDFProcessor:
             end_lp   = side_map[end_side]   if pdf_page == end_page   else None
 
             for lp in sorted([primary, secondary]):
+                if lp <= 0:
+                    continue
                 if start_lp is not None and lp < start_lp:
                     continue
                 if end_lp is not None and lp > end_lp:
@@ -124,10 +124,12 @@ class MultiPagePDFProcessor:
         pages_to_process = []
         for pdf_page in pages_list:
             lp_primary, lp_secondary = self._logical_pages(pdf_page)
-            if not (
-                os.path.exists(f"{output_ocr_dir}/page_{lp_primary:04d}{ext}")
-                and os.path.exists(f"{output_ocr_dir}/page_{lp_secondary:04d}{ext}")
-            ):
+            primary_exists = os.path.exists(f"{output_ocr_dir}/page_{lp_primary:04d}{ext}")
+            secondary_exists = (
+                lp_secondary <= 0
+                or os.path.exists(f"{output_ocr_dir}/page_{lp_secondary:04d}{ext}")
+            )
+            if not (primary_exists and secondary_exists):
                 pages_to_process.append(pdf_page)
 
         if not pages_to_process:
@@ -154,11 +156,15 @@ class MultiPagePDFProcessor:
             lp_primary, lp_secondary = self._logical_pages(pdf_page)
 
             ok1 = self._ocr_and_write(primary_img, lp_primary, scan_config, output_ocr_dir)
-            ok2 = self._ocr_and_write(secondary_img, lp_secondary, scan_config, output_ocr_dir)
+            ok2 = (
+                lp_secondary <= 0
+                or self._ocr_and_write(secondary_img, lp_secondary, scan_config, output_ocr_dir)
+            )
 
             if ok1 and ok2:
                 page_mapping[str(lp_primary)] = pdf_page
-                page_mapping[str(lp_secondary)] = pdf_page
+                if lp_secondary > 0:
+                    page_mapping[str(lp_secondary)] = pdf_page
             else:
                 log_handle.error(
                     f"PDF page {pdf_page}: OCR failed for one or both halves "
@@ -180,9 +186,20 @@ class MultiPagePDFProcessor:
     def _logical_pages(self, pdf_page: int) -> tuple[int, int]:
         """
         Return (primary_logical, secondary_logical) for a 1-based PDF page number.
-        Primary gets the lower logical page number, anchored to book_start_page.
+
+        book_start_side="left":  both halves of book_start_page are book pages.
+          primary=left, secondary=right; formula: (base, base+1) where base=(N-P)*2+1.
+          e.g. P=1: page1→(1,2), page2→(3,4)
+
+        book_start_side="right": only the right half of book_start_page is a book page.
+          After the first page, spreads are read left-to-right (left=lower, right=higher).
+          primary=right, secondary=left; formula: (base, base-1).
+          At book_start_page: returns (1, 0) — secondary=0 signals "not a book page".
+          e.g. P=17: page17→(1,0), page18→(3,2), page30→(27,26)
         """
         base = (pdf_page - self._book_start_page) * 2 + 1
+        if self._book_start_side == "right":
+            return base, base - 1
         return base, base + 1
 
     def _split_image(self, image: Image.Image) -> tuple[Image.Image, Image.Image]:

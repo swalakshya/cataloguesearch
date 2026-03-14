@@ -122,7 +122,7 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
                     scan_meta["llm_workers"] = default_config["llm_workers"]
 
                 # Update multi-page PDF settings from default config (if present)
-                for key in ("multi_page", "start_side", "first_page_side", "split_percentage", "page_start_offset"):
+                for key in ("multi_page", "book_start_page", "book_start_side", "split_percentage"):
                     if key in default_config:
                         scan_meta[key] = default_config[key]
 
@@ -176,7 +176,7 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
             scan_meta["llm_workers"] = file_config["llm_workers"]
 
         # Update multi-page PDF settings from file-specific config (overrides defaults)
-        for key in ("multi_page", "start_side", "first_page_side", "split_percentage", "page_start_offset"):
+        for key in ("multi_page", "book_start_page", "book_start_side", "split_percentage"):
             if key in file_config:
                 scan_meta[key] = file_config[key]
 
