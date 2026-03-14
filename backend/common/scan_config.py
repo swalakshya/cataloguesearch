@@ -121,6 +121,11 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
                 if "llm_workers" in default_config:
                     scan_meta["llm_workers"] = default_config["llm_workers"]
 
+                # Update multi-page PDF settings from default config (if present)
+                for key in ("multi_page", "first_page_side", "split_percentage", "page_start_offset"):
+                    if key in default_config:
+                        scan_meta[key] = default_config[key]
+
             except (json.JSONDecodeError, IOError) as e:
                 log_handle.warning(f"Could not read or parse {scan_config_path}: {e}")
 
@@ -169,6 +174,11 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
         # Update llm_workers setting from file-specific config (overrides default)
         if "llm_workers" in file_config:
             scan_meta["llm_workers"] = file_config["llm_workers"]
+
+        # Update multi-page PDF settings from file-specific config (overrides defaults)
+        for key in ("multi_page", "first_page_side", "split_percentage", "page_start_offset"):
+            if key in file_config:
+                scan_meta[key] = file_config[key]
 
         # Pass through sub_sections (file-specific only — defines per-section page ranges)
         if "sub_sections" in file_config:

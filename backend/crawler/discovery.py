@@ -257,9 +257,15 @@ class SingleFileProcessor:
         pages_list = self._get_page_list(self._scan_config)
         ocr_extension = self._get_ocr_file_extension()
 
+        # For multi-page PDFs, expand PDF page numbers to logical page numbers so
+        # that we check for the correct page_NNNN<ext> files on disk.
+        pdf_processor = self._get_pdf_processor()
+        expand_fn = getattr(pdf_processor, 'expand_pages', None)
+        effective_pages = expand_fn(pages_list) if expand_fn else pages_list
+
         # Check if all required OCR pages exist
         missing_pages = []
-        for page_num in pages_list:
+        for page_num in effective_pages:
             ocr_file = f"{output_ocr_dir}/page_{page_num:04d}{ocr_extension}"
             if not os.path.exists(ocr_file):
                 missing_pages.append(page_num)
@@ -273,7 +279,7 @@ class SingleFileProcessor:
         # Calculate current checksums for comparison
         file_metadata = self._get_metadata()
         current_config_hash = self._get_config_hash(file_metadata)
-        current_ocr_checksum = self._index_state.calculate_ocr_checksum(relative_path, pages_list)
+        current_ocr_checksum = self._index_state.calculate_ocr_checksum(relative_path, effective_pages)
 
         index_state = self._index_state.get_state(document_id)
 
@@ -323,7 +329,6 @@ class SingleFileProcessor:
         # Apply forward-fill logic to map all pages
         page_to_pravachan_data = self._apply_forward_fill(parsed_bookmarks, total_pages)
 
-        pdf_processor = self._get_pdf_processor()
         index_generator = self._get_index_generator()
         sub_sections = self._scan_config.get("sub_sections", [])
 

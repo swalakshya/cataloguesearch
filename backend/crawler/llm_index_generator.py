@@ -61,7 +61,9 @@ class LLMIndexGenerator(IndexGenerator):
         from backend.crawler.pdf_factory import create_pdf_processor
         chunk_strategy = scan_config.get("chunk_strategy")
         processor = pdf_processor or create_pdf_processor(self._config, chunk_strategy, scan_config)
-        raw_data = processor.read_paragraphs(ocr_dir, pages_list)
+        expand_fn = getattr(processor, 'expand_pages', None)
+        effective_pages = expand_fn(pages_list) if expand_fn else pages_list
+        raw_data = processor.read_paragraphs(ocr_dir, effective_pages)
         self._write_verses(output_text_dir, raw_data)
 
         log_handle.info("Metadata that will be indexed: %s", metadata)
@@ -76,10 +78,11 @@ class LLMIndexGenerator(IndexGenerator):
             return
 
         timestamp = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
-        verse_data = self._read_verse_files(output_text_dir, verse_types, pages_list)
+        page_mapping = self._load_page_mapping(ocr_dir)
+        verse_data = self._read_verse_files(output_text_dir, verse_types, effective_pages)
         verse_chunks = self._create_chunks_from_verses(
             verse_data, document_id, original_filename,
-            metadata, page_to_pravachan_data, timestamp
+            metadata, page_to_pravachan_data, timestamp, page_mapping
         )
         if verse_chunks:
             self._bulk_index_chunks(verse_chunks)
@@ -160,13 +163,15 @@ class LLMIndexGenerator(IndexGenerator):
         return result
 
     def _create_chunks_from_verses(self, verse_data, document_id, original_filename,
-                                   metadata, page_to_pravachan_data, timestamp):
+                                   metadata, page_to_pravachan_data, timestamp,
+                                   page_mapping: dict = None):
         """
         Create chunk dicts for each verse block.
 
         Verses are stored as text-only (no vector_embedding) with a verse_type field.
         chunk_id uses the _verse suffix to avoid collision with paragraph chunk IDs.
         """
+        page_mapping = page_mapping or {}
         chunks = []
         language = metadata.get("language", "hi")
         lang_key = self._index_keys_per_lang.get(language, self._index_keys_per_lang["hi"])
@@ -185,6 +190,7 @@ class LLMIndexGenerator(IndexGenerator):
                     "document_id": document_id,
                     "original_filename": original_filename,
                     "page_number": page_num,
+                    "pdf_page_number": page_mapping.get(str(page_num), page_num),
                     "verse_id": i,
                     "verse_type": verse.get("type"),
                     "metadata": metadata,
