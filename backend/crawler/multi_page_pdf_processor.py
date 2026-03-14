@@ -29,8 +29,10 @@ class MultiPagePDFProcessor:
 
     Configuration (from scan_config):
         split_percentage  (int,  default 50):     % from left where the vertical split occurs
-        first_page_side   (str,  default "left"): which half carries the lower logical page number
-        page_start_offset (int,  default 1):      logical page number for the first half of PDF page 1
+        start_page        (int,  default 1):      PDF page number where the book content begins;
+                                                  logical page 1 is the primary half of this page
+        start_side        (str,  default "left"): which physical side of start_page carries
+                                                  logical page 1 ("left" or "right")
     """
 
     PAGE_MAPPING_FILE = "page_mapping.json"
@@ -38,11 +40,21 @@ class MultiPagePDFProcessor:
     def __init__(self, inner_processor, scan_config: dict):
         self._inner = inner_processor
         self._split_percentage = scan_config.get("split_percentage", 50)
-        self._first_page_side = scan_config.get("first_page_side", "left")
-        self._page_start_offset = scan_config.get("page_start_offset", 1)
+        # start_page doubles as the PDF range start and the logical page anchor.
+        # start_side replaces first_page_side; fall back to first_page_side for
+        # backward compatibility with existing scan_config.json files.
+        self._book_start_page = scan_config.get("start_page", 1)
+        self._book_start_side = scan_config.get(
+            "start_side", scan_config.get("first_page_side", "left")
+        )
 
     def get_output_file_extension(self) -> str:
         return self._inner.get_output_file_extension()
+
+    @property
+    def inner_processor(self):
+        """Return the unwrapped inner processor (no expand_pages)."""
+        return self._inner
 
     def expand_pages(self, pdf_pages: list[int]) -> list[int]:
         """Map a list of 1-based PDF page numbers to their logical page numbers."""
@@ -51,6 +63,44 @@ class MultiPagePDFProcessor:
             primary, secondary = self._logical_pages(pdf_page)
             logical.extend([primary, secondary])
         return logical
+
+    def expand_pages_with_bounds(
+        self,
+        pdf_pages: list[int],
+        start_page: int,
+        start_side: str,
+        end_page: int,
+        end_side: str,
+    ) -> list[int]:
+        """
+        Like expand_pages() but respects start/end side boundaries for sub-sections.
+
+        For a sub-section that begins mid-page (e.g. right side of PDF page 10) or
+        ends mid-page (e.g. left side of PDF page 20), this ensures only the correct
+        logical pages are included — preventing overlap between adjacent sub-sections.
+
+        start_side: 'left'|'right' — which side of start_page is the first logical page
+        end_side:   'left'|'right' — which side of end_page is the last logical page
+        """
+        result = []
+        for pdf_page in pdf_pages:
+            primary, secondary = self._logical_pages(pdf_page)
+            if self._book_start_side == "left":
+                side_map = {"left": primary, "right": secondary}
+            else:
+                side_map = {"right": primary, "left": secondary}
+
+            start_lp = side_map[start_side] if pdf_page == start_page else None
+            end_lp   = side_map[end_side]   if pdf_page == end_page   else None
+
+            for lp in sorted([primary, secondary]):
+                if start_lp is not None and lp < start_lp:
+                    continue
+                if end_lp is not None and lp > end_lp:
+                    continue
+                result.append(lp)
+
+        return result
 
     def process_pdf(self, pdf_file: str, scan_config: dict, pages_list: list[int]) -> bool:
         """
@@ -89,7 +139,7 @@ class MultiPagePDFProcessor:
         log_handle.info(
             f"Processing {len(pages_to_process)}/{len(pages_list)} PDF pages "
             f"(split_percentage={self._split_percentage}, "
-            f"first_page_side={self._first_page_side})"
+            f"start_side={self._book_start_side})"
         )
 
         images, pdf_page_numbers = self._inner._get_image(
@@ -130,9 +180,9 @@ class MultiPagePDFProcessor:
     def _logical_pages(self, pdf_page: int) -> tuple[int, int]:
         """
         Return (primary_logical, secondary_logical) for a 1-based PDF page number.
-        Primary gets the lower logical page number.
+        Primary gets the lower logical page number, anchored to book_start_page.
         """
-        base = (pdf_page - 1) * 2 + self._page_start_offset
+        base = (pdf_page - self._book_start_page) * 2 + 1
         return base, base + 1
 
     def _split_image(self, image: Image.Image) -> tuple[Image.Image, Image.Image]:
@@ -144,7 +194,7 @@ class MultiPagePDFProcessor:
         split_x = int(width * self._split_percentage / 100)
         left_half = image.crop((0, 0, split_x, height))
         right_half = image.crop((split_x, 0, width, height))
-        if self._first_page_side == "left":
+        if self._book_start_side == "left":
             return left_half, right_half
         else:
             return right_half, left_half

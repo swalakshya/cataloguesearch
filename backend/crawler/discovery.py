@@ -377,6 +377,47 @@ class SingleFileProcessor:
                     f"{relative_path}#{sg_field}:{sg_name}"
                 ))
                 sub_pages = list(range(sg_start, sg_end + 1))
+                sg_start_side = sg.get("start_side")
+                sg_end_side   = sg.get("end_side")
+
+                # Warn and apply defaults if only one of start_side/end_side is specified
+                if bool(sg_start_side) != bool(sg_end_side):
+                    missing = "start_side" if not sg_start_side else "end_side"
+                    default = "left" if not sg_start_side else "right"
+                    log_handle.warning(
+                        f"Sub-section '{sg_name}': '{missing}' not specified — "
+                        f"defaulting to '{default}'. Set both start_side and end_side "
+                        f"explicitly to suppress this warning."
+                    )
+                    if sys.stdin.isatty():
+                        answer = input(
+                            f"Proceed with default {missing}='{default}' for "
+                            f"sub-section '{sg_name}'? [y/N]: "
+                        ).strip().lower()
+                        if answer != "y":
+                            log_handle.error(
+                                f"Aborted by user for sub-section '{sg_name}'.")
+                            continue
+                    else:
+                        log_handle.warning(
+                            f"Non-interactive mode — applying default "
+                            f"{missing}='{default}' automatically.")
+                    sg_start_side = sg_start_side or "left"
+                    sg_end_side   = sg_end_side   or "right"
+
+                has_side_bounds = sg_start_side and sg_end_side
+                if has_side_bounds and hasattr(pdf_processor, 'expand_pages_with_bounds'):
+                    sub_pages = pdf_processor.expand_pages_with_bounds(
+                        sub_pages, sg_start, sg_start_side, sg_end, sg_end_side
+                    )
+                    sub_pdf_processor = pdf_processor.inner_processor  # already logical pages — prevent double expansion
+                else:
+                    if has_side_bounds:
+                        log_handle.warning(
+                            f"start_side/end_side defined for sub-section '{sg_name}' "
+                            f"but processor does not support expand_pages_with_bounds — ignoring bounds"
+                        )
+                    sub_pdf_processor = pdf_processor
                 sub_metadata = {**file_metadata, "sub_section": {"field": sg_field, "name": sg_name}}
                 sub_config_hash = self._get_config_hash(sub_metadata)
                 # Encode sub-section identity into file_path so each sub-section's
@@ -409,7 +450,7 @@ class SingleFileProcessor:
                     sub_pages, sub_metadata, self._scan_config,
                     page_to_pravachan_data,
                     reindex_metadata_only, dry_run,
-                    pdf_processor=pdf_processor,
+                    pdf_processor=sub_pdf_processor,
                     clean_output_dir=not dir_cleaned
                 )
                 dir_cleaned = True

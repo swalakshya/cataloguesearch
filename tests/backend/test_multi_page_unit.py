@@ -77,9 +77,9 @@ class TestResumeSafety:
             shutil.copy(_BANGALORE_PDF, pdf_path)
 
             scan_config = {
-                "multi_page":      True,
-                "first_page_side": "left",
-                "language":        "hi",
+                "multi_page":  True,
+                "start_side":  "left",
+                "language":    "hi",
             }
             inner     = _FakeInner(pdf_dir, ocr_dir)
             processor = MultiPagePDFProcessor(inner, scan_config)
