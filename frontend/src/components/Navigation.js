@@ -187,11 +187,7 @@ export const Header = ({ currentPage }) => {
         );
     }
 
-    if (currentPage === 'ocr-utils') {
-        return null; // No header/banner for OCR Utils page
-    }
-
-    if (currentPage === 'ui-eval') {
+    if (currentPage === 'eval') {
         return null; // No header/banner for UI Eval page
     }
 

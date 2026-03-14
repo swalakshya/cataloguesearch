@@ -198,7 +198,7 @@ source venv/bin/activate
 uvicorn eval.api:app --host 0.0.0.0 --port 8001 --reload
 ```
 
-Access it at http://localhost:3000/ui-eval (via the frontend).
+Access it at http://localhost:3000/eval (via the frontend).
 
 ---
 
