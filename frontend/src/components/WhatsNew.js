@@ -26,6 +26,16 @@ const WhatsNew = () => {
 
     const updates = [
         {
+            date: "March 16, 2026",
+            newFeatures: [
+                "Support for indexing multi-page PDFs.",
+                " This ensures support for many more Granths."
+            ],
+            newContent: [
+                "Jain Siddhant Praveshika by Pandit Gopaldas ji Baraiya!"
+            ]
+        },
+        {
             date: "March 11, 2026",
             newContent: [
                 "New Granths added: Samaysaar Kalash Tika,",

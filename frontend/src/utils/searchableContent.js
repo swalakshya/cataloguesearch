@@ -278,6 +278,11 @@ export const searchableGranths = [
     name: "Samaysaar Kalash Tika",
     author: "Acharya Amritchandra",
     status: "searchable"
+  },
+  {
+      name: "Jain Siddhant Praveshika",
+      author: "Pandit Gopal Das Baraiya",
+      status: "searchable"
   }
 ];
 
