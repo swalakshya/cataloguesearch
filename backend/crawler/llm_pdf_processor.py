@@ -50,7 +50,22 @@ def extract_indic_text(image, model_name: str = "gemini-2.5-flash") -> list:
     _, blocks = LLMPDFProcessor._process_single_page_llm(0, image, model_name)
     return blocks
 
-PROMPT = """
+# Canonical list of all block types produced by LLMPDFProcessor.
+# Used in the prompt below, in the classifier API, and in the eval UI.
+BLOCK_TYPES = [
+    "sanskrit_text",
+    "prakrit_text",
+    "hindi_text",
+    "sanskrit_verse",
+    "prakrit_verse",
+    "hindi_verse",
+    "footnote",
+    "chapter_heading",
+]
+
+_BLOCK_TYPES_BULLET_LIST = "\n".join(f'- "{t}"' for t in BLOCK_TYPES)
+
+PROMPT = f"""
 The attached image is from a Jain Scripture. It has different types of text:
 
 - Sanskrit text (often separated by lines or in blocks)
@@ -64,21 +79,14 @@ The attached image is from a Jain Scripture. It has different types of text:
 Your job is to parse the image and categorise each block of text into one of the above categories.
 
 Valid values for "type":
-- "sanskrit_text"
-- "prakrit_text"
-- "hindi_text"
-- "sanskrit_verse"
-- "prakrit_verse"
-- "hindi_verse"
-- "footnote"
-- "chapter_heading"
+{_BLOCK_TYPES_BULLET_LIST}
 
 Output a JSON array of objects, each with "type" and "text" keys. Example:
 [
-  {"type": "chapter_heading", "text": "अध्याय १"},
-  {"type": "sanskrit_verse", "text": "ॐ नमो भगवते..."},
-  {"type": "hindi_text", "text": "इसका अर्थ है..."},
-  {"type": "footnote", "text": "१. यह पाठान्तर है"}
+  {{"type": "chapter_heading", "text": "अध्याय १"}},
+  {{"type": "sanskrit_verse", "text": "ॐ नमो भगवते..."}},
+  {{"type": "hindi_text", "text": "इसका अर्थ है..."}},
+  {{"type": "footnote", "text": "१. यह पाठान्तर है"}}
 ]
 
 Preserve the order in which the text appears on the page. Output ONLY the JSON array.

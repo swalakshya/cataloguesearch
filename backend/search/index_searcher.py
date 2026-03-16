@@ -335,6 +335,7 @@ class IndexSearcher:
                 "original_filename": source.get('original_filename'),
                 "filename": filename,
                 "page_number": source.get('page_number'),
+                "pdf_page_number": source.get('pdf_page_number'),
                 "paragraph_id": source.get('paragraph_id'),
                 "content_snippet": content_snippet,
                 "score": float(score) if score is not None else 0.0,

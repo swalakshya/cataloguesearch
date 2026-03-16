@@ -6,6 +6,7 @@ import logging
 from backend.config import Config
 from backend.crawler.advanced_pdf_processor import AdvancedPDFProcessor
 from backend.crawler.llm_pdf_processor import LLMPDFProcessor
+from backend.crawler.multi_page_pdf_processor import MultiPagePDFProcessor
 
 log_handle = logging.getLogger(__name__)
 
@@ -37,13 +38,18 @@ def create_pdf_processor(config: Config, chunk_strategy: str = None,
         log_handle.info(
             f"Creating LLMPDFProcessor: model={llm_model}, workers={llm_workers}"
         )
-        return LLMPDFProcessor(config, llm_model=llm_model, llm_workers=llm_workers)
-
-    # Tesseract-based processors — selected by chunk_strategy
-    strategy = chunk_strategy if chunk_strategy is not None else config.CHUNK_STRATEGY
-
-    if strategy == "advanced":
-        log_handle.info(f"Creating AdvancedPDFProcessor based on chunk_strategy={strategy}")
-        return AdvancedPDFProcessor(config)
+        inner = LLMPDFProcessor(config, llm_model=llm_model, llm_workers=llm_workers)
     else:
-        raise ValueError(f"Unknown chunk_strategy: {strategy!r}")
+        # Tesseract-based processors — selected by chunk_strategy
+        strategy = chunk_strategy if chunk_strategy is not None else config.CHUNK_STRATEGY
+        if strategy == "advanced":
+            log_handle.info(f"Creating AdvancedPDFProcessor based on chunk_strategy={strategy}")
+            inner = AdvancedPDFProcessor(config)
+        else:
+            raise ValueError(f"Unknown chunk_strategy: {strategy!r}")
+
+    if scan_config.get("multi_page"):
+        log_handle.info("Wrapping processor in MultiPagePDFProcessor")
+        return MultiPagePDFProcessor(inner, scan_config)
+
+    return inner

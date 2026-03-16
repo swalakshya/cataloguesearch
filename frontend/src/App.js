@@ -11,7 +11,6 @@ import { FeedbackForm } from './components/Feedback';
 import About from './components/About';
 import WhatsNew from './components/WhatsNew';
 import UsageGuide from './components/UsageGuide';
-import OCRUtils from './components/OCRUtils';
 import SearchIndex from './components/SearchIndex';
 import UIEval from './components/eval/UIEval';
 import SearchableContentWidget from './components/SearchableContentWidget';
@@ -139,9 +138,8 @@ const AppContent = () => {
         if (path === '/feedback') return 'feedback';
         if (path === '/whats-new') return 'whats-new';
         if (path === '/usage-guide') return 'usage-guide';
-        if (path === '/ocr-utils') return 'ocr-utils';
         if (path === '/search-index') return 'search-index';
-        if (path === '/ui-eval') return 'ui-eval';
+        if (path === '/eval') return 'eval';
         return 'home'; // Default to 'home' for root path
     });
     
@@ -156,12 +154,10 @@ const AppContent = () => {
             setCurrentPageState('whats-new');
         } else if (path === '/usage-guide') {
             setCurrentPageState('usage-guide');
-        } else if (path === '/ocr-utils') {
-            setCurrentPageState('ocr-utils');
         } else if (path === '/search-index') {
             setCurrentPageState('search-index');
-        } else if (path === '/ui-eval') {
-            setCurrentPageState('ui-eval');
+        } else if (path === '/eval') {
+            setCurrentPageState('eval');
         } else if (path === '/') {
             setCurrentPageState('home');
         }
@@ -205,9 +201,8 @@ const AppContent = () => {
             'feedback': '/feedback',
             'whats-new': '/whats-new',
             'usage-guide': '/usage-guide',
-            'ocr-utils': '/ocr-utils',
             'search-index': '/search-index',
-            'ui-eval': '/ui-eval'
+            'eval': '/eval'
         };
         navigate(routes[page] || '/');
     };
@@ -737,19 +732,13 @@ const AppContent = () => {
                         </main>
                     )}
 
-                    {currentPage === 'ocr-utils' && (
-                        <main>
-                            <OCRUtils />
-                        </main>
-                    )}
-
                     {currentPage === 'search-index' && (
                         <main>
                             <SearchIndex />
                         </main>
                     )}
 
-                    {currentPage === 'ui-eval' && (
+                    {currentPage === 'eval' && (
                         <main>
                             <UIEval />
                         </main>
@@ -797,9 +786,8 @@ export default function App() {
                 <Route path="/feedback" element={<AppContent />} />
                 <Route path="/whats-new" element={<AppContent />} />
                 <Route path="/usage-guide" element={<AppContent />} />
-                <Route path="/ocr-utils" element={<AppContent />} />
                 <Route path="/search-index" element={<AppContent />} />
-                <Route path="/ui-eval" element={<AppContent />} />
+                <Route path="/eval" element={<AppContent />} />
             </Routes>
         </Router>
     );

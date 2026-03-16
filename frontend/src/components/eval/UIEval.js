@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import OCRUtils from '../OCRUtils';
+import PDFParser from './PDFParser';
 import ParagraphGenEval from './ParagraphGenEval';
 import OCRPreview from './OCRPreview';
-import ScriptureLLMEval from './ScriptureLLMEval';
 import FileBrowser from './FileBrowser';
+import ParaClassifier from './ParaClassifier';
 import { storeDirectoryHandles, getStoredDirectoryHandles, validateDirectoryHandles, requestStoredPermissions, clearStoredDirectoryHandles } from '../../utils/directoryHandlers';
 
 const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
@@ -224,9 +224,9 @@ const UIEval = () => {
                                         onClick={setActiveTab}
                                     />
                                     <NavButton
-                                        id="ocr-eval"
-                                        label="OCR Eval"
-                                        isActive={activeTab === 'ocr-eval'}
+                                        id="pdf-parser"
+                                        label="PDF Parser"
+                                        isActive={activeTab === 'pdf-parser'}
                                         onClick={setActiveTab}
                                     />
                                     <NavButton
@@ -242,15 +242,15 @@ const UIEval = () => {
                                         onClick={setActiveTab}
                                     />
                                     <NavButton
-                                        id="scripture-llm-eval"
-                                        label="Scripture LLM Eval"
-                                        isActive={activeTab === 'scripture-llm-eval'}
+                                        id="paragraph-classifier"
+                                        label="Paragraph Classifier"
+                                        isActive={activeTab === 'paragraph-classifier'}
                                         onClick={setActiveTab}
                                     />
                                 </div>
 
                                 {/* File Browser Button */}
-                                {(activeTab === 'ocr-eval' || activeTab === 'ocr-preview' || activeTab === 'paragraph-eval' || activeTab === 'scripture-llm-eval') && (
+                                {(activeTab === 'pdf-parser' || activeTab === 'ocr-preview' || activeTab === 'paragraph-eval' || activeTab === 'paragraph-classifier') && (
                                     <button
                                         onClick={handleBrowseFiles}
                                         className="bg-green-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-green-700 transition-colors flex items-center"
@@ -431,16 +431,16 @@ const UIEval = () => {
 
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 hover:bg-slate-100 transition-colors cursor-pointer"
-                                                 onClick={() => setActiveTab('ocr-eval')}>
+                                                 onClick={() => setActiveTab('pdf-parser')}>
                                                 <div className="text-sky-600 mb-3">
                                                     <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                                     </svg>
                                                 </div>
-                                                <h3 className="text-lg font-semibold text-slate-800 mb-2">OCR Evaluation</h3>
+                                                <h3 className="text-lg font-semibold text-slate-800 mb-2">PDF Parser</h3>
                                                 <p className="text-sm text-slate-600">
-                                                    Test and evaluate OCR accuracy on individual files. Extract text from images and PDFs with configurable settings.
+                                                    Parse PDFs using Tesseract OCR or Gemini LLM. Extract text, paragraphs, and structured content from scanned documents.
                                                 </p>
                                             </div>
 
@@ -454,6 +454,19 @@ const UIEval = () => {
                                                 <h3 className="text-lg font-semibold text-slate-800 mb-2">Paragraph Generation Eval</h3>
                                                 <p className="text-sm text-slate-600">
                                                     Compare paragraph generation outputs between different directories. Side-by-side comparison of source and target text files.
+                                                </p>
+                                            </div>
+
+                                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 hover:bg-slate-100 transition-colors cursor-pointer"
+                                                 onClick={() => setActiveTab('paragraph-classifier')}>
+                                                <div className="text-orange-600 mb-3">
+                                                    <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                    </svg>
+                                                </div>
+                                                <h3 className="text-lg font-semibold text-slate-800 mb-2">Paragraph Classifier</h3>
+                                                <p className="text-sm text-slate-600">
+                                                    Manually fix Gemini OCR classification errors. View PDF pages alongside extracted blocks and re-classify each block type.
                                                 </p>
                                             </div>
                                         </div>
@@ -471,8 +484,8 @@ const UIEval = () => {
                             </div>
                         )}
 
-                        {activeTab === 'ocr-eval' && (
-                            <OCRUtils
+                        {activeTab === 'pdf-parser' && (
+                            <PDFParser
                                 selectedFile={selectedFile}
                                 onFileSelect={handleFileSelect}
                                 basePaths={basePaths}
@@ -505,13 +518,14 @@ const UIEval = () => {
                             />
                         )}
 
-                        {activeTab === 'scripture-llm-eval' && (
-                            <ScriptureLLMEval
+                        {activeTab === 'paragraph-classifier' && (
+                            <ParaClassifier
                                 selectedFile={selectedFile}
                                 baseDirectoryHandles={baseDirectoryHandles}
                                 basePaths={basePaths}
                             />
                         )}
+
                     </div>
                 </div>
             </div>

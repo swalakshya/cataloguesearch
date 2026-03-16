@@ -1,4 +1,6 @@
+import json
 import logging
+import os
 import os.path
 import shutil
 import sys
@@ -55,8 +57,13 @@ class IndexGenerator:
         if pdf_processor is None:
             pdf_processor = create_pdf_processor(self._config, chunk_strategy, scan_config)
 
+        # For multi-page PDFs, expand PDF page numbers to logical page numbers.
+        # For regular processors (and test stubs) this is an identity operation.
+        expand_fn = getattr(pdf_processor, 'expand_pages', None)
+        effective_pages = expand_fn(pages_list) if expand_fn else pages_list
+
         # Read OCR data using appropriate processor (text files or JSON files)
-        raw_data = pdf_processor.read_paragraphs(ocr_dir, pages_list)
+        raw_data = pdf_processor.read_paragraphs(ocr_dir, effective_pages)
 
         # Convert metadata dates from DD-MM-YYYY to YYYY-MM-DD for OpenSearch
         # (same logic as used for pravachan dates below)
@@ -110,7 +117,8 @@ class IndexGenerator:
             log_handle.error(f"Failed to delete existing chunks for document_id {document_id}: {e}")
             # Continue with indexing even if deletion fails, as it's a safety measure
 
-        pages_set = set(pages_list)
+        page_mapping = self._load_page_mapping(ocr_dir)
+        pages_set = set(effective_pages)
         page_text_paths = []
         for root, _, files in os.walk(output_text_dir):
             for file_name in files:
@@ -125,7 +133,7 @@ class IndexGenerator:
 
         chunks = self._create_chunks_from_paras(
             paras, document_id, original_filename, metadata,
-            page_to_pravachan_data, timestamp
+            page_to_pravachan_data, timestamp, page_mapping
         )
         log_handle.info(f"Created {len(chunks)} initial chunks for document {document_id}.")
 
@@ -219,8 +227,10 @@ class IndexGenerator:
 
     def _create_chunks_from_paras(self, paras, document_id,
                                   original_filename, metadata,
-                                  page_to_pravachan_data, timestamp):
+                                  page_to_pravachan_data, timestamp,
+                                  page_mapping: dict = None):
         """Converts a list of paragraphs into a list of chunk dictionaries."""
+        page_mapping = page_mapping or {}
         chunks = []
         for i, (page_num, para_text) in enumerate(paras):
             chunk_id = f"{document_id}_p{page_num}_para{i}"
@@ -244,6 +254,7 @@ class IndexGenerator:
                 "document_id": document_id,
                 "original_filename": original_filename,
                 "page_number": page_num,
+                "pdf_page_number": page_mapping.get(str(page_num), page_num),
                 "paragraph_id": i,
                 "embedding_text": self._prepare_embedding_text(para_text),
                 "metadata": metadata,
@@ -355,6 +366,21 @@ class IndexGenerator:
             except IOError as e:
                 log_handle.error(f"Could not read file {page_text_path}: {e}")
         return final_paras
+
+    def _load_page_mapping(self, ocr_dir: str) -> dict:
+        """
+        Load page_mapping.json from ocr_dir if present.
+        Returns a dict mapping logical page number (str) → PDF page number (int).
+        Returns empty dict when absent (regular single-page-per-PDF documents).
+        """
+        path = os.path.join(ocr_dir, "page_mapping.json")
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as fh:
+                    return json.load(fh)
+            except (IOError, json.JSONDecodeError) as e:
+                log_handle.warning(f"Could not read page mapping {path}: {e}")
+        return {}
 
     def _prepare_embedding_text(self, text: str) -> str:
         """Hook for subclasses to clean text before embedding. No-op by default."""

@@ -155,6 +155,46 @@ class SingleFileProcessor:
 
         return sorted(list(all_pages))
 
+    def _get_bounded_logical_pages(self, scan_config, pdf_processor):
+        """
+        For multi-page PDFs: expand physical pages to logical pages respecting
+        sub-section side boundaries (start_side / end_side).
+
+        Each sub-section is expanded independently with expand_pages_with_bounds()
+        so that boundary physical pages only contribute the correct half-page.
+        The union across all sub-sections is returned as a sorted list.
+
+        For single-page PDFs (no expand_pages_with_bounds): returns the raw
+        physical page list unchanged.
+        """
+        if not hasattr(pdf_processor, 'expand_pages_with_bounds'):
+            return self._get_page_list(scan_config)
+
+        sub_sections = scan_config.get("sub_sections", [])
+        if not sub_sections:
+            # No sub-sections — fall back to plain expand_pages
+            pages_list = self._get_page_list(scan_config)
+            return pdf_processor.expand_pages(pages_list)
+
+        logical = set()
+        for sg in sub_sections:
+            sg_start = sg.get("start_page")
+            sg_end   = sg.get("end_page")
+            sg_start_side = sg.get("start_side")
+            sg_end_side   = sg.get("end_side")
+            if sg_start is None or sg_end is None:
+                continue
+            physical_pages = sorted(range(sg_start, sg_end + 1))
+            if sg_start_side and sg_end_side:
+                expanded = pdf_processor.expand_pages_with_bounds(
+                    physical_pages, sg_start, sg_start_side, sg_end, sg_end_side
+                )
+            else:
+                expanded = pdf_processor.expand_pages(physical_pages)
+            logical.update(expanded)
+
+        return sorted(logical)
+
     # All meaningful fields that the bookmark extractor can return
     _BOOKMARK_FIELDS = ("pravachan_no", "date", "gatha", "kalash", "shlok")
 
@@ -215,7 +255,8 @@ class SingleFileProcessor:
             pdf_processor = self._get_pdf_processor()
 
             ret = pdf_processor.process_pdf(
-                self._file_path, self._scan_config, pages_list)
+                self._file_path, self._scan_config, pages_list,
+            )
 
             if ret:
                 # Get current state to preserve parsed_bookmarks if it exists
@@ -254,12 +295,17 @@ class SingleFileProcessor:
                 f"OCR directory does not exist for {self._file_path}. Run process() first.")
             return
 
-        pages_list = self._get_page_list(self._scan_config)
         ocr_extension = self._get_ocr_file_extension()
+
+        # For multi-page PDFs use bounded expansion so side boundaries are respected
+        # (e.g. end_side="left" on the last physical page excludes its right half).
+        # For single-page PDFs _get_bounded_logical_pages falls back to _get_page_list.
+        pdf_processor = self._get_pdf_processor()
+        effective_pages = self._get_bounded_logical_pages(self._scan_config, pdf_processor)
 
         # Check if all required OCR pages exist
         missing_pages = []
-        for page_num in pages_list:
+        for page_num in effective_pages:
             ocr_file = f"{output_ocr_dir}/page_{page_num:04d}{ocr_extension}"
             if not os.path.exists(ocr_file):
                 missing_pages.append(page_num)
@@ -273,7 +319,7 @@ class SingleFileProcessor:
         # Calculate current checksums for comparison
         file_metadata = self._get_metadata()
         current_config_hash = self._get_config_hash(file_metadata)
-        current_ocr_checksum = self._index_state.calculate_ocr_checksum(relative_path, pages_list)
+        current_ocr_checksum = self._index_state.calculate_ocr_checksum(relative_path, effective_pages)
 
         index_state = self._index_state.get_state(document_id)
 
@@ -323,7 +369,6 @@ class SingleFileProcessor:
         # Apply forward-fill logic to map all pages
         page_to_pravachan_data = self._apply_forward_fill(parsed_bookmarks, total_pages)
 
-        pdf_processor = self._get_pdf_processor()
         index_generator = self._get_index_generator()
         sub_sections = self._scan_config.get("sub_sections", [])
 
@@ -331,7 +376,7 @@ class SingleFileProcessor:
             # --- Standard path: single document per PDF ---
             index_generator.index_document(
                 document_id, relative_path, output_ocr_dir, output_text_dir,
-                pages_list, file_metadata, self._scan_config,
+                effective_pages, file_metadata, self._scan_config,
                 page_to_pravachan_data,
                 reindex_metadata_only, dry_run,
                 pdf_processor=pdf_processor
@@ -372,6 +417,47 @@ class SingleFileProcessor:
                     f"{relative_path}#{sg_field}:{sg_name}"
                 ))
                 sub_pages = list(range(sg_start, sg_end + 1))
+                sg_start_side = sg.get("start_side")
+                sg_end_side   = sg.get("end_side")
+
+                # Warn and apply defaults if only one of start_side/end_side is specified
+                if bool(sg_start_side) != bool(sg_end_side):
+                    missing = "start_side" if not sg_start_side else "end_side"
+                    default = "left" if not sg_start_side else "right"
+                    log_handle.warning(
+                        f"Sub-section '{sg_name}': '{missing}' not specified — "
+                        f"defaulting to '{default}'. Set both start_side and end_side "
+                        f"explicitly to suppress this warning."
+                    )
+                    if sys.stdin.isatty():
+                        answer = input(
+                            f"Proceed with default {missing}='{default}' for "
+                            f"sub-section '{sg_name}'? [y/N]: "
+                        ).strip().lower()
+                        if answer != "y":
+                            log_handle.error(
+                                f"Aborted by user for sub-section '{sg_name}'.")
+                            continue
+                    else:
+                        log_handle.warning(
+                            f"Non-interactive mode — applying default "
+                            f"{missing}='{default}' automatically.")
+                    sg_start_side = sg_start_side or "left"
+                    sg_end_side   = sg_end_side   or "right"
+
+                has_side_bounds = sg_start_side and sg_end_side
+                if has_side_bounds and hasattr(pdf_processor, 'expand_pages_with_bounds'):
+                    sub_pages = pdf_processor.expand_pages_with_bounds(
+                        sub_pages, sg_start, sg_start_side, sg_end, sg_end_side
+                    )
+                    sub_pdf_processor = pdf_processor.inner_processor  # already logical pages — prevent double expansion
+                else:
+                    if has_side_bounds:
+                        log_handle.warning(
+                            f"start_side/end_side defined for sub-section '{sg_name}' "
+                            f"but processor does not support expand_pages_with_bounds — ignoring bounds"
+                        )
+                    sub_pdf_processor = pdf_processor
                 sub_metadata = {**file_metadata, "sub_section": {"field": sg_field, "name": sg_name}}
                 sub_config_hash = self._get_config_hash(sub_metadata)
                 # Encode sub-section identity into file_path so each sub-section's
@@ -382,7 +468,7 @@ class SingleFileProcessor:
                 # Use sub_file_path (not relative_path) so the stored ocr_checksum
                 # is tied to this sub-section's identity, consistent with file_path.
                 sub_ocr_checksum = self._index_state.calculate_ocr_checksum(
-                    sub_file_path, pages_list)
+                    sub_file_path, sub_pages)
 
                 log_handle.info(
                     f"Processing sub-section [{i+1}/{len(sub_sections)}]: "
@@ -404,7 +490,7 @@ class SingleFileProcessor:
                     sub_pages, sub_metadata, self._scan_config,
                     page_to_pravachan_data,
                     reindex_metadata_only, dry_run,
-                    pdf_processor=pdf_processor,
+                    pdf_processor=sub_pdf_processor,
                     clean_output_dir=not dir_cleaned
                 )
                 dir_cleaned = True

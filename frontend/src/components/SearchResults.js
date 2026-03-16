@@ -185,7 +185,7 @@ export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, re
                 )}
                 {result.file_url && (
                     <a
-                        href={`${result.file_url}#page=${result.page_number}`}
+                        href={`${result.file_url}#page=${result.pdf_page_number ?? result.page_number}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-blue-600 hover:text-blue-800 font-medium flex items-center"

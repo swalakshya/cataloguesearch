@@ -35,6 +35,14 @@ class PDFProcessor:
         self._base_ocr_folder = config.BASE_OCR_PATH
         self._base_pdf_folder = config.BASE_PDF_PATH
 
+    def expand_pages(self, pages_list: list[int]) -> list[int]:
+        """
+        Return the logical page numbers for the given PDF page numbers.
+        For single-page-per-PDF processors this is an identity operation.
+        MultiPagePDFProcessor overrides this to expand each PDF page to two logical pages.
+        """
+        return pages_list
+
     def get_output_file_extension(self) -> str:
         """
         Returns the file extension for OCR output files.

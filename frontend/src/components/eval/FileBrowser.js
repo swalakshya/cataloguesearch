@@ -8,6 +8,8 @@ const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectory
     const [error, setError] = useState(null);
     const [pathHistory, setPathHistory] = useState(['']);
     const [basePdfHandle, setBasePdfHandle] = useState(null);
+    const currentTabRef = useRef(currentTab);
+    useEffect(() => { currentTabRef.current = currentTab; }, [currentTab]);
 
     useEffect(() => {
         if (isOpen && basePaths) {
@@ -87,8 +89,8 @@ const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectory
                         type: 'directory'
                     });
                 } else if (handle.kind === 'file') {
-                    // Show different file types based on current tab
-                    if (currentTab === 'scripture-eval' && name.toLowerCase().endsWith('.md')) {
+                    const tab = currentTabRef.current;
+                    if (tab === 'scripture-eval' && name.toLowerCase().endsWith('.md')) {
                         items.push({
                             name,
                             handle,
@@ -96,7 +98,7 @@ const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectory
                             type: 'file',
                             fileType: 'markdown'
                         });
-                    } else if ((currentTab === 'ocr-eval' || currentTab === 'paragraph-eval' || currentTab === 'ocr-preview' || currentTab === 'scripture-llm-eval') && name.toLowerCase().endsWith('.pdf')) {
+                    } else if ((tab === 'pdf-parser' || tab === 'paragraph-eval' || tab === 'ocr-preview' || tab === 'paragraph-classifier') && name.toLowerCase().endsWith('.pdf')) {
                         items.push({
                             name,
                             handle,
@@ -414,8 +416,8 @@ const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectory
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
                                     </svg>
                                     <p>
-                                        {currentTab === 'scripture-eval' 
-                                            ? 'No directories or .md files found' 
+                                        {currentTabRef.current === 'scripture-eval'
+                                            ? 'No directories or .md files found'
                                             : 'No subdirectories or PDF files found'}
                                     </p>
                                 </div>
