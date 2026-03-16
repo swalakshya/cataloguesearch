@@ -165,14 +165,13 @@ class MultiPagePDFProcessor:
                 page_mapping[str(lp_primary)] = pdf_page
                 if lp_secondary > 0:
                     page_mapping[str(lp_secondary)] = pdf_page
+                self._save_page_mapping(output_ocr_dir, page_mapping)
             else:
                 log_handle.error(
                     f"PDF page {pdf_page}: OCR failed for one or both halves "
                     f"(logical pages {lp_primary}, {lp_secondary})"
                 )
                 failed = True
-
-        self._save_page_mapping(output_ocr_dir, page_mapping)
         return not failed
 
     def read_paragraphs(self, ocr_dir: str, pages_list: list[int]):

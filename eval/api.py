@@ -27,7 +27,7 @@ from backend.config import Config
 from backend.crawler.advanced_pdf_processor import AdvancedPDFProcessor
 from backend.common.scan_config import get_scan_config
 from backend.crawler.bookmark_extractor.factory import create_bookmark_extractor_by_name
-from backend.crawler.llm_pdf_processor import extract_indic_text
+from backend.crawler.llm_pdf_processor import extract_indic_text, BLOCK_TYPES
 from backend.crawler.paragraph_generator.advanced import AdvancedParagraphGenerator
 from backend.crawler.paragraph_generator.language_meta import get_language_meta
 from .ocr import get_ocr_service
@@ -896,6 +896,365 @@ async def process_scripture_llm(
                 os.unlink(temp_path)
             except Exception as cleanup_error:
                 log_handle.warning(f"Failed to cleanup temp file: {cleanup_error}")
+
+
+# --- Paragraph Classifier Helpers ---
+
+def _classifier_scan_cfg(config, ocr_relative_path: str) -> dict:
+    """Walk up the PDF tree from ocr_relative_path to find + flatten scan_config.json.
+
+    Merges the 'default' section with the document-specific section (keyed by the
+    document name, i.e. the last component of ocr_relative_path).  Document-specific
+    keys take precedence, so fields like book_start_side/book_start_page are returned
+    correctly even when they live outside the 'default' block.
+    """
+    doc_name = os.path.basename(ocr_relative_path)
+    search_dir = os.path.join(config.BASE_PDF_PATH, ocr_relative_path)
+    while True:
+        candidate = os.path.join(search_dir, "scan_config.json")
+        if os.path.isfile(candidate):
+            with open(candidate, encoding="utf-8") as fh:
+                raw = json.load(fh)
+            merged = {**raw.get("default", {}), **raw.get(doc_name, {})}
+            return merged if merged else raw
+        parent = os.path.dirname(search_dir)
+        if parent == search_dir:
+            break
+        search_dir = parent
+    return {}
+
+
+def _classifier_pdf_path(config, ocr_relative_path: str) -> str:
+    """Return the full PDF file path for a given ocr_relative_path."""
+    return os.path.join(config.BASE_PDF_PATH, ocr_relative_path + ".pdf")
+
+
+def _classifier_ocr_dir(config, ocr_relative_path: str) -> str:
+    return os.path.join(config.BASE_OCR_PATH, ocr_relative_path)
+
+
+def _load_page_mapping(ocr_dir: str) -> Optional[Dict[str, int]]:
+    """Return logical→physical dict from page_mapping.json, or None if not present."""
+    path = os.path.join(ocr_dir, "page_mapping.json")
+    if not os.path.isfile(path):
+        return None
+    with open(path, encoding="utf-8") as fh:
+        raw = json.load(fh)
+    return {k: int(v) for k, v in raw.items()}
+
+
+# --- Paragraph Classifier Models ---
+
+class ClassifierBlock(BaseModel):
+    type: str
+    text: str
+
+class ClassifierPageResponse(BaseModel):
+    page: int
+    blocks: List[ClassifierBlock]
+    ocr_relative_path: str
+
+class ClassifierSaveRequest(BaseModel):
+    ocr_relative_path: str
+    page: int
+    blocks: List[ClassifierBlock]
+
+class ClassifierSaveResponse(BaseModel):
+    saved: bool
+    backup_path: str
+    message: str
+
+class ClassifierPageMappingResponse(BaseModel):
+    # logical_page (str key) -> physical_pdf_page (int)
+    # None when this is a single-page PDF (no page_mapping.json)
+    page_mapping: Optional[Dict[str, int]]
+    split_percentage: int
+    book_start_side: str        # "left" or "right"
+    available_pages: List[int]  # sorted list of logical pages that have a page_XXXX.json file
+
+class ClassifierBookmark(BaseModel):
+    title: str
+    level: int
+    logical_page: int           # already resolved; jump straight to this page
+
+class ClassifierBookmarksResponse(BaseModel):
+    bookmarks: List[ClassifierBookmark]
+
+
+# --- Paragraph Classifier Endpoints ---
+
+@router.get("/classifier/block-types")
+async def get_block_types():
+    """Return the canonical list of LLM block types."""
+    return {"block_types": BLOCK_TYPES}
+
+
+@router.get("/classifier/page-mapping", response_model=ClassifierPageMappingResponse)
+async def get_page_mapping(ocr_relative_path: str):
+    """
+    Return multi-page PDF metadata for the given OCR directory:
+      - page_mapping: logical_page -> physical_pdf_page (None if single-page PDF)
+      - split_percentage, book_start_side: from scan_config
+      - available_pages: sorted logical pages that have a page_XXXX.json file
+    """
+    try:
+        config = Config("configs/config.yaml")
+        ocr_dir = _classifier_ocr_dir(config, ocr_relative_path)
+
+        if not os.path.isdir(ocr_dir):
+            raise HTTPException(status_code=404, detail=f"OCR directory not found: {ocr_relative_path}")
+
+        import re as _re
+        page_mapping = _load_page_mapping(ocr_dir)
+        scan_cfg = _classifier_scan_cfg(config, ocr_relative_path)
+
+        # Always derive available pages from the JSON files present on disk.
+        # page_mapping only covers the multi-page split portion; single-page OCR'd
+        # pages (not in the mapping) are equally valid and must be included.
+        available_pages = sorted(
+            int(m.group(1))
+            for f in os.listdir(ocr_dir)
+            if (m := _re.match(r"^page_(\d{4})\.json$", f))
+        )
+
+        return ClassifierPageMappingResponse(
+            page_mapping=page_mapping,
+            split_percentage=int(scan_cfg.get("split_percentage", 50)),
+            book_start_side=scan_cfg.get("book_start_side", "left"),
+            available_pages=available_pages,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_handle.error(f"Error loading page mapping: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error loading page mapping: {str(e)}")
+
+
+@router.get("/classifier/bookmarks", response_model=ClassifierBookmarksResponse)
+async def get_classifier_bookmarks(ocr_relative_path: str):
+    """
+    Extract bookmarks from the PDF and return them with logical page numbers.
+
+    For multi-page PDFs the physical page from the PDF outline is looked up in
+    page_mapping to resolve the corresponding logical page.  For single-page PDFs
+    the physical and logical page numbers are identical.
+    """
+    try:
+        config = Config("configs/config.yaml")
+        pdf_path = _classifier_pdf_path(config, ocr_relative_path)
+
+        if not os.path.isfile(pdf_path):
+            raise HTTPException(status_code=404, detail=f"PDF not found: {ocr_relative_path}.pdf")
+
+        import fitz  # PyMuPDF — already available
+
+        ocr_dir = _classifier_ocr_dir(config, ocr_relative_path)
+        page_mapping = _load_page_mapping(ocr_dir) if os.path.isdir(ocr_dir) else None
+
+        # Build reverse map: physical_page -> list of logical pages
+        # (a physical page can map to two logical pages in a multi-page PDF)
+        physical_to_logical: Dict[int, List[int]] = {}
+        if page_mapping:
+            for logical_str, physical in page_mapping.items():
+                physical_to_logical.setdefault(physical, []).append(int(logical_str))
+            for v in physical_to_logical.values():
+                v.sort()
+
+        bookmarks: List[ClassifierBookmark] = []
+        with fitz.open(pdf_path) as doc:
+            toc = doc.get_toc(simple=True)  # [(level, title, page_1indexed), ...]
+            for level, title, physical_page in toc:
+                if page_mapping:
+                    # Use the first (lowest) logical page on that physical page
+                    logical_pages = physical_to_logical.get(physical_page, [])
+                    logical_page = logical_pages[0] if logical_pages else physical_page
+                else:
+                    logical_page = physical_page
+                bookmarks.append(ClassifierBookmark(
+                    title=title,
+                    level=level,
+                    logical_page=logical_page,
+                ))
+
+        return ClassifierBookmarksResponse(bookmarks=bookmarks)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_handle.error(f"Error extracting bookmarks: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error extracting bookmarks: {str(e)}")
+
+
+@router.get("/classifier/page-image")
+async def get_classifier_page_image(ocr_relative_path: str, logical_page: int):
+    """
+    Render the PDF page corresponding to the given logical page number and return
+    it as a base64-encoded PNG.
+
+    For multi-page PDFs:
+      - Looks up the physical page from page_mapping.json
+      - Determines which half (left/right) belongs to this logical page using
+        split_percentage and book_start_side from scan_config
+      - Returns only that half as the image
+
+    For single-page PDFs:
+      - logical_page == physical page; returns the full page image
+    """
+    try:
+        config = Config("configs/config.yaml")
+        pdf_path = _classifier_pdf_path(config, ocr_relative_path)
+
+        if not os.path.isfile(pdf_path):
+            raise HTTPException(status_code=404, detail=f"PDF not found: {ocr_relative_path}.pdf")
+
+        ocr_dir = _classifier_ocr_dir(config, ocr_relative_path)
+        page_mapping = _load_page_mapping(ocr_dir) if os.path.isdir(ocr_dir) else None
+        scan_cfg = _classifier_scan_cfg(config, ocr_relative_path)
+
+        split_pct = int(scan_cfg.get("split_percentage", 50))
+        book_start_side = scan_cfg.get("book_start_side", "left")
+
+        import fitz
+
+        # A page_mapping may only cover a subset of logical pages (e.g. the multi-page
+        # portion of a mixed PDF).  Fall back to full-page mode for any page that is
+        # absent from the mapping — logical == physical, no cropping needed.
+        mapped_physical = page_mapping.get(str(logical_page)) if page_mapping else None
+
+        if mapped_physical is not None:
+            physical_page = mapped_physical
+            # Determine which half this logical page occupies.
+            # book_start_side="left":  odd logical → left,  even logical → right
+            # book_start_side="right": odd logical → right, even logical → left
+            is_odd = (logical_page % 2 == 1)
+            if book_start_side == "left":
+                side = "left" if is_odd else "right"
+            else:
+                side = "right" if is_odd else "left"
+        else:
+            physical_page = logical_page
+            side = None  # full page — single-page OCR or page not in mapping
+
+        with fitz.open(pdf_path) as doc:
+            if physical_page < 1 or physical_page > len(doc):
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Physical page {physical_page} out of range (PDF has {len(doc)} pages)"
+                )
+            page = doc[physical_page - 1]  # 0-indexed
+            mat = fitz.Matrix(2.0, 2.0)    # 2× render for sharpness
+            pix = page.get_pixmap(matrix=mat)
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
+        if side is not None:
+            w, h = img.size
+            split_x = int(w * split_pct / 100)
+            if side == "left":
+                img = img.crop((0, 0, split_x, h))
+            else:
+                img = img.crop((split_x, 0, w, h))
+
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        image_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+
+        return {"image": image_b64, "physical_page": physical_page, "side": side}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_handle.error(f"Error rendering page image: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error rendering page: {str(e)}")
+
+
+@router.get("/classifier/page", response_model=ClassifierPageResponse)
+async def get_classifier_page(ocr_relative_path: str, page: int):
+    """Load page_XXXX.json from the OCR directory, validating ocr_engine=llm."""
+    try:
+        config = Config("configs/config.yaml")
+        ocr_dir = _classifier_ocr_dir(config, ocr_relative_path)
+
+        if not os.path.isdir(ocr_dir):
+            raise HTTPException(status_code=404, detail=f"OCR directory not found: {ocr_relative_path}")
+
+        scan_cfg = _classifier_scan_cfg(config, ocr_relative_path)
+        ocr_engine = scan_cfg.get("ocr_engine", "")
+        if ocr_engine != "llm":
+            raise HTTPException(
+                status_code=400,
+                detail=f"scan_config.json has ocr_engine='{ocr_engine}', expected 'llm'."
+            )
+
+        page_file = os.path.join(ocr_dir, f"page_{page:04d}.json")
+        if not os.path.isfile(page_file):
+            raise HTTPException(status_code=404, detail=f"Page file not found: page_{page:04d}.json")
+
+        with open(page_file, encoding="utf-8") as fh:
+            blocks = json.load(fh)
+
+        return ClassifierPageResponse(
+            page=page,
+            blocks=[ClassifierBlock(**b) for b in blocks],
+            ocr_relative_path=ocr_relative_path,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_handle.error(f"Error loading classifier page: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error loading page: {str(e)}")
+
+
+@router.post("/classifier/save", response_model=ClassifierSaveResponse)
+async def save_classifier_page(request: ClassifierSaveRequest):
+    """
+    Save corrected block classifications back to page_XXXX.json.
+    Creates a .bak backup of the original file first.
+    Validates that scan_config has ocr_engine=llm before writing.
+    """
+    try:
+        config = Config("configs/config.yaml")
+        ocr_dir = _classifier_ocr_dir(config, request.ocr_relative_path)
+
+        if not os.path.isdir(ocr_dir):
+            raise HTTPException(status_code=404, detail=f"OCR directory not found: {request.ocr_relative_path}")
+
+        scan_cfg = _classifier_scan_cfg(config, request.ocr_relative_path)
+        ocr_engine = scan_cfg.get("ocr_engine", "")
+        if ocr_engine != "llm":
+            raise HTTPException(
+                status_code=400,
+                detail=f"scan_config.json has ocr_engine='{ocr_engine}', expected 'llm'."
+            )
+
+        page_file = os.path.join(ocr_dir, f"page_{request.page:04d}.json")
+        if not os.path.isfile(page_file):
+            raise HTTPException(status_code=404, detail=f"Page file not found: page_{request.page:04d}.json")
+
+        backup_path = page_file + ".bak"
+        if not os.path.isfile(backup_path):
+            shutil.copy2(page_file, backup_path)
+            log_handle.info(f"Created backup: {backup_path}")
+
+        corrected = [{"type": b.type, "text": b.text} for b in request.blocks]
+        with open(page_file, "w", encoding="utf-8") as fh:
+            json.dump(corrected, fh, ensure_ascii=False, indent=2)
+
+        log_handle.info(f"Saved classifier corrections to {page_file}")
+
+        return ClassifierSaveResponse(
+            saved=True,
+            backup_path=os.path.relpath(backup_path, config.BASE_OCR_PATH),
+            message=f"Saved page {request.page}. Backup at {os.path.basename(backup_path)}.",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_handle.error(f"Error saving classifier page: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error saving page: {str(e)}")
 
 
 # --- Standalone Eval App ---

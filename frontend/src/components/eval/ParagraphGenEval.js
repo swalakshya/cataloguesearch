@@ -14,7 +14,7 @@ import {
     loadFilesFromDirectory,
     readFileContent
 } from '../../utils/directoryHandlers';
-import { addPageNumbersToBookmarks } from '../../utils/pdfUtils';
+import { usePDFJsViewer } from '../../hooks/usePDFJsViewer';
 
 const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
 
@@ -39,45 +39,21 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
     const [pendingHandles, setPendingHandles] = useState({ pdf: null, ocr: null, text: null });
     const pickerActiveRef = useRef(false);
     
-    // Bookmarks functionality
-    const [bookmarks, setBookmarks] = useState([]);
+    // Bookmarks / PDF rendering — via shared hook
+    const {
+        pdfDoc,
+        bookmarks,
+        loadPDF,
+        renderPage: renderPDFPageFromHook,
+        resolveBookmarkPage,
+    } = usePDFJsViewer();
     const [showBookmarksModal, setShowBookmarksModal] = useState(false);
-    const [pdfDoc, setPdfDoc] = useState(null);
 
     // PDF page rendering
     const [pdfPageDataUrl, setPdfPageDataUrl] = useState(null);
-    const canvasRef = useRef(null);
 
     // Store PDF's parent directory handle for better UX when browsing
     const [pdfParentDirHandle, setPdfParentDirHandle] = useState(null);
-    
-    // PDF.js loading
-    useEffect(() => {
-        const loadPdfJs = async () => {
-            if (!window.pdfjsLib) {
-                try {
-                    const script = document.createElement('script');
-                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-                    script.async = true;
-                    
-                    await new Promise((resolve, reject) => {
-                        script.onload = resolve;
-                        script.onerror = reject;
-                        document.head.appendChild(script);
-                    });
-                } catch (error) {
-                    console.error('Failed to load PDF.js:', error);
-                }
-            }
-            
-            if (window.pdfjsLib) {
-                window.pdfjsLib.GlobalWorkerOptions.workerSrc = 
-                    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-            }
-        };
-
-        loadPdfJs();
-    }, []);
 
     // Load persisted directory handles on component mount
     useEffect(() => {
@@ -380,100 +356,43 @@ Please select the SOURCE directory (${selection.sourcePath})`;
             : '';
     };
 
-    // Load bookmarks from the selected PDF file
+    // Load PDF and bookmarks from the selected folder
     const loadPDFBookmarks = async () => {
         if (!selectedFolder?.selectedPDFFile || !baseDirectoryHandles.pdf) return;
 
         try {
-            console.log('Loading bookmarks for:', selectedFolder);
-
-            // The relativePath includes the full path to the PDF directory
-            // We need to navigate to the parent directory and then get the PDF file
             const pathParts = selectedFolder.relativePath.split('/');
-            const pdfDirectory = pathParts.slice(0, -1).join('/'); // Remove the last part (PDF name without extension)
+            const pdfDirectory = pathParts.slice(0, -1).join('/');
 
-            console.log('PDF directory path:', pdfDirectory);
-            console.log('PDF file name:', selectedFolder.selectedPDFFile);
-
-            const pdfDirHandle = await navigateToPath(
-                baseDirectoryHandles.pdf,
-                pdfDirectory
-            );
-
+            const pdfDirHandle = await navigateToPath(baseDirectoryHandles.pdf, pdfDirectory);
             if (!pdfDirHandle) {
                 console.error('Could not navigate to PDF directory:', pdfDirectory);
                 return;
             }
 
-            // Store the PDF parent directory handle for better UX when browsing
             setPdfParentDirHandle(pdfDirHandle);
-
-            // Notify parent component of the PDF parent directory path
-            if (onPdfParentDirChange) {
-                onPdfParentDirChange(pdfDirectory);
-            }
+            if (onPdfParentDirChange) onPdfParentDirChange(pdfDirectory);
 
             const pdfFileHandle = await pdfDirHandle.getFileHandle(selectedFolder.selectedPDFFile);
             const pdfFile = await pdfFileHandle.getFile();
             const arrayBuffer = await pdfFile.arrayBuffer();
 
-            if (window.pdfjsLib) {
-                const loadingTask = window.pdfjsLib.getDocument(arrayBuffer);
-                const pdf = await loadingTask.promise;
-                setPdfDoc(pdf);
-
-                // Extract bookmarks
-                const outline = await pdf.getOutline();
-                console.log('PDF outline result:', outline);
-                if (outline && outline.length > 0) {
-                    // Add page numbers to all bookmarks
-                    const bookmarksWithPages = await addPageNumbersToBookmarks(outline, pdf);
-                    setBookmarks(bookmarksWithPages);
-                    console.log('Bookmarks with page numbers loaded:', bookmarksWithPages.length);
-                } else {
-                    setBookmarks([]);
-                    console.log('No bookmarks found in PDF');
-                }
-            }
+            await loadPDF({ data: arrayBuffer });
         } catch (err) {
-            console.error('Error loading PDF bookmarks:', err);
-            setBookmarks([]);
+            console.error('Error loading PDF:', err);
         }
     };
 
     // Handle bookmark click to navigate to page
     const handleBookmarkClick = async (bookmark) => {
-        if (!pdfDoc || !bookmark.dest) return;
-
-        try {
-            let dest = bookmark.dest;
-            
-            // If dest is a string, get the actual destination
-            if (typeof dest === 'string') {
-                dest = await pdfDoc.getDestination(dest);
-            }
-            
-            if (dest && dest[0]) {
-                const pageRef = dest[0];
-                const pageIndex = await pdfDoc.getPageIndex(pageRef);
-                const pageNumber = pageIndex + 1; // PDF pages are 1-indexed
-                
-                console.log(`Bookmark "${bookmark.title}" points to page ${pageNumber}`);
-                
-                // Jump to the corresponding page file
-                jumpToPageByNumber(pageNumber);
-            }
-        } catch (err) {
-            console.error('Error navigating to bookmark:', err);
-        }
+        const pageNumber = await resolveBookmarkPage(bookmark);
+        if (pageNumber) jumpToPageByNumber(pageNumber);
     };
 
     // Jump to a specific page number (helper function)
     const jumpToPageByNumber = (pageNumber) => {
-        // Try both .txt and .json extensions
         const pagePrefix = `page_${String(pageNumber).padStart(4, '0')}`;
         const fileName = fileList.find(f => f.startsWith(pagePrefix));
-
         if (fileName) {
             const foundIndex = fileList.indexOf(fileName);
             setCurrentIndex(foundIndex);
@@ -485,36 +404,13 @@ Please select the SOURCE directory (${selection.sourcePath})`;
         }
     };
 
-    // Render a specific PDF page
+    // Render a specific PDF page via the hook
     const renderPDFPage = async (pageNumber) => {
-        if (!pdfDoc) {
-            console.error('PDF document not loaded');
-            return;
-        }
-
-        try {
-            const page = await pdfDoc.getPage(pageNumber);
-            const viewport = page.getViewport({ scale: 1.5 });
-
-            // Create a temporary canvas for rendering
-            const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d');
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-
-            const renderContext = {
-                canvasContext: context,
-                viewport: viewport
-            };
-
-            await page.render(renderContext).promise;
-
-            // Convert canvas to data URL
-            const dataUrl = canvas.toDataURL();
+        const dataUrl = await renderPDFPageFromHook(pageNumber);
+        if (dataUrl) {
             setPdfPageDataUrl(dataUrl);
-        } catch (err) {
-            console.error('Error rendering PDF page:', err);
-            setError(`Error rendering PDF page ${pageNumber}: ${err.message}`);
+        } else {
+            setError(`Error rendering PDF page ${pageNumber}`);
         }
     };
 
