@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Spinner } from '../SharedComponents';
 import { api } from '../../services/api';
 import FileBrowser from './FileBrowser';
@@ -15,6 +15,7 @@ import {
     readFileContent
 } from '../../utils/directoryHandlers';
 import { usePDFJsViewer } from '../../hooks/usePDFJsViewer';
+import useArrowNavigation from '../../hooks/useArrowNavigation';
 
 const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
 
@@ -351,6 +352,12 @@ Please select the SOURCE directory (${selection.sourcePath})`;
             displayFiles(fileList[newIndex]);
         }
     };
+
+    useArrowNavigation(
+        useCallback(() => navigate(-1), [currentIndex, fileList]),
+        useCallback(() => navigate(1),  [currentIndex, fileList]),
+        fileList.length > 0,
+    );
 
     const jumpToPage = () => {
         const pageNum = parseInt(jumpPageNumber, 10);
@@ -763,6 +770,11 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                         </div>
                         <div className="bg-slate-50 border border-slate-300 rounded-lg overflow-hidden">
                             <div className="p-4 space-y-3 max-h-[700px] overflow-y-auto">
+                                {!targetContent && (
+                                    <div className="text-slate-400 text-sm text-center py-8 italic">
+                                        No indexed data
+                                    </div>
+                                )}
                                 {targetContent.split('----').map((paragraph, index) => {
                                     const trimmedParagraph = paragraph.trim();
                                     if (!trimmedParagraph) return null;

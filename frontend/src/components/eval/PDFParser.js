@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Spinner } from '../SharedComponents';
 import ShowBookmarksButton from '../ShowBookmarksButton';
 import BookmarksModal from '../BookmarksModal';
@@ -6,6 +6,7 @@ import ParseBookmarksControl from '../ParseBookmarksControl';
 import FileOrUrlInput from './FileOrUrlInput';
 import usePDFViewer from '../../hooks/usePDFViewer';
 import useMultiPageSplit from '../../hooks/useMultiPageSplit';
+import useArrowNavigation from '../../hooks/useArrowNavigation';
 
 const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
 
@@ -178,6 +179,12 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
     const handlePageNavigation = async (direction) => {
         await pdfViewer.handlePageNavigation(direction, cropTop, cropBottom, () => setResults(null));
     };
+
+    useArrowNavigation(
+        useCallback(() => handlePageNavigation('prev'), [pdfViewer, cropTop, cropBottom]),
+        useCallback(() => handlePageNavigation('next'), [pdfViewer, cropTop, cropBottom]),
+        !!pdfDoc,
+    );
 
     const jumpToPage = async () => {
         await pdfViewer.jumpToPage(jumpPageNumber, cropTop, cropBottom, () => setResults(null));
