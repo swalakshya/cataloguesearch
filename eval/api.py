@@ -989,7 +989,7 @@ async def get_block_types():
     return {"block_types": BLOCK_TYPES}
 
 
-@router.get("/classifier/page-mapping", response_model=ClassifierPageMappingResponse)
+@router.get("/pdf/page-mapping", response_model=ClassifierPageMappingResponse)
 async def get_page_mapping(ocr_relative_path: str):
     """
     Return multi-page PDF metadata for the given OCR directory:
@@ -1031,7 +1031,7 @@ async def get_page_mapping(ocr_relative_path: str):
         raise HTTPException(status_code=500, detail=f"Error loading page mapping: {str(e)}")
 
 
-@router.get("/classifier/bookmarks", response_model=ClassifierBookmarksResponse)
+@router.get("/pdf/bookmarks", response_model=ClassifierBookmarksResponse)
 async def get_classifier_bookmarks(ocr_relative_path: str):
     """
     Extract bookmarks from the PDF and return them with logical page numbers.
@@ -1086,7 +1086,7 @@ async def get_classifier_bookmarks(ocr_relative_path: str):
         raise HTTPException(status_code=500, detail=f"Error extracting bookmarks: {str(e)}")
 
 
-@router.get("/classifier/page-image")
+@router.get("/pdf/page-image")
 async def get_classifier_page_image(ocr_relative_path: str, logical_page: int):
     """
     Render the PDF page corresponding to the given logical page number and return

@@ -39,18 +39,21 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
     const [pendingHandles, setPendingHandles] = useState({ pdf: null, ocr: null, text: null });
     const pickerActiveRef = useRef(false);
     
-    // Bookmarks / PDF rendering — via shared hook
+    // Bookmarks / PDF rendering — via shared hook (used for single-page PDFs only)
     const {
         pdfDoc,
-        bookmarks,
         loadPDF,
         renderPage: renderPDFPageFromHook,
-        resolveBookmarkPage,
     } = usePDFJsViewer();
     const [showBookmarksModal, setShowBookmarksModal] = useState(false);
+    const [bookmarks, setBookmarks] = useState([]);
 
     // PDF page rendering
     const [pdfPageDataUrl, setPdfPageDataUrl] = useState(null);
+
+    // Multi-page PDF mapping (null = single-page PDF, no cropping needed)
+    const [pageMapping, setPageMapping] = useState(null);
+    const pageMappingRef = useRef(null);  // sync ref so renderPDFPage sees latest value immediately
 
     // Store PDF's parent directory handle for better UX when browsing
     const [pdfParentDirHandle, setPdfParentDirHandle] = useState(null);
@@ -172,12 +175,36 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
 
             setSourceHandle(sourceDir);
             setTargetHandle(targetDir);
-            
+
+            // Fetch page-mapping + bookmarks from backend (works for both multi-page and single-page)
+            const ocrRelPath = relativePath;
+            try {
+                const [mappingData, bookmarkData] = await Promise.all([
+                    fetch(`${API_BASE_URL}/eval/pdf/page-mapping?ocr_relative_path=${encodeURIComponent(ocrRelPath)}`).then(r => r.ok ? r.json() : null),
+                    fetch(`${API_BASE_URL}/eval/pdf/bookmarks?ocr_relative_path=${encodeURIComponent(ocrRelPath)}`).then(r => r.ok ? r.json() : null),
+                ]);
+                const mapping = mappingData?.page_mapping || null;
+                setPageMapping(mapping);
+                pageMappingRef.current = mapping;
+                const adapted = (bookmarkData?.bookmarks || []).map(b => ({
+                    ...b,
+                    dest: true,
+                    pageNumber: b.logical_page,
+                    items: [],
+                }));
+                setBookmarks(adapted);
+            } catch (e) {
+                console.warn('Could not load page-mapping/bookmarks from backend:', e);
+                setPageMapping(null);
+                pageMappingRef.current = null;
+                setBookmarks([]);
+            }
+
             // Load and display files
             const files = await loadFiles(sourceDir);
             if (files.length > 0) {
                 setCurrentIndex(0);
-                await displayFiles(files[0], sourceDir, targetDir);
+                await displayFiles(files[0], sourceDir, targetDir, relativePath);
             }
         } catch (err) {
             setError(`Error processing selected folder: ${err.message}`);
@@ -280,7 +307,7 @@ Please select the SOURCE directory (${selection.sourcePath})`;
     };
 
 
-    const displayFiles = async (fileName, sourceDir = sourceHandle, targetDir = targetHandle) => {
+    const displayFiles = async (fileName, sourceDir = sourceHandle, targetDir = targetHandle, ocrRelPath = selectedFolder?.relativePath) => {
         if (!fileName || !sourceDir || !targetDir) return;
 
         setIsLoading(true);
@@ -291,15 +318,16 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                 10
             );
 
-            // Target directory ALWAYS has .txt files
+            // Target directory has .txt files for indexed pages; some pages (e.g. preamble
+            // pages excluded from all sub-sections) intentionally have no .txt file.
             const targetFileName = `page_${String(pageNumber).padStart(4, '0')}.txt`;
             const targetText = await readFileContent(targetDir, targetFileName);
-            setTargetContent(targetText);
+            setTargetContent(targetText.startsWith('--- File not found') ? '' : targetText);
 
-            // Render PDF page if pdfDoc is loaded
-            if (pdfDoc) {
+            // Render PDF page if multi-page mapping exists or PDF.js doc is loaded
+            if (pageMappingRef.current || pdfDoc) {
                 setSourceContent(''); // Clear source content when showing PDF
-                await renderPDFPage(pageNumber);
+                await renderPDFPage(pageNumber, ocrRelPath);
             } else {
                 // Fallback: still read source content if PDF is not loaded
                 setPdfPageDataUrl(null); // Clear PDF preview when showing source
@@ -356,19 +384,16 @@ Please select the SOURCE directory (${selection.sourcePath})`;
             : '';
     };
 
-    // Load PDF and bookmarks from the selected folder
-    const loadPDFBookmarks = async () => {
+    // Load PDF via PDF.js only for single-page PDFs (no page_mapping)
+    const loadPDFForSinglePage = async () => {
         if (!selectedFolder?.selectedPDFFile || !baseDirectoryHandles.pdf) return;
+        if (pageMapping) return;  // multi-page: backend handles rendering
 
         try {
             const pathParts = selectedFolder.relativePath.split('/');
             const pdfDirectory = pathParts.slice(0, -1).join('/');
-
             const pdfDirHandle = await navigateToPath(baseDirectoryHandles.pdf, pdfDirectory);
-            if (!pdfDirHandle) {
-                console.error('Could not navigate to PDF directory:', pdfDirectory);
-                return;
-            }
+            if (!pdfDirHandle) return;
 
             setPdfParentDirHandle(pdfDirHandle);
             if (onPdfParentDirChange) onPdfParentDirChange(pdfDirectory);
@@ -376,17 +401,15 @@ Please select the SOURCE directory (${selection.sourcePath})`;
             const pdfFileHandle = await pdfDirHandle.getFileHandle(selectedFolder.selectedPDFFile);
             const pdfFile = await pdfFileHandle.getFile();
             const arrayBuffer = await pdfFile.arrayBuffer();
-
             await loadPDF({ data: arrayBuffer });
         } catch (err) {
             console.error('Error loading PDF:', err);
         }
     };
 
-    // Handle bookmark click to navigate to page
-    const handleBookmarkClick = async (bookmark) => {
-        const pageNumber = await resolveBookmarkPage(bookmark);
-        if (pageNumber) jumpToPageByNumber(pageNumber);
+    // Handle bookmark click — backend bookmarks already have logical_page as pageNumber
+    const handleBookmarkClick = (bookmark) => {
+        jumpToPageByNumber(bookmark.logical_page ?? bookmark.pageNumber);
     };
 
     // Jump to a specific page number (helper function)
@@ -404,20 +427,35 @@ Please select the SOURCE directory (${selection.sourcePath})`;
         }
     };
 
-    // Render a specific PDF page via the hook
-    const renderPDFPage = async (pageNumber) => {
-        const dataUrl = await renderPDFPageFromHook(pageNumber);
-        if (dataUrl) {
-            setPdfPageDataUrl(dataUrl);
+    // Render a specific PDF page: use backend for multi-page, PDF.js for single-page
+    const renderPDFPage = async (pageNumber, ocrRelPath = selectedFolder?.relativePath) => {
+        if (pageMappingRef.current) {
+            try {
+                const r = await fetch(`${API_BASE_URL}/eval/pdf/page-image?ocr_relative_path=${encodeURIComponent(ocrRelPath)}&logical_page=${pageNumber}`);
+                const data = await r.json();
+                if (r.ok) {
+                    setPdfPageDataUrl(`data:image/png;base64,${data.image}`);
+                } else {
+                    setError(`Error fetching page image: ${data.error || r.status}`);
+                }
+            } catch (e) {
+                console.error('Error fetching page image:', e);
+                setError(`Error fetching page image: ${e.message}`);
+            }
         } else {
-            setError(`Error rendering PDF page ${pageNumber}`);
+            const dataUrl = await renderPDFPageFromHook(pageNumber);
+            if (dataUrl) {
+                setPdfPageDataUrl(dataUrl);
+            } else {
+                setError(`Error rendering PDF page ${pageNumber}`);
+            }
         }
     };
 
-    // Load bookmarks when a PDF is selected and directories are set up
+    // Load PDF (single-page only) when a PDF is selected and directories are set up
     useEffect(() => {
         if (selectedFolder?.selectedPDFFile && permissionsGranted && sourceHandle && targetHandle) {
-            loadPDFBookmarks();
+            loadPDFForSinglePage();
         }
     }, [selectedFolder, permissionsGranted, sourceHandle, targetHandle]);
 
@@ -653,6 +691,8 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                             setSourceContent('');
                             setTargetContent('');
                             setError(null);
+                            setPageMapping(null);
+                            pageMappingRef.current = null;
                         }}
                         className="px-4 py-2 text-sm bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors"
                     >

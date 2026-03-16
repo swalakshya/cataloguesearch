@@ -155,6 +155,46 @@ class SingleFileProcessor:
 
         return sorted(list(all_pages))
 
+    def _get_bounded_logical_pages(self, scan_config, pdf_processor):
+        """
+        For multi-page PDFs: expand physical pages to logical pages respecting
+        sub-section side boundaries (start_side / end_side).
+
+        Each sub-section is expanded independently with expand_pages_with_bounds()
+        so that boundary physical pages only contribute the correct half-page.
+        The union across all sub-sections is returned as a sorted list.
+
+        For single-page PDFs (no expand_pages_with_bounds): returns the raw
+        physical page list unchanged.
+        """
+        if not hasattr(pdf_processor, 'expand_pages_with_bounds'):
+            return self._get_page_list(scan_config)
+
+        sub_sections = scan_config.get("sub_sections", [])
+        if not sub_sections:
+            # No sub-sections — fall back to plain expand_pages
+            pages_list = self._get_page_list(scan_config)
+            return pdf_processor.expand_pages(pages_list)
+
+        logical = set()
+        for sg in sub_sections:
+            sg_start = sg.get("start_page")
+            sg_end   = sg.get("end_page")
+            sg_start_side = sg.get("start_side")
+            sg_end_side   = sg.get("end_side")
+            if sg_start is None or sg_end is None:
+                continue
+            physical_pages = sorted(range(sg_start, sg_end + 1))
+            if sg_start_side and sg_end_side:
+                expanded = pdf_processor.expand_pages_with_bounds(
+                    physical_pages, sg_start, sg_start_side, sg_end, sg_end_side
+                )
+            else:
+                expanded = pdf_processor.expand_pages(physical_pages)
+            logical.update(expanded)
+
+        return sorted(logical)
+
     # All meaningful fields that the bookmark extractor can return
     _BOOKMARK_FIELDS = ("pravachan_no", "date", "gatha", "kalash", "shlok")
 
@@ -214,8 +254,19 @@ class SingleFileProcessor:
             # Get PDF processor based on chunk_strategy
             pdf_processor = self._get_pdf_processor()
 
+            # For multi-page PDFs, compute the bounded logical page set so that
+            # boundary physical pages only write the correct half (e.g. end_side="left"
+            # on the last physical page suppresses the right-half logical page).
+            allowed_logical = None
+            if hasattr(pdf_processor, 'expand_pages_with_bounds'):
+                allowed_logical = set(
+                    self._get_bounded_logical_pages(self._scan_config, pdf_processor)
+                )
+
             ret = pdf_processor.process_pdf(
-                self._file_path, self._scan_config, pages_list)
+                self._file_path, self._scan_config, pages_list,
+                allowed_logical_pages=allowed_logical,
+            )
 
             if ret:
                 # Get current state to preserve parsed_bookmarks if it exists
@@ -254,14 +305,13 @@ class SingleFileProcessor:
                 f"OCR directory does not exist for {self._file_path}. Run process() first.")
             return
 
-        pages_list = self._get_page_list(self._scan_config)
         ocr_extension = self._get_ocr_file_extension()
 
-        # For multi-page PDFs, expand PDF page numbers to logical page numbers so
-        # that we check for the correct page_NNNN<ext> files on disk.
+        # For multi-page PDFs use bounded expansion so side boundaries are respected
+        # (e.g. end_side="left" on the last physical page excludes its right half).
+        # For single-page PDFs _get_bounded_logical_pages falls back to _get_page_list.
         pdf_processor = self._get_pdf_processor()
-        expand_fn = getattr(pdf_processor, 'expand_pages', None)
-        effective_pages = expand_fn(pages_list) if expand_fn else pages_list
+        effective_pages = self._get_bounded_logical_pages(self._scan_config, pdf_processor)
 
         # Check if all required OCR pages exist
         missing_pages = []
@@ -428,7 +478,7 @@ class SingleFileProcessor:
                 # Use sub_file_path (not relative_path) so the stored ocr_checksum
                 # is tied to this sub-section's identity, consistent with file_path.
                 sub_ocr_checksum = self._index_state.calculate_ocr_checksum(
-                    sub_file_path, pages_list)
+                    sub_file_path, sub_pages)
 
                 log_handle.info(
                     f"Processing sub-section [{i+1}/{len(sub_sections)}]: "

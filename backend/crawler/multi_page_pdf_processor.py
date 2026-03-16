@@ -102,11 +102,21 @@ class MultiPagePDFProcessor:
 
         return result
 
-    def process_pdf(self, pdf_file: str, scan_config: dict, pages_list: list[int]) -> bool:
+    def process_pdf(
+        self,
+        pdf_file: str,
+        scan_config: dict,
+        pages_list: list[int],
+        allowed_logical_pages: set[int] | None = None,
+    ) -> bool:
         """
         Process a PDF where each physical page contains two logical pages.
 
         pages_list: 1-based PDF page numbers to process.
+        allowed_logical_pages: optional set of logical page numbers to write.
+          When provided, any half whose logical page number is not in the set is
+          silently skipped.  Use this to enforce sub-section side boundaries
+          (e.g. only write logical page 146, not 147, for the last physical page).
         Writes page_{logical:04d}<ext> for each half and updates page_mapping.json.
         """
         if not os.path.exists(pdf_file):
@@ -155,15 +165,22 @@ class MultiPagePDFProcessor:
             primary_img, secondary_img = self._split_image(image)
             lp_primary, lp_secondary = self._logical_pages(pdf_page)
 
-            ok1 = self._ocr_and_write(primary_img, lp_primary, scan_config, output_ocr_dir)
+            # Respect side-boundary filter when provided
+            write_primary = allowed_logical_pages is None or lp_primary in allowed_logical_pages
+            write_secondary = lp_secondary <= 0 or (
+                allowed_logical_pages is None or lp_secondary in allowed_logical_pages
+            )
+
+            ok1 = self._ocr_and_write(primary_img, lp_primary, scan_config, output_ocr_dir) if write_primary else True
             ok2 = (
-                lp_secondary <= 0
+                not write_secondary
                 or self._ocr_and_write(secondary_img, lp_secondary, scan_config, output_ocr_dir)
             )
 
             if ok1 and ok2:
-                page_mapping[str(lp_primary)] = pdf_page
-                if lp_secondary > 0:
+                if write_primary:
+                    page_mapping[str(lp_primary)] = pdf_page
+                if lp_secondary > 0 and write_secondary:
                     page_mapping[str(lp_secondary)] = pdf_page
                 self._save_page_mapping(output_ocr_dir, page_mapping)
             else:

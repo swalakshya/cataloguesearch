@@ -100,11 +100,12 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
         question_prefixes = tuple(scan_config.get("question_prefix", []))
         answer_prefixes = tuple(scan_config.get("answer_prefix", []))
         typo_list = scan_config.get("typo_list", [])
+        qa_merge = scan_config.get("qa_merge", True)
 
         qa_prefixes = question_prefixes + answer_prefixes
         phase1 = self._phase1_sentence_boundaries(pages_data, stop_prefixes, qa_prefixes, typo_list)
         phase1_5 = self._phase1_5_tag_qa(phase1, question_prefixes, answer_prefixes)
-        phase2 = self._phase2_min_length(phase1_5, stop_prefixes)
+        phase2 = self._phase2_min_length(phase1_5, stop_prefixes, question_prefixes, qa_merge)
 
         log_handle.info(
             "GranthParagraphGenerator: %d pages → %d (phase1) → %d (phase2) paragraphs",
@@ -223,6 +224,8 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
         self,
         paragraphs: List[ParaInfo],
         stop_prefixes: tuple,
+        question_prefixes: tuple = (),
+        qa_merge: bool = True,
     ) -> List[Tuple[int, str]]:
         """
         Combine consecutive QA paragraphs with '\\n', and greedily merge
@@ -231,6 +234,7 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
         Hard flush boundaries (never merge across), in priority order:
           - is_chapter_start=True  — chapter boundary, flushes before
           - QA ↔ non-QA type change
+          - qa_merge=False + new question — keeps each Q+A pair as its own paragraph
           - stop prefix            — paragraph begins a commentary section (non-QA only)
           - is_verse_end=True      — flushes after adding the paragraph
 
@@ -258,6 +262,12 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
 
             # Flush on type change (QA ↔ non-QA)
             if buffer and para.is_qa != buffer_is_qa:
+                _flush()
+
+            # When qa_merge=False, each Q+A pair is its own paragraph:
+            # flush when a new question arrives while already in QA mode.
+            if (not qa_merge and buffer_is_qa
+                    and self._starts_with_prefix(para.text, question_prefixes)):
                 _flush()
 
             # stop_prefix is a hard boundary for non-QA only

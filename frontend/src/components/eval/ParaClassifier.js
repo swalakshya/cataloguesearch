@@ -107,8 +107,8 @@ const ParaClassifier = ({ selectedFile }) => {
         setOriginalTypes([]);
 
         Promise.all([
-            apiFetch(`${API_BASE_URL}/eval/classifier/page-mapping?ocr_relative_path=${enc(ocrPath)}`),
-            apiFetch(`${API_BASE_URL}/eval/classifier/bookmarks?ocr_relative_path=${enc(ocrPath)}`),
+            apiFetch(`${API_BASE_URL}/eval/pdf/page-mapping?ocr_relative_path=${enc(ocrPath)}`),
+            apiFetch(`${API_BASE_URL}/eval/pdf/bookmarks?ocr_relative_path=${enc(ocrPath)}`),
         ])
             .then(([mapping, bkmks]) => {
                 const pages = mapping.available_pages || [];
@@ -134,7 +134,7 @@ const ParaClassifier = ({ selectedFile }) => {
         setPdfDataUrl(null);
 
         apiFetch(
-            `${API_BASE_URL}/eval/classifier/page-image` +
+            `${API_BASE_URL}/eval/pdf/page-image` +
             `?ocr_relative_path=${enc(ocrPath)}&logical_page=${currentLogicalPage}`
         )
             .then(d => setPdfDataUrl(`data:image/png;base64,${d.image}`))

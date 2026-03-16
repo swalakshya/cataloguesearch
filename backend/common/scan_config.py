@@ -184,4 +184,8 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
         if "sub_sections" in file_config:
             scan_meta["sub_sections"] = file_config["sub_sections"]
 
+        # Update qa_merge setting from file-specific config (overrides default)
+        if "qa_merge" in file_config:
+            scan_meta["qa_merge"] = file_config["qa_merge"]
+
     return scan_meta

@@ -403,3 +403,64 @@ class TestSubsectionIsolation:
         )
         for _, blocks in verse_data:
             assert all(b["type"] == "prakrit_verse" for b in blocks)
+
+
+# ── qa_merge behaviour ────────────────────────────────────────────────────────
+
+def _qa_blocks(*pairs):
+    """Build a single-page pages_data with Q+A block pairs.
+
+    Each pair is (question_text, answer_text).
+    """
+    blocks = []
+    for q, a in pairs:
+        blocks.append({"type": "hindi_text", "text": q})
+        blocks.append({"type": "hindi_text", "text": a})
+    return [(1, blocks)]
+
+
+_QA_SCAN_CONFIG_BASE = {
+    "ocr_engine": "llm",
+    "question_prefix": ["प्रश्न"],
+    "answer_prefix": ["उत्तर"],
+    "typo_list": [],
+}
+
+_QA_PAIRS = [
+    ("प्रश्न १ – पहला प्रश्न क्या है?", "उत्तर – पहला उत्तर यह है।"),
+    ("प्रश्न २ – दूसरा प्रश्न क्या है?", "उत्तर – दूसरा उत्तर यह है।"),
+    ("प्रश्न ३ – तीसरा प्रश्न क्या है?", "उत्तर – तीसरा उत्तर यह है।"),
+]
+
+
+class TestQaMergeBehaviour:
+    def _gen_paragraphs(self, qa_merge=None):
+        from backend.crawler.paragraph_generator.granth import GranthParagraphGenerator
+        from backend.crawler.paragraph_generator.language_meta import HindiMeta
+        cfg = dict(_QA_SCAN_CONFIG_BASE)
+        if qa_merge is not None:
+            cfg["qa_merge"] = qa_merge
+        gen = GranthParagraphGenerator(Config(), HindiMeta(cfg))
+        return gen.generate_paragraphs(_qa_blocks(*_QA_PAIRS), cfg)
+
+    def test_qa_merge_false_gives_one_para_per_pair(self):
+        """qa_merge=False: each Q+A pair becomes its own paragraph."""
+        paras = self._gen_paragraphs(qa_merge=False)
+        assert len(paras) == 3, f"Expected 3 paragraphs, got {len(paras)}"
+        for i, (_, text) in enumerate(paras):
+            q_text, a_text = _QA_PAIRS[i]
+            assert q_text in text
+            assert a_text in text
+
+    def test_qa_merge_true_merges_all_pairs(self):
+        """qa_merge=True (default): all Q+A pairs merge into one paragraph."""
+        paras = self._gen_paragraphs(qa_merge=True)
+        assert len(paras) == 1, f"Expected 1 paragraph, got {len(paras)}"
+        for q_text, a_text in _QA_PAIRS:
+            assert q_text in paras[0][1]
+            assert a_text in paras[0][1]
+
+    def test_qa_merge_default_is_true(self):
+        """Omitting qa_merge preserves existing behaviour (merge all)."""
+        paras = self._gen_paragraphs(qa_merge=None)
+        assert len(paras) == 1
