@@ -177,13 +177,16 @@ class MultiPagePDFProcessor:
                 or self._ocr_and_write(secondary_img, lp_secondary, scan_config, output_ocr_dir)
             )
 
-            if ok1 and ok2:
-                if write_primary:
-                    page_mapping[str(lp_primary)] = pdf_page
-                if lp_secondary > 0 and write_secondary:
-                    page_mapping[str(lp_secondary)] = pdf_page
-                self._save_page_mapping(output_ocr_dir, page_mapping)
-            else:
+            # Update mapping per-half so a successfully written half is never
+            # orphaned (file on disk but no mapping entry) when the other half
+            # fails.  Save after every PDF page regardless of partial failure.
+            if ok1 and write_primary:
+                page_mapping[str(lp_primary)] = pdf_page
+            if ok2 and lp_secondary > 0 and write_secondary:
+                page_mapping[str(lp_secondary)] = pdf_page
+            self._save_page_mapping(output_ocr_dir, page_mapping)
+
+            if not ok1 or not ok2:
                 log_handle.error(
                     f"PDF page {pdf_page}: OCR failed for one or both halves "
                     f"(logical pages {lp_primary}, {lp_secondary})"
