@@ -254,18 +254,8 @@ class SingleFileProcessor:
             # Get PDF processor based on chunk_strategy
             pdf_processor = self._get_pdf_processor()
 
-            # For multi-page PDFs, compute the bounded logical page set so that
-            # boundary physical pages only write the correct half (e.g. end_side="left"
-            # on the last physical page suppresses the right-half logical page).
-            allowed_logical = None
-            if hasattr(pdf_processor, 'expand_pages_with_bounds'):
-                allowed_logical = set(
-                    self._get_bounded_logical_pages(self._scan_config, pdf_processor)
-                )
-
             ret = pdf_processor.process_pdf(
                 self._file_path, self._scan_config, pages_list,
-                allowed_logical_pages=allowed_logical,
             )
 
             if ret:
@@ -386,7 +376,7 @@ class SingleFileProcessor:
             # --- Standard path: single document per PDF ---
             index_generator.index_document(
                 document_id, relative_path, output_ocr_dir, output_text_dir,
-                pages_list, file_metadata, self._scan_config,
+                effective_pages, file_metadata, self._scan_config,
                 page_to_pravachan_data,
                 reindex_metadata_only, dry_run,
                 pdf_processor=pdf_processor
