@@ -660,7 +660,6 @@ def _granth_payload(query, exact_match=False, granth_enabled=True):
     }
 
 
-@pytest.mark.integration
 class TestGranthSearchAPI:
     """HTTP API integration tests — require the live API server fixture."""
 
@@ -746,3 +745,14 @@ class TestGranthSearchAPI:
         assert r.status_code == 200
         data = r.json()
         assert data["pravachan_results"]["total_hits"] == 0
+
+    def test_granth_vector_search_returns_results(self, api_server):
+        """4-word query with exact_match=False routes to vector search; granth docs are returned."""
+        # is_lexical_query returns False for 4+ words → vector path in search_api.py
+        r = requests.post(
+            f"{api_server}/api/search",
+            json=_granth_payload("पानी हवा और धूप", exact_match=False),
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["granth_results"]["total_hits"] > 0
