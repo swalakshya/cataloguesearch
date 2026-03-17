@@ -260,6 +260,10 @@ def test_api_metadata_endpoint(api_server):
     # Should have the Pravachan content type key
     assert expected_content_types.issubset(actual_keys), f"Expected content type keys {expected_content_types} in metadata, got {actual_keys}"
 
+    # Categories not in active_categories must never appear
+    assert "Books" not in actual_keys, \
+        f"'Books' must not appear in /api/metadata (not in active_categories), got keys: {actual_keys}"
+
     # Expected values for each content type
     expected_values_by_content_type = {
         "Pravachan": {
@@ -339,6 +343,87 @@ def test_api_metadata_endpoint(api_server):
                     f"Expected {key} values {expected_values_set} for {content_type}, got {actual_values_set}"
 
     log_handle.info(f"✓ API metadata test passed - validated content-type-specific metadata structure with expected keys and values")
+
+
+def test_books_category_excluded(api_server):
+    """
+    Books is not in active_categories.
+    A document indexed with category='Books' must not appear in /api/search results
+    and must not appear in /api/metadata.
+    """
+    from backend.config import Config
+    from backend.common.opensearch import get_opensearch_client
+
+    config = Config()
+    client = get_opensearch_client(config)
+    index_name = config.OPENSEARCH_INDEX_NAME
+    metadata_index = config.OPENSEARCH_METADATA_INDEX_NAME
+
+    books_chunk_id = "test_books_excluded_p1_para1"
+    books_chunk = {
+        "document_id": "test_books_excluded",
+        "filename": "books_test.pdf",
+        "text_content_hindi": "पुस्तक विशेष परीक्षण सामग्री अनोखा",
+        "text_content_gujarati": "પુસ્તક વિશેષ",
+        "content_snippet": "पुस्तक विशेष परीक्षण सामग्री अनोखा",
+        "page_number": 1,
+        "metadata": {"category": "Books", "language": "hi"},
+    }
+    books_meta_id = "Books_Anuyog_hi_test"
+    books_meta = {
+        "content_type": "Books",
+        "key": "Anuyog",
+        "language": "hi",
+        "values": ["books_test_value"],
+    }
+
+    client.index(index=index_name, id=books_chunk_id, body=books_chunk, refresh=True)
+    client.index(index=metadata_index, id=books_meta_id, body=books_meta, refresh=True)
+
+    # Invalidate the metadata cache so the API re-reads from OpenSearch
+    inv = requests.post(f"http://{api_server.host}:{api_server.port}/api/cache/invalidate")
+    assert inv.status_code == 200
+
+    try:
+        # /api/metadata must not include "Books"
+        meta_r = requests.get(f"http://{api_server.host}:{api_server.port}/api/metadata")
+        assert meta_r.status_code == 200
+        assert "Books" not in meta_r.json(), \
+            f"'Books' must not appear in /api/metadata; got: {list(meta_r.json().keys())}"
+
+        # /api/search must not return the Books document in either result set
+        search_payload = {
+            "query": "पुस्तक विशेष परीक्षण सामग्री अनोखा",
+            "language": "hi",
+            "exact_match": True,
+            "exclude_words": [],
+            "categories": {},
+            "search_types": {
+                "Pravachan": {"enabled": True, "page_size": 10, "page_number": 1},
+                "Granth":    {"enabled": True, "page_size": 10, "page_number": 1},
+            },
+            "enable_reranking": False,
+        }
+        search_r = requests.post(
+            f"http://{api_server.host}:{api_server.port}/api/search",
+            json=search_payload,
+        )
+        assert search_r.status_code == 200
+        data = search_r.json()
+        all_results = (
+            data["pravachan_results"]["results"] +
+            data["granth_results"]["results"]
+        )
+        assert all(r.get("filename") != "books_test.pdf" for r in all_results), \
+            "Books document must not appear in search results"
+
+        log_handle.info("✓ Books category correctly excluded from /api/metadata and /api/search")
+
+    finally:
+        client.delete(index=index_name, id=books_chunk_id, ignore=[404])
+        client.delete(index=metadata_index, id=books_meta_id, ignore=[404])
+        client.indices.refresh(index=index_name)
+        client.indices.refresh(index=metadata_index)
 
 
 def test_api_exact_phrase_search(api_server):
