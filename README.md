@@ -15,6 +15,10 @@ Search combines BM25 keyword matching, vector embeddings, and a reranking model 
 
 See [ONBOARDING.md](ONBOARDING.md) for step-by-step instructions to have cataloguesearch working on your laptop.
 
+## Indexing a new PDF
+
+See [INDEXING_GUIDE.md](INDEXING_GUIDE.md) for a step-by-step guide to adding a new document: choosing an OCR engine, configuring crop, multi-page spreads, sub-sections, Q&A prefixes, stop words, and running the indexing commands.
+
 ## Architecture
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for a design overview: crawler pipelines, search API, OpenSearch indices, transliteration service, and deployment topology.
