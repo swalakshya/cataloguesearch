@@ -17,6 +17,7 @@ index:
 
 search:
   filtered_metadata_fields: ["type", "category", "language", "Author", "Anuyog", "Granth"]
+  active_categories: ["Pravachan", "Granth"]
 
 opensearch:
   host: localhost

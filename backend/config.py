@@ -123,6 +123,8 @@ class Config:
             return self._settings.get("vector_embeddings", {}).get("reranker_onnx_path", None)
         elif name == "FILTERED_METADATA_FIELDS":
             return self._settings.get("search", {}).get("filtered_metadata_fields", {})
+        elif name == "ACTIVE_CATEGORIES":
+            return self._settings.get("search", {}).get("active_categories", ["Pravachan", "Granth"])
         elif name == "TRANSLITERATION_API_URL":
             return self._settings.get("transliteration", {}).get("api_url", "http://localhost:8001")
         elif name == "TRANSLITERATION_DEFAULT_LANGUAGE":

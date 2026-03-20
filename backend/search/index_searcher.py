@@ -387,25 +387,23 @@ class IndexSearcher:
             log_handle.error(f"Error during lexical search: {e}", exc_info=True)
             return [], 0
 
-    def perform_pravachan_search(
-            self, keywords: str, exact_match: bool, exclude_words: List[str],
+    def perform_category_search(
+            self, category: str, keywords: str, exact_match: bool, exclude_words: List[str],
             categories: Dict[str, List[str]], detected_language: str,
             page_size: int, page_number: int,
             start_year: int | None = None, end_year: int | None = None) -> Tuple[List[Dict[str, Any]], int]:
         """
-        Performs lexical search on pravachan documents.
-        Adds metadata.category = "Pravachan" filter.
+        Generic lexical search filtered to a specific metadata.category value.
         """
-        # Add category filter for Pravachan
-        pravachan_categories = categories.copy() if categories else {}
-        if 'category' not in pravachan_categories:
-            pravachan_categories['category'] = ['Pravachan']
+        merged = categories.copy() if categories else {}
+        if 'category' not in merged:
+            merged['category'] = [category]
 
         return self.perform_lexical_search(
             keywords=keywords,
             exact_match=exact_match,
             exclude_words=exclude_words,
-            categories=pravachan_categories,
+            categories=merged,
             detected_language=detected_language,
             page_size=page_size,
             page_number=page_number,
@@ -413,30 +411,26 @@ class IndexSearcher:
             end_year=end_year
         )
 
+    def perform_pravachan_search(
+            self, keywords: str, exact_match: bool, exclude_words: List[str],
+            categories: Dict[str, List[str]], detected_language: str,
+            page_size: int, page_number: int,
+            start_year: int | None = None, end_year: int | None = None) -> Tuple[List[Dict[str, Any]], int]:
+        """Backwards-compatible wrapper: lexical search on Pravachan documents."""
+        return self.perform_category_search(
+            "Pravachan", keywords, exact_match, exclude_words, categories,
+            detected_language, page_size, page_number, start_year, end_year
+        )
+
     def perform_granth_search(
             self, keywords: str, exact_match: bool, exclude_words: List[str],
             categories: Dict[str, List[str]], detected_language: str,
             page_size: int, page_number: int,
             start_year: int | None = None, end_year: int | None = None) -> Tuple[List[Dict[str, Any]], int]:
-        """
-        Performs lexical search on granth documents.
-        Adds metadata.category = "Granth" filter.
-        """
-        # Add category filter for Granth
-        granth_categories = categories.copy() if categories else {}
-        if 'category' not in granth_categories:
-            granth_categories['category'] = ['Granth']
-
-        return self.perform_lexical_search(
-            keywords=keywords,
-            exact_match=exact_match,
-            exclude_words=exclude_words,
-            categories=granth_categories,
-            detected_language=detected_language,
-            page_size=page_size,
-            page_number=page_number,
-            start_year=start_year,
-            end_year=end_year
+        """Backwards-compatible wrapper: lexical search on Granth documents."""
+        return self.perform_category_search(
+            "Granth", keywords, exact_match, exclude_words, categories,
+            detected_language, page_size, page_number, start_year, end_year
         )
 
     def perform_vector_search(
