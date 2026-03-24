@@ -74,3 +74,33 @@ code {
 body {
   font-family: 'Noto Sans', 'Noto Sans Devanagari', sans-serif;
 }
+
+.llm-citation-line {
+  display: block;
+  text-align: right;
+}
+
+.llm-citation {
+  font-style: italic;
+  font-size: 0.75em;
+  vertical-align: sub;
+  color: #475569;
+}
+
+.llm-answer-scroll {
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+@media (max-width: 768px) {
+  .llm-answer-scroll {
+    max-height: 55vh;
+  }
+}
+
+.llm-bold-separator {
+  border: 0;
+  border-top: 1px solid #e2e8f0;
+  margin: 0.5rem 0;
+}

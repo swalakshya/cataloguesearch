@@ -1,5 +1,6 @@
 // --- API SERVICE ---
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
+const LLM_API_BASE_URL = process.env.REACT_APP_LLM_API_BASE_URL || 'http://localhost:8012';
 
 export const api = {
     getMetadata: async () => {
@@ -128,6 +129,73 @@ export const api = {
         } catch (error) {
             console.error("API Error: Could not submit feedback", error);
             throw error;
+        }
+    },
+
+    answer: async (requestPayload) => {
+        try {
+            const response = await fetch(`${LLM_API_BASE_URL}/v1/answer`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestPayload),
+            });
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            console.error("API Error: Could not fetch answer", error);
+            throw error;
+        }
+    },
+
+    createChatSession: async (requestPayload) => {
+        try {
+            const response = await fetch(`${LLM_API_BASE_URL}/v1/chat/sessions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestPayload),
+            });
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            console.error("API Error: Could not create chat session", error);
+            throw error;
+        }
+    },
+
+    sendChatMessage: async (sessionId, requestPayload) => {
+        try {
+            const response = await fetch(`${LLM_API_BASE_URL}/v1/chat/sessions/${sessionId}/messages`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestPayload),
+            });
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            console.error("API Error: Could not send chat message", error);
+            throw error;
+        }
+    },
+
+    closeChatSession: async (sessionId) => {
+        try {
+            const response = await fetch(`${LLM_API_BASE_URL}/v1/chat/sessions/${sessionId}`, {
+                method: 'DELETE',
+            });
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            console.error("API Error: Could not close chat session", error);
+            throw error;
+        }
+    },
+
+    checkLlmHealth: async () => {
+        try {
+            const response = await fetch(`${LLM_API_BASE_URL}/v1/health`);
+            return response.ok;
+        } catch {
+            return false;
         }
     }
 };
