@@ -46,7 +46,7 @@ def api_base_url():
     pytest.skip(f"API server not reachable at {base_url}: {last_exc}")
 
 
-def _external_search(base_url, query, content_type=None):
+def _agent_search(base_url, query, content_type=None):
     payload = {
         "query": query,
         "language": "hi",
@@ -65,15 +65,15 @@ def _external_search(base_url, query, content_type=None):
     return r.json()
 
 
-class TestExternalAPI:
-    """External API integration tests against a running cataloguesearch-api container."""
+class TestAgentAPI:
+    """Agent API integration tests against a running cataloguesearch-api container."""
 
-    def test_external_search_returns_list(self, api_base_url):
-        results = _external_search(api_base_url, "भगवान आत्मा")
+    def test_agent_search_returns_list(self, api_base_url):
+        results = _agent_search(api_base_url, "भगवान आत्मा")
         assert isinstance(results, list)
 
-    def test_external_search_fields_when_present(self, api_base_url):
-        results = _external_search(api_base_url, "भगवान आत्मा")
+    def test_agent_search_fields_when_present(self, api_base_url):
+        results = _agent_search(api_base_url, "भगवान आत्मा")
         if not results:
             pytest.skip("No results returned; OpenSearch may be empty")
         for field in (
@@ -89,8 +89,8 @@ class TestExternalAPI:
         ):
             assert field in results[0]
 
-    def test_external_navigate_includes_current(self, api_base_url):
-        results = _external_search(api_base_url, "भगवान आत्मा")
+    def test_agent_navigate_includes_current(self, api_base_url):
+        results = _agent_search(api_base_url, "भगवान आत्मा")
         if not results:
             pytest.skip("No results returned; OpenSearch may be empty")
         chunk_id = results[0]["chunk_id"]
@@ -106,8 +106,8 @@ class TestExternalAPI:
         assert isinstance(data, list)
         assert any(item.get("chunk_id") == chunk_id for item in data)
 
-    # def test_external_find_similar_returns_list(self, api_base_url):
-    #     results = _external_search(api_base_url, "भगवान आत्मा")
+    # def test_agent_find_similar_returns_list(self, api_base_url):
+    #     results = _agent_search(api_base_url, "भगवान आत्मा")
     #     if not results:
     #         pytest.skip("No results returned; OpenSearch may be empty")
     #     chunk_id = results[0]["chunk_id"]
@@ -122,7 +122,7 @@ class TestExternalAPI:
     #     data = r.json()
     #     assert isinstance(data, list)
 
-    def test_external_get_filter_options(self, api_base_url):
+    def test_agent_get_filter_options(self, api_base_url):
         payload = {"language": "hi", "content_type": "Granth"}
         r = requests.post(
             f"{api_base_url}/api/agent/get_filter_options",
@@ -135,7 +135,7 @@ class TestExternalAPI:
             assert key in data
         assert isinstance(data["granths"], list)
 
-    def test_external_get_pravachan_returns_list(self, api_base_url):
+    def test_agent_get_pravachan_returns_list(self, api_base_url):
         payload = {"granth": "Samaysaar", "pravachan_number": "1", "language": "hi"}
         r = requests.post(
             f"{api_base_url}/api/agent/get_pravachan",

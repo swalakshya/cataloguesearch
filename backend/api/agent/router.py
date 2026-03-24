@@ -13,7 +13,7 @@ log_handle = logging.getLogger(__name__)
 router = APIRouter(tags=["agent"])
 
 
-class ExternalSearchRequest(BaseModel):
+class AgentSearchRequest(BaseModel):
     query: str = Field(..., description="Search text (Hindi or Gujarati)")
     language: Literal["hi", "gu"] = Field(..., description="Script language")
     content_type: List[Literal["Pravachan", "Granth", "Books"]] = Field(
@@ -31,22 +31,22 @@ class ExternalSearchRequest(BaseModel):
     rerank: bool = Field(True, description="Apply cross-encoder reranking")
 
 
-class ExternalNavigateRequest(BaseModel):
+class AgentNavigateRequest(BaseModel):
     chunk_id: str = Field(..., description="Starting chunk")
     direction: Literal["next", "prev", "both"] = Field("both")
     steps: int = Field(1, ge=1, le=20)
 
 
-class ExternalFindSimilarRequest(BaseModel):
+class AgentFindSimilarRequest(BaseModel):
     chunk_id: str = Field(..., description="Source chunk to find similarities for")
 
 
-class ExternalFilterOptionsRequest(BaseModel):
+class AgentFilterOptionsRequest(BaseModel):
     language: Literal["hi", "gu"] = Field(..., description="Language context")
     content_type: Literal["Pravachan", "Granth", "Books"] = Field(..., description="Category")
 
 
-class ExternalGetPravachanRequest(BaseModel):
+class AgentGetPravachanRequest(BaseModel):
     granth: str = Field(..., description="Granth name")
     pravachan_number: str = Field(..., description="Pravachan number")
     language: Literal["hi", "gu"] = Field(..., description="Language")
@@ -131,7 +131,7 @@ def _build_date_range_filter(year_from: Optional[int], year_to: Optional[int]) -
 _ALL_CONTENT_TYPES = {"Pravachan", "Granth", "Books"}
 
 
-def _build_filters(payload: ExternalSearchRequest) -> List[Dict[str, Any]]:
+def _build_filters(payload: AgentSearchRequest) -> List[Dict[str, Any]]:
     filters: List[Dict[str, Any]] = []
 
     if set(payload.content_type) != _ALL_CONTENT_TYPES:
@@ -166,7 +166,7 @@ def _build_filters(payload: ExternalSearchRequest) -> List[Dict[str, Any]]:
 
 
 @router.post("/search", summary="Search catalogue chunks")
-async def external_search(request: Request, payload: ExternalSearchRequest = Body(...)):
+async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)):
     """
     Hybrid search over the Jain texts corpus.
 
@@ -180,7 +180,7 @@ async def external_search(request: Request, payload: ExternalSearchRequest = Bod
     """
     try:
         log_handle.info(
-            "external_search request",
+            "agent_search request",
             extra={
                 "language": payload.language,
                 "content_type": payload.content_type,
@@ -207,7 +207,7 @@ async def external_search(request: Request, payload: ExternalSearchRequest = Bod
         text_field = _get_text_field(payload.language)
         from_ = (payload.page - 1) * payload.page_size
 
-        log_handle.debug("external_search mode=%s", "lexical" if is_lexical else "vector")
+        log_handle.debug("agent_search mode=%s", "lexical" if is_lexical else "vector")
         if is_lexical:
             query_body = {
                 "query": {
@@ -224,13 +224,13 @@ async def external_search(request: Request, payload: ExternalSearchRequest = Bod
                 from_=from_
             )
             hits = response.get("hits", {}).get("hits", [])
-            log_handle.info("external_search lexical hits=%s", len(hits))
+            log_handle.info("agent_search lexical hits=%s", len(hits))
             results = [_chunk_from_hit(hit, payload.language) for hit in hits]
             return JSONResponse(content=results, status_code=200)
 
         query_embedding = embedding_model.get_embedding(payload.query)
         if not query_embedding:
-            log_handle.warning("external_search produced empty embedding; returning empty results")
+            log_handle.warning("agent_search produced empty embedding; returning empty results")
             return JSONResponse(content=[], status_code=200)
 
         initial_fetch_size = 40 if payload.rerank else payload.page_size
@@ -250,11 +250,11 @@ async def external_search(request: Request, payload: ExternalSearchRequest = Bod
             from_=0
         )
         hits = response.get("hits", {}).get("hits", [])
-        log_handle.info("external_search knn initial_hits=%s rerank=%s", len(hits), payload.rerank)
+        log_handle.info("agent_search knn initial_hits=%s rerank=%s", len(hits), payload.rerank)
 
         if not payload.rerank or not index_searcher._reranker or not hits:
             if payload.rerank and not index_searcher._reranker:
-                log_handle.warning("external_search rerank requested but reranker not available; returning unreranked results")
+                log_handle.warning("agent_search rerank requested but reranker not available; returning unreranked results")
             paginated = hits[from_:from_ + payload.page_size]
             results = [_chunk_from_hit(hit, payload.language) for hit in paginated]
             return JSONResponse(content=results, status_code=200)
@@ -268,7 +268,7 @@ async def external_search(request: Request, payload: ExternalSearchRequest = Bod
         try:
             rerank_scores = index_searcher._reranker.predict(sentence_pairs)
         except Exception as rerank_exc:
-            log_handle.exception("external_search reranking failed; returning unreranked results: %s", rerank_exc)
+            log_handle.exception("agent_search reranking failed; returning unreranked results: %s", rerank_exc)
             paginated = hits[from_:from_ + payload.page_size]
             results = [_chunk_from_hit(hit, payload.language) for hit in paginated]
             return JSONResponse(content=results, status_code=200)
@@ -281,12 +281,12 @@ async def external_search(request: Request, payload: ExternalSearchRequest = Bod
         return JSONResponse(content=results, status_code=200)
 
     except Exception as exc:
-        log_handle.exception(f"External search failed: {exc}")
+        log_handle.exception(f"Agent search failed: {exc}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {exc}")
 
 
 @router.post("/navigate", summary="Navigate paragraphs around a chunk")
-async def external_navigate(request: Request, payload: ExternalNavigateRequest = Body(...)):
+async def agent_navigate(request: Request, payload: AgentNavigateRequest = Body(...)):
     """
     Walk sequentially through a document by paragraph, starting from a given chunk.
 
@@ -295,7 +295,7 @@ async def external_navigate(request: Request, payload: ExternalNavigateRequest =
     """
     try:
         log_handle.info(
-            "external_navigate request",
+            "agent_navigate request",
             extra={
                 "chunk_id": payload.chunk_id,
                 "direction": payload.direction,
@@ -346,25 +346,25 @@ async def external_navigate(request: Request, payload: ExternalNavigateRequest =
         response = client.search(index=config.OPENSEARCH_INDEX_NAME, body=query_body)
         hits = response.get("hits", {}).get("hits", [])
         language = source.get("language", "hi")
-        log_handle.info("external_navigate hits=%s language=%s", len(hits), language)
+        log_handle.info("agent_navigate hits=%s language=%s", len(hits), language)
         results = [_chunk_from_hit(hit, language) for hit in hits]
         return JSONResponse(content=results, status_code=200)
 
     except HTTPException:
         raise
     except Exception as exc:
-        log_handle.exception(f"External navigate failed: {exc}")
+        log_handle.exception(f"Agent navigate failed: {exc}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {exc}")
 
 
 @router.post("/find_similar", summary="Find semantically similar chunks")
-async def external_find_similar(request: Request, payload: ExternalFindSimilarRequest = Body(...)):
+async def agent_find_similar(request: Request, payload: AgentFindSimilarRequest = Body(...)):
     """
     Given a chunk, find the top 10 semantically related passages across the entire corpus
     using vector KNN search on the chunk's stored embedding.
     """
     try:
-        log_handle.info("external_find_similar request", extra={"chunk_id": payload.chunk_id})
+        log_handle.info("agent_find_similar request", extra={"chunk_id": payload.chunk_id})
         config = request.app.state.config
         client = get_opensearch_client(config)
 
@@ -376,14 +376,14 @@ async def external_find_similar(request: Request, payload: ExternalFindSimilarRe
         source_vector = source_doc.get("_source", {}).get("vector_embedding")
         if not source_vector:
             log_handle.warning(
-                "external_find_similar: source chunk missing vector_embedding; returning empty"
+                "agent_find_similar: source chunk missing vector_embedding; returning empty"
             )
             return JSONResponse(content=[], status_code=200)
 
         # NOTE: The "bool.must: knn" shape can be expensive and, depending on OpenSearch
         # version/plugins, may create heavy hybrid query execution.
         #
-        # Prefer pure knn query (like external_search does) and keep `k` == `size` so
+        # Prefer pure knn query (like agent_search does) and keep `k` == `size` so
         # we don't over-fetch.
         k = 10
         query_body: Dict[str, Any] = {
@@ -396,25 +396,25 @@ async def external_find_similar(request: Request, payload: ExternalFindSimilarRe
             response = client.search(index=config.OPENSEARCH_INDEX_NAME, body=query_body)
         except TransportError as te:
             # Example: all shards failed / task cancelled / circuit breaker, etc.
-            log_handle.exception("external_find_similar opensearch error: %s", te)
+            log_handle.exception("agent_find_similar opensearch error: %s", te)
             raise HTTPException(status_code=503, detail="OpenSearch query failed")
 
         hits = response.get("hits", {}).get("hits", [])
         language = source_doc.get("_source", {}).get("language", "hi")
-        log_handle.info("external_find_similar hits=%s language=%s", len(hits), language)
+        log_handle.info("agent_find_similar hits=%s language=%s", len(hits), language)
         results = [_chunk_from_hit(hit, language) for hit in hits]
         return JSONResponse(content=results, status_code=200)
 
     except HTTPException:
         raise
     except Exception as exc:
-        log_handle.exception(f"External find_similar failed: {exc}")
+        log_handle.exception(f"Agent find_similar failed: {exc}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/get_filter_options", summary="Get available filter values")
-async def external_get_filter_options(
-    request: Request, payload: ExternalFilterOptionsRequest = Body(...)
+async def agent_get_filter_options(
+    request: Request, payload: AgentFilterOptionsRequest = Body(...)
 ):
     """
     Return valid filter values for a given language and content type.
@@ -425,7 +425,7 @@ async def external_get_filter_options(
     """
     try:
         log_handle.info(
-            "external_get_filter_options request",
+            "agent_get_filter_options request",
             extra={"language": payload.language, "content_type": payload.content_type},
         )
         config = request.app.state.config
@@ -458,7 +458,7 @@ async def external_get_filter_options(
             "date_ranges": date_ranges if content_type == "Pravachan" else {},
         }
         log_handle.info(
-            "external_get_filter_options response sizes",
+            "agent_get_filter_options response sizes",
             extra={
                 "granths": len(granths),
                 "anuyogs": len(anuyogs),
@@ -469,13 +469,13 @@ async def external_get_filter_options(
         return JSONResponse(content=response, status_code=200)
 
     except Exception as exc:
-        log_handle.exception(f"External get_filter_options failed: {exc}")
+        log_handle.exception(f"Agent get_filter_options failed: {exc}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {exc}")
 
 
 @router.post("/get_pravachan", summary="Fetch all chunks of a Pravachan in order")
-async def external_get_pravachan(
-    request: Request, payload: ExternalGetPravachanRequest = Body(...)
+async def agent_get_pravachan(
+    request: Request, payload: AgentGetPravachanRequest = Body(...)
 ):
     """
     Fetch every paragraph of a specific numbered discourse (Pravachan), sorted by
@@ -484,7 +484,7 @@ async def external_get_pravachan(
     """
     try:
         log_handle.info(
-            "external_get_pravachan request",
+            "agent_get_pravachan request",
             extra={
                 "granth": payload.granth,
                 "pravachan_number": payload.pravachan_number,
@@ -522,15 +522,15 @@ async def external_get_pravachan(
             if not hits:
                 break
             all_hits.extend(hits)
-            log_handle.debug("external_get_pravachan page fetched hits=%s total=%s", len(hits), len(all_hits))
+            log_handle.debug("agent_get_pravachan page fetched hits=%s total=%s", len(hits), len(all_hits))
             search_after = hits[-1].get("sort")
             if len(hits) < query_body["size"]:
                 break
 
-        log_handle.info("external_get_pravachan total_hits=%s", len(all_hits))
+        log_handle.info("agent_get_pravachan total_hits=%s", len(all_hits))
         results = [_chunk_from_hit(hit, payload.language) for hit in all_hits]
         return JSONResponse(content=results, status_code=200)
 
     except Exception as exc:
-        log_handle.exception(f"External get_pravachan failed: {exc}")
+        log_handle.exception(f"Agent get_pravachan failed: {exc}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {exc}")
