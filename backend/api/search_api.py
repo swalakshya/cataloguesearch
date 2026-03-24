@@ -15,6 +15,7 @@ from backend.search.index_searcher import IndexSearcher
 from backend.utils import json_dumps, JSONResponse, log_memory_usage
 from utils.logger import setup_logging, VERBOSE_LEVEL_NUM, METRICS_LEVEL_NUM
 from backend.api.feedback_api import router as feedback_router
+from backend.api.external_api import router as external_router
 
 log_handle = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ app.add_middleware(
 
 # --- Include Routers ---
 app.include_router(feedback_router, prefix="/api")
+app.include_router(external_router, prefix="/api/external")
 
 @app.on_event("startup")
 async def initialize():
