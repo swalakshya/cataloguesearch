@@ -206,7 +206,7 @@ export const Header = ({ currentPage }) => {
                 </div>
                 <div className="h-32 md:h-40 flex flex-col items-center justify-center">
                     <h1 className="text-4xl font-bold text-slate-800 font-display">Aagam-Khoj (आगम-खोज)</h1>
-                    <p className="text-base text-slate-500 mt-1 font-sans">Get answers from Pravachans of Pujya Gurudev Shri Kanji Swami!</p>
+                    <p className="text-base text-slate-500 mt-1 font-sans">Explore Jain Shastras/Books and Pravachans of Pujya Gurudev Shri Kanji Swami!</p>
                 </div>
             </div>
         </div>

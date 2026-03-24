@@ -75,7 +75,7 @@ const About = () => {
                 A crucial question arises: Should artificial technology be used with such important content? Gurudev's Pravachans are akin to our Teerthankar's Vaani—how can AI be used to interpret their words?
             </p>
             <p className="mb-8 text-gray-700 leading-relaxed">
-                The short answer is that AI is not used to interpret Gurudev's words or his intention. Instead, AI serves merely as a tool to identify references that <em>possibly</em> match the input questions, providing direct references from Gurudev's Pravachans. Aagam Khoj does not generate answers; it provides word-for-word references from Gurudev's Pravachans themselves.
+                The short answer is that AI is not used to interpret Gurudev's words or his intention. Instead, AI serves merely as a tool to identify references that <em>possibly</em> match the input questions, providing direct references from Gurudev's Pravachans. Aagam Khoj generates answers which are strongly backed with Jain Shastras and Gurudev's Pravachans. It provides word-for-word references from these texts with each answer. This helps in finding answers from Jain Aagam easily.
             </p>
             
             

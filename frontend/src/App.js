@@ -14,7 +14,7 @@ import UsageGuide from './components/UsageGuide';
 import SearchIndex from './components/SearchIndex';
 import UIEval from './components/eval/UIEval';
 import SearchableContentWidget from './components/SearchableContentWidget';
-import { Spinner, ChevronUpIcon, ChevronDownIcon, ExpandIcon } from './components/SharedComponents';
+import { Spinner, ChevronUpIcon, ChevronDownIcon, ExpandIcon, PdfIcon } from './components/SharedComponents';
 
 // Import API service
 import { api } from './services/api';
@@ -184,6 +184,18 @@ const AppContent = () => {
         setModalData(null);
         setIsContextLoading(false);
         setShowTipsModal(false);
+        setLlmAnswer(null);
+        setLlmReferences([]);
+        setLlmError(null);
+        setLlmLoading(false);
+        setChatMessages([]);
+        setChatInput('');
+        setChatInputVisible(false);
+        setHomeMode(null);
+        if (chatSessionId) {
+            api.closeChatSession(chatSessionId).catch(() => null);
+            setChatSessionId(null);
+        }
     };
 
     const currentPage = currentPageState;
@@ -193,6 +205,12 @@ const AppContent = () => {
         // Reset search state when navigating to Home
         if (page === 'home') {
             resetSearchState();
+        } else if (chatSessionId) {
+            api.closeChatSession(chatSessionId).catch(() => null);
+            setChatSessionId(null);
+            setChatMessages([]);
+            setChatInput('');
+            setChatInputVisible(false);
         }
         
         const routes = {
@@ -234,7 +252,25 @@ const AppContent = () => {
     const [isGranthProseLoading, setIsGranthProseLoading] = useState(false);
     const [showWelcomePopup, setShowWelcomePopup] = useState(false);
     const [showTipsModal, setShowTipsModal] = useState(false);
+    const [llmAnswer, setLlmAnswer] = useState(null);
+    const [llmReferences, setLlmReferences] = useState([]);
+    const [llmError, setLlmError] = useState(null);
+    const [llmLoading, setLlmLoading] = useState(false);
+    const [chatSessionId, setChatSessionId] = useState(null);
+    const [chatMessages, setChatMessages] = useState([]);
+    const [chatInput, setChatInput] = useState('');
+    const [chatInputVisible, setChatInputVisible] = useState(false);
     const PAGE_SIZE = 20;
+    const llmProvider = (process.env.REACT_APP_LLM_PROVIDER || '').trim();
+    const [llmAvailable, setLlmAvailable] = useState(false);
+    const [homeMode, setHomeMode] = useState('search');
+    const isChatMode = homeMode === 'chat';
+    const chatEnabled = isChatMode;
+    const showAnswerButton = llmAvailable && isChatMode;
+
+    useEffect(() => {
+        api.checkLlmHealth().then(setLlmAvailable);
+    }, []);
 
     useEffect(() => {
         api.getMetadata().then(data => {
@@ -243,6 +279,38 @@ const AppContent = () => {
             setMetadata(data['Pravachan']?.[language] || {});
         });
     }, []);
+
+    useEffect(() => {
+        if (!chatEnabled) return;
+        try {
+            const stored = localStorage.getItem('llmChatSession');
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                if (parsed?.sessionId) {
+                    setChatSessionId(parsed.sessionId);
+                    setChatMessages(parsed.messages || []);
+                }
+            }
+        } catch (error) {
+            console.warn('localStorage not available:', error);
+        }
+    }, [chatEnabled]);
+
+    useEffect(() => {
+        if (!chatEnabled) return;
+        try {
+            if (chatSessionId) {
+                localStorage.setItem(
+                    'llmChatSession',
+                    JSON.stringify({ sessionId: chatSessionId, messages: chatMessages })
+                );
+            } else {
+                localStorage.removeItem('llmChatSession');
+            }
+        } catch (error) {
+            console.warn('localStorage not available:', error);
+        }
+    }, [chatEnabled, chatSessionId, chatMessages]);
 
     // Update metadata when language or contentTypes selection changes
     useEffect(() => {
@@ -331,12 +399,54 @@ const AppContent = () => {
         };
     }, [query, activeFilters, contentTypes, language, exactMatch, excludeWords, searchType, startYear, endYear]);
 
+    function buildLlmFilters() {
+        const filters = {};
+        const types = [];
+        if (contentTypes.pravachans) types.push('Pravachan');
+        if (contentTypes.granths) types.push('Granth');
+        if (types.length) filters.content_type = types;
+
+        if (startYear) filters.year_from = Number(startYear);
+        if (endYear) filters.year_to = Number(endYear);
+
+        activeFilters.forEach((filter) => {
+            const key = String(filter.key || '').toLowerCase();
+            const value = filter.value;
+            if (!value) return;
+            if (key.includes('granth')) {
+                filters.granth = value;
+            } else if (key.includes('anuyog')) {
+                filters.anuyog = value;
+            } else if (
+                key.includes('author') ||
+                key.includes('tikakaar') ||
+                key.includes('teekakar') ||
+                key.includes('bhasha vachanika') ||
+                key.includes('contributor')
+            ) {
+                filters.contributor = value;
+            }
+        });
+
+        return filters;
+    }
+
     const handleSearch = useCallback(async (page = 1) => {
         if (!query.trim()) {
             alert("Please enter a search query.");
             return;
         }
         setIsLoading(true);
+        setLlmAnswer(null);
+        setLlmReferences([]);
+        setLlmError(null);
+        setChatMessages([]);
+        setChatInput('');
+        setChatInputVisible(false);
+        if (chatSessionId) {
+            api.closeChatSession(chatSessionId).catch(() => null);
+            setChatSessionId(null);
+        }
         setPravachanPage(page);
         setSimilarDocumentsData(null);
         setSourceDocForSimilarity(null);
@@ -352,6 +462,117 @@ const AppContent = () => {
         }
         setIsLoading(false);
     }, [query, buildSearchPayload]);
+
+    async function handleChatSend(sessionId, message) {
+        if (!message.trim()) {
+            return;
+        }
+        setLlmLoading(true);
+        setLlmError(null);
+        setChatMessages(prev => [...prev, { role: 'user', content: message }, { role: 'assistant', pending: true }]);
+        setChatInput('');
+        setChatInputVisible(false);
+        try {
+            const data = await api.sendChatMessage(sessionId, {
+                role: 'user',
+                content: message,
+                filters: buildLlmFilters()
+            });
+            setChatMessages(prev => {
+                const updated = [...prev];
+                const idx = updated.findIndex(item => item.role === 'assistant' && item.pending);
+                if (idx !== -1) {
+                    updated[idx] = {
+                        role: 'assistant',
+                        content: data.answer || '',
+                        references: data.references || []
+                    };
+                    return updated;
+                }
+                return [
+                    ...updated,
+                    {
+                        role: 'assistant',
+                        content: data.answer || '',
+                        references: data.references || []
+                    }
+                ];
+            });
+        } catch (error) {
+            setLlmError('Could not continue chat. Please try again.');
+            setChatMessages(prev => prev.filter(item => !(item.role === 'assistant' && item.pending)));
+        } finally {
+            setLlmLoading(false);
+        }
+    }
+
+    async function handleChatStart(firstQuestion) {
+        setLlmLoading(true);
+        setLlmError(null);
+        setChatMessages([]);
+        setChatInput('');
+        setChatInputVisible(false);
+        const languageCode = language === 'gujarati' ? 'gu' : 'hi';
+        try {
+            const session = await api.createChatSession({
+                language: languageCode,
+                ...(llmProvider ? { provider: llmProvider } : {})
+            });
+            setChatSessionId(session.session_id);
+            await handleChatSend(session.session_id, firstQuestion);
+        } catch (error) {
+            setLlmError('Could not start chat. Please try again.');
+        } finally {
+            setLlmLoading(false);
+        }
+    }
+
+    async function handleAnswer() {
+        if (!query.trim()) {
+            alert("Please enter a search query.");
+            return;
+        }
+        if (chatEnabled) {
+            await handleChatStart(query);
+            return;
+        }
+        setLlmLoading(true);
+        setLlmError(null);
+        setLlmAnswer(null);
+        setLlmReferences([]);
+
+        const languageCode = language === 'gujarati' ? 'gu' : 'hi';
+        try {
+            const sessionPayload = {
+                language: languageCode,
+                ...(llmProvider ? { provider: llmProvider } : {})
+            };
+            const session = await api.createChatSession(sessionPayload);
+            const data = await api.sendChatMessage(session.session_id, {
+                role: 'user',
+                content: query,
+                filters: buildLlmFilters()
+            });
+            setLlmAnswer(data.answer || '');
+            setLlmReferences(data.references || []);
+            await api.closeChatSession(session.session_id).catch(() => null);
+        } catch (error) {
+            setLlmError('Could not generate answer. Please try again.');
+        } finally {
+            setLlmLoading(false);
+        }
+    }
+
+    const handleEndChat = useCallback(async () => {
+        if (chatSessionId) {
+            await api.closeChatSession(chatSessionId).catch(() => null);
+        }
+        setChatSessionId(null);
+        setChatMessages([]);
+        setChatInput('');
+        setChatInputVisible(false);
+        setLlmError(null);
+    }, [chatSessionId]);
 
     const handlePravachanSearch = useCallback(async (page = 1) => {
         if (!query.trim()) {
@@ -490,6 +711,99 @@ const AppContent = () => {
 
     const showSearchInterface = currentPage === 'home';
 
+    const cleanAnswerText = (answerText) => {
+        if (!answerText) return '';
+        const refIdx = answerText.search(/\n?References\b/i);
+        const trimmed = refIdx >= 0 ? answerText.slice(0, refIdx) : answerText;
+        return trimmed.trim();
+    };
+
+    const formatAnswerHtml = (answerText) => {
+        if (!answerText) return '';
+        let sanitizedAnswer = cleanAnswerText(answerText);
+        sanitizedAnswer = sanitizedAnswer.replace(/<\/sub>\s*]/gi, '</sub>');
+        const headingParts = [];
+        sanitizedAnswer = sanitizedAnswer.replace(/^#{2,3}\s*(.+)$/gm, (match, content) => {
+            headingParts.push(content);
+            return `__HEADING_BOLD_${headingParts.length - 1}__`;
+        });
+        sanitizedAnswer = sanitizedAnswer.replace(/^\s*\*\*(.+?)\*\*\s*$/gm, (match, content) => {
+            headingParts.push(content);
+            return `__HEADING_BOLD_${headingParts.length - 1}__`;
+        });
+        const boldParts = [];
+        const italicParts = [];
+        const citationParts = [];
+
+        let text = sanitizedAnswer.replace(/\*\*(.+?)\*\*/gs, (match, content) => {
+            boldParts.push(content);
+            return `__BOLD_${boldParts.length - 1}__`;
+        });
+
+        text = text.replace(/<sub>([\s\S]*?)<\/sub>/gi, (match, content) => {
+            citationParts.push(content);
+            return `__CITE_${citationParts.length - 1}__`;
+        });
+
+        text = text.replace(/“([^”]+)”/g, (match, content) => {
+            italicParts.push(content);
+            return `__ITAL_${italicParts.length - 1}__`;
+        });
+
+        text = text.replace(/"([^"]+)"/g, (match, content) => {
+            italicParts.push(content);
+            return `__ITAL_${italicParts.length - 1}__`;
+        });
+
+        const escapeHtml = (value) =>
+            value
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+
+        text = escapeHtml(text);
+
+        text = text.replace(/__CITE_(\d+)__(\s*[|.।])/g, (match, idx, punct) => {
+            return `${punct}__CITE_${idx}__`;
+        });
+
+        let html = text.replace(/\n/g, '<br/>');
+        html = html.replace(/__HEADING_BOLD_(\d+)__/g, (match, idx) => {
+            const content = headingParts[Number(idx)] || '';
+            return `<strong>${escapeHtml(content)}</strong><hr class="llm-bold-separator"/>`;
+        });
+        html = html.replace(/__BOLD_(\d+)__/g, (match, idx) => {
+            const content = boldParts[Number(idx)] || '';
+            return `<strong>${escapeHtml(content)}</strong>`;
+        });
+        html = html.replace(/__ITAL_(\d+)__/g, (match, idx) => {
+            const content = italicParts[Number(idx)] || '';
+            return `<em>${escapeHtml(content)}</em>`;
+        });
+        html = html.replace(/__CITE_(\d+)__/g, (match, idx) => {
+            const content = citationParts[Number(idx)] || '';
+            const escaped = escapeHtml(content);
+            return `<span class="llm-citation-line"><sub class="llm-citation"><em>${escaped}</em></sub></span>`;
+        });
+
+        return html;
+    };
+
+    const parseReference = (ref) => {
+        const withoutFileUrl = ref.replace(/file_url\s*:\s*/i, '').trim();
+        const urlMatch = withoutFileUrl.match(/https?:\/\/\S+/);
+        let text = withoutFileUrl
+            .replace(urlMatch?.[0] || '', '')
+            .trim()
+            .replace(/[-–—\s]+$/, '');
+        text = text.replace(/((?:Page|पृष्ठ)\s*\d+)\s*[^-–—\s]*$/i, '$1');
+        text = text.replace(/[),.।;:]+$/g, '').trim();
+        return {
+            text,
+            url: urlMatch ? urlMatch[0] : null
+        };
+    };
+
     return (
         <div className="bg-slate-50 text-slate-900 min-h-screen font-sans">
             {modalData && (
@@ -537,26 +851,61 @@ const AppContent = () => {
 
                     {showSearchInterface && (
                         <main>
-                            <SearchableContentWidget />
-                            <div className="bg-white p-3 md:p-4 rounded-lg shadow-sm border border-slate-200 mb-4">
-                                {/* Row 1: Search Bar and Button */}
-                                <div className="flex items-center gap-2">
-                                    <div className="flex-grow">
-                                        <SearchBar
-                                            query={query}
-                                            setQuery={setQuery}
-                                            onSearch={() => handleSearch(1)}
-                                            language={language}
-                                        />
-                                    </div>
+                            {llmAvailable && !isChatMode && (
+                                <div className="flex items-center justify-between bg-lime-50 border border-lime-200 rounded-lg px-4 py-2.5 mb-4 text-sm">
+                                    <span className="text-lime-800">✨ AI Chat (beta) is available.</span>
                                     <button
-                                        onClick={() => handleSearch(1)}
-                                        disabled={isLoading}
-                                        className="bg-sky-600 text-white font-bold py-3 px-4 rounded-md text-base hover:bg-sky-700 transition duration-300 disabled:bg-slate-300 flex items-center justify-center"
+                                        onClick={() => setHomeMode('chat')}
+                                        className="ml-4 flex-shrink-0 bg-lime-600 hover:bg-lime-700 text-white text-xs font-semibold px-3 py-1.5 rounded-md transition-colors"
                                     >
-                                        {isLoading ? <Spinner /> : 'Search'}
+                                        Try it
                                     </button>
                                 </div>
+                            )}
+
+                            {isChatMode && (
+                                <div className="flex items-center mb-4 text-sm">
+                                    <button
+                                        onClick={() => setHomeMode('search')}
+                                        className="text-slate-500 hover:text-slate-700 flex items-center gap-1 transition-colors"
+                                    >
+                                        ← Back to Search
+                                    </button>
+                                    <span className="ml-3 bg-lime-100 text-lime-800 text-xs font-semibold px-2 py-0.5 rounded-full">Beta</span>
+                                </div>
+                            )}
+
+                                    <SearchableContentWidget />
+                                    <div className="bg-white p-3 md:p-4 rounded-lg shadow-sm border border-slate-200 mb-4">
+                                        {/* Row 1: Search Bar and Button */}
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex-grow">
+                                                <SearchBar
+                                                    query={query}
+                                                    setQuery={setQuery}
+                                                    onSearch={() => isChatMode ? handleAnswer() : handleSearch(1)}
+                                                    language={language}
+                                                />
+                                            </div>
+                                            {!isChatMode && (
+                                                <button
+                                                    onClick={() => handleSearch(1)}
+                                                    disabled={isLoading}
+                                                    className="bg-sky-600 text-white font-bold py-3 px-4 rounded-md text-base hover:bg-sky-700 transition duration-300 disabled:bg-slate-300 flex items-center justify-center"
+                                                >
+                                                    {isLoading ? <Spinner /> : 'Search'}
+                                                </button>
+                                            )}
+                                            {showAnswerButton && (
+                                                <button
+                                                    onClick={handleAnswer}
+                                                    disabled={llmLoading}
+                                                    className="bg-lime-500 text-slate-900 font-bold py-3 px-4 rounded-md text-base hover:bg-lime-600 transition duration-300 disabled:bg-slate-300 flex items-center justify-center"
+                                                >
+                                                    {llmLoading ? <Spinner /> : 'Ask'}
+                                                </button>
+                                            )}
+                                        </div>
 
                                 {/* Row 2: Filters and Info */}
                                 <div className="flex items-center justify-between mt-3">
@@ -582,45 +931,197 @@ const AppContent = () => {
                                 </div>
 
                                 {/* Filters section that shows/hides */}
-                                {showFilters && (
-                                    <div className="mt-4 border-t border-slate-200 pt-4">
-                                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                                            <MetadataFilters
-                                                metadata={allMetadata}
-                                                activeFilters={activeFilters}
-                                                onAddFilter={addFilter}
-                                                onRemoveFilter={removeFilter}
-                                                contentTypes={contentTypes}
-                                                setContentTypes={setContentTypes}
-                                                language={language}
-                                                startYear={startYear}
-                                                setStartYear={setStartYear}
-                                                endYear={endYear}
-                                                setEndYear={setEndYear}
-                                            />
-                                            <SearchOptions
-                                                language={language}
-                                                setLanguage={setLanguage}
-                                            />
-                                            <AdvancedSearch
-                                                exactMatch={exactMatch}
-                                                setExactMatch={setExactMatch}
-                                                excludeWords={excludeWords}
-                                                setExcludeWords={setExcludeWords}
-                                            />
-                                        </div>
+                                        {showFilters && (
+                                            <div className="mt-4 border-t border-slate-200 pt-4">
+                                                <div className={`grid grid-cols-1 ${isChatMode ? 'lg:grid-cols-2' : 'lg:grid-cols-3'} gap-8`}>
+                                                    <MetadataFilters
+                                                        metadata={allMetadata}
+                                                        activeFilters={activeFilters}
+                                                        onAddFilter={addFilter}
+                                                        onRemoveFilter={removeFilter}
+                                                        contentTypes={contentTypes}
+                                                        setContentTypes={setContentTypes}
+                                                        language={language}
+                                                        startYear={startYear}
+                                                        setStartYear={setStartYear}
+                                                        endYear={endYear}
+                                                        setEndYear={setEndYear}
+                                                    />
+                                                    <SearchOptions
+                                                        language={language}
+                                                        setLanguage={setLanguage}
+                                                    />
+                                                    {!isChatMode && (
+                                                        <AdvancedSearch
+                                                            exactMatch={exactMatch}
+                                                            setExactMatch={setExactMatch}
+                                                            excludeWords={excludeWords}
+                                                            setExcludeWords={setExcludeWords}
+                                                        />
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                )}
-                            </div>
-                            
-                            {isLoading && (
+
+                            {homeMode && isLoading && (
                                 <div className="text-center py-8">
                                     <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-sky-500"></div>
                                     <p className="mt-3 text-base text-slate-500">Searching...</p>
                                 </div>
                             )}
+
+                            {homeMode && llmAvailable && !chatEnabled && (llmAnswer || llmError || llmLoading) && (
+                                <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 mb-4">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h3 className="text-lg font-semibold text-slate-800">Answer</h3>
+                                        {llmLoading && (
+                                            <div className="flex items-center text-sm text-slate-500">
+                                                <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-lime-500 mr-2"></div>
+                                                Generating...
+                                            </div>
+                                        )}
+                                    </div>
+                                    {llmError && (
+                                        <div className="text-red-600 text-sm">{llmError}</div>
+                                    )}
+                                    {(llmAnswer || llmReferences.length > 0) && (
+                                        <div className="llm-answer-scroll">
+                                            {llmAnswer && (
+                                                <div
+                                                    className="text-slate-800 leading-relaxed text-base"
+                                                    dangerouslySetInnerHTML={{ __html: formatAnswerHtml(llmAnswer) }}
+                                                />
+                                            )}
+                                            {llmReferences.length > 0 && (
+                                                <div className="mt-4 border-t border-slate-200 pt-3">
+                                                    <h4 className="text-sm font-semibold text-slate-600 uppercase tracking-wider mb-2">References</h4>
+                                                    <div className="space-y-2">
+                                                        {llmReferences.map((ref, idx) => {
+                                                            const { text, url } = parseReference(ref);
+                                                            return (
+                                                                <div key={`${ref}-${idx}`} className="flex items-center justify-between gap-3 text-sm text-slate-700">
+                                                                    <span className="flex-1">{text || ref}</span>
+                                                                    {url && (
+                                                                        <a
+                                                                            href={url}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            className="text-blue-600 hover:text-blue-800 font-medium flex items-center whitespace-nowrap"
+                                                                        >
+                                                                            <PdfIcon />View PDF
+                                                                        </a>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {homeMode && llmAvailable && isChatMode && (chatMessages.length > 0 || llmError || llmLoading) && (
+                                <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 mb-4">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h3 className="text-lg font-semibold text-slate-800">Answer</h3>
+                                        {llmLoading && (
+                                            <div className="flex items-center text-sm text-slate-500">
+                                                <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-lime-500 mr-2"></div>
+                                                Generating...
+                                            </div>
+                                        )}
+                                    </div>
+                                    {llmError && (
+                                        <div className="text-red-600 text-sm mb-3">{llmError}</div>
+                                    )}
+                                    <div className="llm-answer-scroll space-y-4">
+                                        {chatMessages.map((msg, idx) => (
+                                            <div key={`${msg.role}-${idx}`} className={msg.role === 'user' ? 'bg-slate-50 p-3 rounded-md' : 'bg-white'}>
+                                                {msg.role === 'user' ? (
+                                                    <div className="text-slate-700 text-sm font-semibold">You</div>
+                                                ) : (
+                                                    <div className="text-slate-700 text-sm font-semibold">Answer</div>
+                                                )}
+                                                {msg.pending ? (
+                                                    <div className="flex items-center text-sm text-slate-500 mt-2">
+                                                        <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-lime-500 mr-2"></div>
+                                                        Generating answer...
+                                                    </div>
+                                                ) : (
+                                                    <div
+                                                        className="text-slate-800 leading-relaxed text-base mt-2"
+                                                        dangerouslySetInnerHTML={{ __html: formatAnswerHtml(msg.content || '') }}
+                                                    />
+                                                )}
+                                                {msg.references && msg.references.length > 0 && (
+                                                    <div className="mt-3 border-t border-slate-200 pt-3">
+                                                        <h4 className="text-sm font-semibold text-slate-600 uppercase tracking-wider mb-2">References</h4>
+                                                        <div className="space-y-2">
+                                                            {msg.references.map((ref, refIdx) => {
+                                                                const { text, url } = parseReference(ref);
+                                                                return (
+                                                                    <div key={`${ref}-${refIdx}`} className="flex items-center justify-between gap-3 text-sm text-slate-700">
+                                                                        <span className="flex-1">{text || ref}</span>
+                                                                        {url && (
+                                                                            <a
+                                                                                href={url}
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                                className="text-blue-600 hover:text-blue-800 font-medium flex items-center whitespace-nowrap"
+                                                                            >
+                                                                                <PdfIcon />View PDF
+                                                                            </a>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="mt-4 flex flex-wrap gap-2">
+                                        <button
+                                            onClick={() => setChatInputVisible(true)}
+                                            disabled={llmLoading}
+                                            className="bg-sky-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-sky-700 transition duration-200 disabled:bg-slate-300"
+                                        >
+                                            Ask more
+                                        </button>
+                                        <button
+                                            onClick={handleEndChat}
+                                            disabled={llmLoading}
+                                            className="bg-slate-200 text-slate-700 font-semibold py-2 px-4 rounded-md hover:bg-slate-300 transition duration-200 disabled:bg-slate-100"
+                                        >
+                                            End chat
+                                        </button>
+                                    </div>
+                                    {chatInputVisible && (
+                                        <div className="mt-4 flex items-center gap-2">
+                                            <input
+                                                type="text"
+                                                value={chatInput}
+                                                onChange={(e) => setChatInput(e.target.value)}
+                                                placeholder="Ask a follow-up question..."
+                                                className="flex-grow p-2 bg-slate-50 border border-slate-300 rounded-md text-slate-800 text-base focus:ring-1 focus:ring-sky-500"
+                                            />
+                                            <button
+                                                onClick={() => handleChatSend(chatSessionId, chatInput)}
+                                                disabled={llmLoading || !chatInput.trim()}
+                                                className="bg-lime-500 text-slate-900 font-semibold py-2 px-4 rounded-md hover:bg-lime-600 transition duration-200 disabled:bg-slate-300"
+                                            >
+                                                Send
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                             
-                            {!isLoading && (searchData || similarDocumentsData) && (
+                            {homeMode && !isLoading && (searchData || similarDocumentsData) && (
                                 <div className="mt-4">
                                     <SuggestionsCard
                                         suggestions={searchData?.suggestions}
@@ -696,11 +1197,7 @@ const AppContent = () => {
                                 </div>
                             )}
                             
-                            {!isLoading && !searchData && (
-                                <div className="text-center py-8 text-base text-slate-500 bg-white rounded-lg border border-slate-200">
-                                    Enter a query and click Search to see results.
-                                </div>
-                            )}
+                            {!isLoading && !searchData && null}
                         </main>
                     )}
 
