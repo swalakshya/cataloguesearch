@@ -57,7 +57,7 @@ def _external_search(base_url, query, content_type=None):
     }
     verify_tls = _should_verify_tls(base_url)
     r = requests.post(
-        f"{base_url}/api/external/search",
+        f"{base_url}/api/agent/search",
         json=payload,
         verify=verify_tls,
     )
@@ -65,7 +65,6 @@ def _external_search(base_url, query, content_type=None):
     return r.json()
 
 
-@pytest.mark.integration
 class TestExternalAPI:
     """External API integration tests against a running cataloguesearch-api container."""
 
@@ -98,7 +97,7 @@ class TestExternalAPI:
 
         payload = {"chunk_id": chunk_id, "direction": "both", "steps": 1}
         r = requests.post(
-            f"{api_base_url}/api/external/navigate",
+            f"{api_base_url}/api/agent/navigate",
             json=payload,
             verify=_should_verify_tls(api_base_url),
         )
@@ -115,7 +114,7 @@ class TestExternalAPI:
 
     #     payload = {"chunk_id": chunk_id}
     #     r = requests.post(
-    #         f"{api_base_url}/api/external/find_similar",
+    #         f"{api_base_url}/api/agent/find_similar",
     #         json=payload,
     #         verify=_should_verify_tls(api_base_url),
     #     )
@@ -126,7 +125,7 @@ class TestExternalAPI:
     def test_external_get_filter_options(self, api_base_url):
         payload = {"language": "hi", "content_type": "Granth"}
         r = requests.post(
-            f"{api_base_url}/api/external/get_filter_options",
+            f"{api_base_url}/api/agent/get_filter_options",
             json=payload,
             verify=_should_verify_tls(api_base_url),
         )
@@ -139,7 +138,7 @@ class TestExternalAPI:
     def test_external_get_pravachan_returns_list(self, api_base_url):
         payload = {"granth": "Samaysaar", "pravachan_number": "1", "language": "hi"}
         r = requests.post(
-            f"{api_base_url}/api/external/get_pravachan",
+            f"{api_base_url}/api/agent/get_pravachan",
             json=payload,
             verify=_should_verify_tls(api_base_url),
         )

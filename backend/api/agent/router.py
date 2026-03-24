@@ -10,7 +10,7 @@ from backend.utils import JSONResponse
 
 log_handle = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["agent"])
 
 
 class ExternalSearchRequest(BaseModel):
@@ -165,8 +165,19 @@ def _build_filters(payload: ExternalSearchRequest) -> List[Dict[str, Any]]:
     return filters
 
 
-@router.post("/search")
+@router.post("/search", summary="Search catalogue chunks")
 async def external_search(request: Request, payload: ExternalSearchRequest = Body(...)):
+    """
+    Hybrid search over the Jain texts corpus.
+
+    For short or exact-match queries (lexical mode), runs a boolean keyword search.
+    For natural-language queries (semantic mode), generates a vector embedding, retrieves
+    the top candidates via KNN, and optionally re-scores them with a cross-encoder reranker
+    (BAAI/bge-reranker-base) before returning the top N results.
+
+    The `contributor` filter matches across Author, Tikakaar, and Bhasha Vachanika — callers
+    do not need to know which role a person holds.
+    """
     try:
         log_handle.info(
             "external_search request",
@@ -274,8 +285,14 @@ async def external_search(request: Request, payload: ExternalSearchRequest = Bod
         raise HTTPException(status_code=500, detail=f"Internal server error: {exc}")
 
 
-@router.post("/navigate")
+@router.post("/navigate", summary="Navigate paragraphs around a chunk")
 async def external_navigate(request: Request, payload: ExternalNavigateRequest = Body(...)):
+    """
+    Walk sequentially through a document by paragraph, starting from a given chunk.
+
+    `direction="both"` with `steps=1` returns the previous, current, and next paragraphs —
+    useful for reading context around a search result. `steps` can go up to 20.
+    """
     try:
         log_handle.info(
             "external_navigate request",
@@ -340,8 +357,12 @@ async def external_navigate(request: Request, payload: ExternalNavigateRequest =
         raise HTTPException(status_code=500, detail=f"Internal server error: {exc}")
 
 
-@router.post("/find_similar")
+@router.post("/find_similar", summary="Find semantically similar chunks")
 async def external_find_similar(request: Request, payload: ExternalFindSimilarRequest = Body(...)):
+    """
+    Given a chunk, find the top 10 semantically related passages across the entire corpus
+    using vector KNN search on the chunk's stored embedding.
+    """
     try:
         log_handle.info("external_find_similar request", extra={"chunk_id": payload.chunk_id})
         config = request.app.state.config
@@ -391,10 +412,17 @@ async def external_find_similar(request: Request, payload: ExternalFindSimilarRe
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/get_filter_options")
+@router.post("/get_filter_options", summary="Get available filter values")
 async def external_get_filter_options(
     request: Request, payload: ExternalFilterOptionsRequest = Body(...)
 ):
+    """
+    Return valid filter values for a given language and content type.
+
+    Reads live from the metadata index — automatically reflects new Granths, Anuyogs,
+    contributors, and date ranges as content is indexed. Call this before search when
+    you need exact filter values to avoid mismatches.
+    """
     try:
         log_handle.info(
             "external_get_filter_options request",
@@ -445,10 +473,15 @@ async def external_get_filter_options(
         raise HTTPException(status_code=500, detail=f"Internal server error: {exc}")
 
 
-@router.post("/get_pravachan")
+@router.post("/get_pravachan", summary="Fetch all chunks of a Pravachan in order")
 async def external_get_pravachan(
     request: Request, payload: ExternalGetPravachanRequest = Body(...)
 ):
+    """
+    Fetch every paragraph of a specific numbered discourse (Pravachan), sorted by
+    paragraph order. Useful when the full text of a discourse is needed rather than
+    just the top search results.
+    """
     try:
         log_handle.info(
             "external_get_pravachan request",
