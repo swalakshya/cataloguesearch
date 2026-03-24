@@ -19,6 +19,7 @@ import os
 import shutil
 import socket
 import sys
+import tarfile
 import time
 import urllib.error
 import urllib.request
@@ -101,7 +102,7 @@ def _docker_request(method: str, path: str, body: dict | None = None) -> dict:
     raw = resp.read().decode("utf-8", errors="replace")
     conn.close()
 
-    if resp.status not in (200, 201, 204):
+    if resp.status not in (200, 201, 204, 304):
         raise RuntimeError(
             f"❌ Docker API {method} {path} → HTTP {resp.status}: {raw[:400]}"
         )
@@ -184,6 +185,7 @@ def _confirm(local_dir: Path):
     print("  5. Create snapshot: cataloguesearch_prod_metadata")
     print("  6. Verify both snapshots have state=SUCCESS")
     print("  7. Verify snapshot files exist on disk")
+    print("  8. Create tarball: snapshots.tar.gz alongside the snapshots folder")
     print()
     print(f"⚠️  WARNING: Step 2 will CLEAR all existing files in:")
     print(f"           {local_dir}")
@@ -211,6 +213,11 @@ def step1_delete_repository():
         log_handle.info("✅ Step 1 done. Repository '%s' deleted.", REPO_NAME)
     elif status == 404:
         log_handle.info("✅ Step 1 done. Repository '%s' did not exist — nothing to delete.", REPO_NAME)
+    elif status == 0:
+        log_handle.info(
+            "✅ Step 1 done. OpenSearch not reachable (container likely stopped from a "
+            "previous interrupted run) — assuming no repository to delete."
+        )
     else:
         raise RuntimeError(
             f"❌ Unexpected response deleting repository: HTTP {status} — {body}"
@@ -448,6 +455,22 @@ def step7_verify_files_on_disk(local_dir: Path):
 
 
 # ---------------------------------------------------------------------------
+# Step 8: Create tarball of the snapshots directory
+# ---------------------------------------------------------------------------
+
+def step8_create_tarball(local_dir: Path):
+    tarball_path = local_dir.parent / (local_dir.name + ".tar.gz")
+    log_handle.info("🔄 Step 8: Creating tarball at %s...", tarball_path)
+
+    with tarfile.open(tarball_path, "w:gz") as tar:
+        tar.add(local_dir, arcname=local_dir.name)
+
+    size_mb = tarball_path.stat().st_size / (1024 * 1024)
+    log_handle.info("✅ Step 8 done. Tarball created: %s (%.1f MB)", tarball_path, size_mb)
+    return tarball_path
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -468,11 +491,13 @@ def main():
         step5_create_snapshot_metadata()
         step6_verify_snapshots()
         step7_verify_files_on_disk(local_dir)
+        tarball_path = step8_create_tarball(local_dir)
 
         print()
         print("=" * 62)
         print("✅ All snapshots created successfully!")
-        print(f"   Location: {local_dir}")
+        print(f"   Snapshots folder : {local_dir}")
+        print(f"   Tarball          : {tarball_path}")
         print("=" * 62)
         print()
         log_handle.info("✅ Script completed successfully.")
