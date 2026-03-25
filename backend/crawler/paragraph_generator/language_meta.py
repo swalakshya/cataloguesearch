@@ -71,11 +71,11 @@ class HindiMeta(LanguageMeta):
 
     @property
     def sentence_terminators(self) -> tuple:
-        return ('।', '?', '!', '।।', ')', ']', '}')
+        return ('।', '?', '!', '।।', ')', ']', '}', "'", '"')
 
     @property
     def punctuation_suffixes(self) -> tuple:
-        return ('।', '?', '!', ':', ')', ']', '}')
+        return ('।', '?', '!', ':', ')', ']', '}', "'", '"')
 
     def normalize_dialogue_patterns(self, text: str) -> str:
         """
@@ -102,11 +102,11 @@ class GujaratiMeta(LanguageMeta):
     @property
     def sentence_terminators(self) -> tuple:
         # Gujarati includes '.' as sentence terminator
-        return ('।', '.', '?', '!', '।।', ')', ']', '}')
+        return ('।', '.', '?', '!', '।।', ')', ']', '}', "'", '"')
 
     @property
     def punctuation_suffixes(self) -> tuple:
-        return ('।', '.', '?', '!', ':', ')', ']', '}')
+        return ('।', '.', '?', '!', ':', ')', ']', '}', "'", '"')
 
     def normalize_dialogue_patterns(self, text: str) -> str:
         """

@@ -74,7 +74,9 @@ def indexed_documents(setup, indexing_module):
         ],
         "crop": {
             "top": 8,
-            "bottom": 8
+            "bottom": 8,
+            "left": 1,
+            "right": 1
         }
     }
 
@@ -530,7 +532,9 @@ def test_dry_run_behavior(setup, indexing_module):
         ],
         "crop": {
             "top": 8,
-            "bottom": 8
+            "bottom": 8,
+            "left": 1,
+            "right": 1
         }
     }
 

@@ -128,7 +128,7 @@ Full reference of all options:
 |-----|------|---------|-------------|
 | `ocr_engine` | string | `"tesseract"` | `"tesseract"` or `"llm"` — selects the OCR pipeline |
 | `chunk_strategy` | string | `"advanced"` | `"advanced"` (Tesseract path) or `"llm"` (LLM path) |
-| `crop` | object | `{}` | Percentage of page height to strip before OCR. Keys: `top`, `bottom` |
+| `crop` | object | `{}` | Percentage to strip before OCR. Keys: `top`, `bottom` (% of height), `left`, `right` (% of width) |
 | `psm` | int | 3 | Tesseract page segmentation mode (only for Tesseract path) |
 | `header_prefix` | array | `[]` | Lines starting with these strings are treated as headers/footers and excluded |
 | `header_regex` | array | `[]` | Regex patterns that match header/footer lines |
@@ -219,7 +219,7 @@ You can set a different crop per-file by adding a `"<filename>"` key alongside `
 ```json
 {
   "default": {
-    "crop": { "top": 8, "bottom": 6 }
+    "crop": { "top": 8, "bottom": 6, "left": 0, "right": 0 }
   },
   "Samaysar_Vol2": {
     "crop": { "top": 12, "bottom": 8 }

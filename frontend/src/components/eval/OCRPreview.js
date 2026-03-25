@@ -8,6 +8,8 @@ const OCRPreview = ({ selectedFile: propSelectedFile, baseDirectoryHandles }) =>
     const [pdfFileName, setPdfFileName] = useState('');
     const [cropTop, setCropTop] = useState(0);
     const [cropBottom, setCropBottom] = useState(0);
+    const [cropLeft, setCropLeft] = useState(0);
+    const [cropRight, setCropRight] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
     const [previewPages, setPreviewPages] = useState([]);
@@ -66,7 +68,8 @@ const OCRPreview = ({ selectedFile: propSelectedFile, baseDirectoryHandles }) =>
             return;
         }
 
-        if (!(0 <= cropTop && cropTop <= 50 && 0 <= cropBottom && cropBottom <= 50)) {
+        if (!(0 <= cropTop && cropTop <= 50 && 0 <= cropBottom && cropBottom <= 50 &&
+              0 <= cropLeft && cropLeft <= 50 && 0 <= cropRight && cropRight <= 50)) {
             setError('Crop percentages must be between 0 and 50');
             return;
         }
@@ -93,6 +96,8 @@ const OCRPreview = ({ selectedFile: propSelectedFile, baseDirectoryHandles }) =>
             formData.append('pdf_file', pdfFile);
             formData.append('crop_top', String(cropTop));
             formData.append('crop_bottom', String(cropBottom));
+            formData.append('crop_left', String(cropLeft));
+            formData.append('crop_right', String(cropRight));
             formData.append('offset', String(offset));
             formData.append('limit', String(pagesPerView));
 
@@ -294,7 +299,7 @@ const OCRPreview = ({ selectedFile: propSelectedFile, baseDirectoryHandles }) =>
             )}
 
             {/* Crop Settings */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
                         Crop Top (%)
@@ -318,6 +323,34 @@ const OCRPreview = ({ selectedFile: propSelectedFile, baseDirectoryHandles }) =>
                         step="0.1"
                         value={cropBottom}
                         onChange={(e) => setCropBottom(parseFloat(e.target.value) || 0)}
+                        min="0"
+                        max="50"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Crop Left (%)
+                    </label>
+                    <input
+                        type="number"
+                        step="0.1"
+                        value={cropLeft}
+                        onChange={(e) => setCropLeft(parseFloat(e.target.value) || 0)}
+                        min="0"
+                        max="50"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Crop Right (%)
+                    </label>
+                    <input
+                        type="number"
+                        step="0.1"
+                        value={cropRight}
+                        onChange={(e) => setCropRight(parseFloat(e.target.value) || 0)}
                         min="0"
                         max="50"
                         className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
