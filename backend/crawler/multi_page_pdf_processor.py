@@ -58,8 +58,8 @@ class MultiPagePDFProcessor:
         """Map a list of 1-based PDF page numbers to their logical page numbers."""
         logical = []
         for pdf_page in pdf_pages:
-            primary, secondary = self._logical_pages(pdf_page)
-            logical.extend([p for p in [primary, secondary] if p > 0])
+            left, right = self._logical_pages(pdf_page)
+            logical.extend([p for p in [left, right] if p > 0])
         return logical
 
     def expand_pages_with_bounds(
@@ -82,16 +82,13 @@ class MultiPagePDFProcessor:
         """
         result = []
         for pdf_page in pdf_pages:
-            primary, secondary = self._logical_pages(pdf_page)
-            if self._book_start_side == "left":
-                side_map = {"left": primary, "right": secondary}
-            else:
-                side_map = {"right": primary, "left": secondary}
+            left, right = self._logical_pages(pdf_page)
+            side_map = {"left": left, "right": right}
 
             start_lp = side_map[start_side] if pdf_page == start_page else None
             end_lp   = side_map[end_side]   if pdf_page == end_page   else None
 
-            for lp in sorted([primary, secondary]):
+            for lp in [left, right]:
                 if lp <= 0:
                     continue
                 if start_lp is not None and lp < start_lp:
@@ -133,13 +130,16 @@ class MultiPagePDFProcessor:
         # Only process PDF pages where at least one logical half is missing
         pages_to_process = []
         for pdf_page in pages_list:
-            lp_primary, lp_secondary = self._logical_pages(pdf_page)
-            primary_exists = os.path.exists(f"{output_ocr_dir}/page_{lp_primary:04d}{ext}")
-            secondary_exists = (
-                lp_secondary <= 0
-                or os.path.exists(f"{output_ocr_dir}/page_{lp_secondary:04d}{ext}")
+            lp_left, lp_right = self._logical_pages(pdf_page)
+            left_exists = (
+                lp_left <= 0
+                or os.path.exists(f"{output_ocr_dir}/page_{lp_left:04d}{ext}")
             )
-            if not (primary_exists and secondary_exists):
+            right_exists = (
+                lp_right <= 0
+                or os.path.exists(f"{output_ocr_dir}/page_{lp_right:04d}{ext}")
+            )
+            if not (left_exists and right_exists):
                 pages_to_process.append(pdf_page)
 
         if not pages_to_process:
@@ -162,34 +162,33 @@ class MultiPagePDFProcessor:
         failed = False
 
         for pdf_page, image in zip(pdf_page_numbers, images):
-            primary_img, secondary_img = self._split_image(image)
-            lp_primary, lp_secondary = self._logical_pages(pdf_page)
+            left_img, right_img = self._split_image(image)
+            lp_left, lp_right = self._logical_pages(pdf_page)
 
             # Respect side-boundary filter when provided
-            write_primary = allowed_logical_pages is None or lp_primary in allowed_logical_pages
-            write_secondary = lp_secondary <= 0 or (
-                allowed_logical_pages is None or lp_secondary in allowed_logical_pages
+            write_left = lp_left > 0 and (
+                allowed_logical_pages is None or lp_left in allowed_logical_pages
+            )
+            write_right = lp_right > 0 and (
+                allowed_logical_pages is None or lp_right in allowed_logical_pages
             )
 
-            ok1 = self._ocr_and_write(primary_img, lp_primary, scan_config, output_ocr_dir) if write_primary else True
-            ok2 = (
-                not write_secondary
-                or self._ocr_and_write(secondary_img, lp_secondary, scan_config, output_ocr_dir)
-            )
+            ok1 = self._ocr_and_write(left_img, lp_left, scan_config, output_ocr_dir) if write_left else True
+            ok2 = self._ocr_and_write(right_img, lp_right, scan_config, output_ocr_dir) if write_right else True
 
             # Update mapping per-half so a successfully written half is never
             # orphaned (file on disk but no mapping entry) when the other half
             # fails.  Save after every PDF page regardless of partial failure.
-            if ok1 and write_primary:
-                page_mapping[str(lp_primary)] = pdf_page
-            if ok2 and lp_secondary > 0 and write_secondary:
-                page_mapping[str(lp_secondary)] = pdf_page
+            if ok1 and write_left:
+                page_mapping[str(lp_left)] = pdf_page
+            if ok2 and write_right:
+                page_mapping[str(lp_right)] = pdf_page
             self._save_page_mapping(output_ocr_dir, page_mapping)
 
             if not ok1 or not ok2:
                 log_handle.error(
                     f"PDF page {pdf_page}: OCR failed for one or both halves "
-                    f"(logical pages {lp_primary}, {lp_secondary})"
+                    f"(logical pages {lp_left}, {lp_right})"
                 )
                 failed = True
         return not failed
@@ -204,36 +203,34 @@ class MultiPagePDFProcessor:
 
     def _logical_pages(self, pdf_page: int) -> tuple[int, int]:
         """
-        Return (primary_logical, secondary_logical) for a 1-based PDF page number.
+        Return (left_logical, right_logical) for a 1-based PDF page number.
+
+        Reading order within every spread is always left → right.
+        book_start_side controls only the offset on the very first PDF page:
 
         book_start_side="left":  both halves of book_start_page are book pages.
-          primary=left, secondary=right; formula: (base, base+1) where base=(N-P)*2+1.
-          e.g. P=1: page1→(1,2), page2→(3,4)
+          e.g. book_start_page=1: page1→(1,2), page2→(3,4)
 
         book_start_side="right": only the right half of book_start_page is a book page.
-          After the first page, spreads are read left-to-right (left=lower, right=higher).
-          primary=right, secondary=left; formula: (base, base-1).
-          At book_start_page: returns (1, 0) — secondary=0 signals "not a book page".
-          e.g. P=17: page17→(1,0), page18→(3,2), page30→(27,26)
+          left=0 for book_start_page signals "no left page" and is filtered by callers.
+          e.g. book_start_page=5: page5→(0,1), page6→(2,3), page7→(4,5)
         """
-        base = (pdf_page - self._book_start_page) * 2 + 1
         if self._book_start_side == "right":
-            return base, base - 1
-        return base, base + 1
+            left = (pdf_page - self._book_start_page) * 2
+        else:
+            left = (pdf_page - self._book_start_page) * 2 + 1
+        return left, left + 1
 
     def _split_image(self, image: Image.Image) -> tuple[Image.Image, Image.Image]:
         """
         Split image vertically at split_percentage.
-        Returns (primary_half, secondary_half) where primary gets the lower logical page number.
+        Always returns (left_half, right_half) matching the (left, right) logical page order.
         """
         width, height = image.size
         split_x = int(width * self._split_percentage / 100)
         left_half = image.crop((0, 0, split_x, height))
         right_half = image.crop((split_x, 0, width, height))
-        if self._book_start_side == "left":
-            return left_half, right_half
-        else:
-            return right_half, left_half
+        return left_half, right_half
 
     def _ocr_and_write(
         self, image: Image.Image, logical_page: int,

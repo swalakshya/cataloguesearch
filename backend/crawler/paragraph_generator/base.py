@@ -17,14 +17,19 @@ class ParaInfo:
     Flags (all default False):
         is_chapter_start  — first paragraph after a chapter heading; hard merge boundary.
         is_verse_end      — paragraph ends with a verse marker (e.g. ।।67।।); flush after.
-        is_qa             — paragraph is a Q&A block; combine with consecutive QA, never
-                            merge with non-QA.
+        is_question       — paragraph is a question (tagged by Phase 1.5).
+        is_answer         — paragraph is an answer (tagged by Phase 1.5).
     """
     page_num: int
     text: str
     is_chapter_start: bool = False
     is_verse_end: bool = False
-    is_qa: bool = False
+    is_question: bool = False
+    is_answer: bool = False
+
+    @property
+    def is_qa(self) -> bool:
+        return self.is_question or self.is_answer
 
 
 # Characters that can legally precede a prefix word

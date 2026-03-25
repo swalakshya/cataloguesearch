@@ -464,3 +464,44 @@ class TestQaMergeBehaviour:
         """Omitting qa_merge preserves existing behaviour (merge all)."""
         paras = self._gen_paragraphs(qa_merge=None)
         assert len(paras) == 1
+
+    def test_qa_merge_false_numbered_questions(self):
+        """qa_merge=False: numbered questions like '५. प्रश्न:' are still treated as
+        question boundaries, so each Q+A pair is its own paragraph."""
+        from backend.crawler.paragraph_generator.granth import GranthParagraphGenerator
+        from backend.crawler.paragraph_generator.language_meta import HindiMeta
+        cfg = {**_QA_SCAN_CONFIG_BASE, "qa_merge": False}
+        numbered_pairs = [
+            ("४. प्रश्न: सज्जन तो हास्य नहीं करेंगे?", "उत्तर: दुष्ट तो ऐसे ही होते हैं।"),
+            ("५. प्रश्न: पूर्व ग्रन्थ तो हैं ही?", "उत्तर: ग्रन्थ का अभ्यास करने से लाभ होता है।"),
+            ("६. प्रश्न: यह सत्य है कि हित होता है?", "उत्तर: यथार्थ सर्व पदार्थों के ज्ञाता केवली हैं।"),
+        ]
+        gen = GranthParagraphGenerator(Config(), HindiMeta(cfg))
+        paras = gen.generate_paragraphs(_qa_blocks(*numbered_pairs), cfg)
+        assert len(paras) == 3, f"Expected 3 paragraphs (one per Q+A pair), got {len(paras)}"
+        for i, (_, text) in enumerate(paras):
+            q_text, a_text = numbered_pairs[i]
+            assert q_text in text, f"Q{i+1} missing from paragraph {i+1}"
+            assert a_text in text, f"A{i+1} missing from paragraph {i+1}"
+
+    def test_phase1_flushes_before_numbered_question(self):
+        """Phase 1 must flush the buffer before a numbered question even when the
+        preceding non-QA block does not end with terminal punctuation.
+        Without the fix, '७. प्रश्न:' would be absorbed into the preceding buffer."""
+        from backend.crawler.paragraph_generator.granth import GranthParagraphGenerator
+        from backend.crawler.paragraph_generator.language_meta import HindiMeta
+        cfg = {**_QA_SCAN_CONFIG_BASE, "qa_merge": False}
+        pages_data = [(4, [
+            {"type": "hindi_text", "text": "मान, माया, लोभ से व हास्य – कोई सूक्ष्म अर्थ का उपदेश दे तो पाप नहीं होता"},
+            {"type": "hindi_text", "text": "७. प्रश्न: आपने विशेष ज्ञानी से टीका क्यों नहीं की?"},
+            {"type": "hindi_text", "text": "उत्तर: कालदोष से केवली का अभाव है।"},
+        ])]
+        gen = GranthParagraphGenerator(Config(), HindiMeta(cfg))
+        paras = gen.generate_paragraphs(pages_data, cfg)
+        texts = [t for _, t in paras]
+        # The non-QA prose must be its own paragraph, not merged with Q7
+        assert any("मान, माया" in t and "प्रश्न" not in t for t in texts), \
+            "Non-QA prose was merged with the numbered question"
+        # Q7 and A7 must be together (qa_merge=False → one Q+A pair)
+        assert any("७. प्रश्न" in t and "उत्तर" in t for t in texts), \
+            "Q7 and A7 were not merged into one paragraph"

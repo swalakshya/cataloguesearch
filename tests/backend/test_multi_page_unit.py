@@ -154,3 +154,55 @@ class TestSavePageMapping:
         # The method must catch it silently.
         processor._save_page_mapping("/nonexistent/directory/that/cannot/exist", {"1": 1})
         # Reaching here without an exception means the test passes
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# _logical_pages and expand_pages ordering
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestLogicalPageOrdering:
+    """
+    Reading order within every spread is always left → right (lower → higher
+    logical page number), regardless of book_start_side.
+    """
+
+    def _make(self, book_start_page, book_start_side):
+        cfg = {"book_start_page": book_start_page, "book_start_side": book_start_side}
+        return MultiPagePDFProcessor(_FakeInner("/a", "/b"), cfg)
+
+    def test_left_start_logical_pages(self):
+        p = self._make(book_start_page=1, book_start_side="left")
+        assert p._logical_pages(1) == (1, 2)
+        assert p._logical_pages(2) == (3, 4)
+        assert p._logical_pages(3) == (5, 6)
+
+    def test_right_start_logical_pages(self):
+        # book_start_page=5, book_start_side="right":
+        #   PDF 5 → left=0 (no left page), right=1
+        #   PDF 6 → left=2, right=3
+        #   PDF 7 → left=4, right=5
+        p = self._make(book_start_page=5, book_start_side="right")
+        assert p._logical_pages(5) == (0, 1)
+        assert p._logical_pages(6) == (2, 3)
+        assert p._logical_pages(7) == (4, 5)
+
+    def test_left_start_expand_pages_order(self):
+        p = self._make(book_start_page=1, book_start_side="left")
+        assert p.expand_pages([1, 2, 3]) == [1, 2, 3, 4, 5, 6]
+
+    def test_right_start_expand_pages_order(self):
+        # PDF 5 → [1]; PDF 6 → [2, 3]; PDF 7 → [4, 5]
+        p = self._make(book_start_page=5, book_start_side="right")
+        assert p.expand_pages([5, 6, 7]) == [1, 2, 3, 4, 5]
+
+    def test_right_start_expand_pages_with_bounds_order(self):
+        p = self._make(book_start_page=5, book_start_side="right")
+        # Full range: same as expand_pages
+        result = p.expand_pages_with_bounds([5, 6, 7], 5, "right", 7, "right")
+        assert result == [1, 2, 3, 4, 5]
+
+    def test_right_start_expand_pages_with_bounds_start_trim(self):
+        # start_side="right" on PDF 6 → skip left=2, start from right=3
+        p = self._make(book_start_page=5, book_start_side="right")
+        result = p.expand_pages_with_bounds([6, 7], 6, "right", 7, "right")
+        assert result == [3, 4, 5]
