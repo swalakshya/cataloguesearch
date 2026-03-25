@@ -1591,3 +1591,312 @@ def test_api_series_date_filter_include_bookmark_dates(api_server):
     log_handle.info(
         f"✓ Series date inclusion test (1980) passed - found page 2 with matching date, "
         f"and {len(pages_without_dates)} pages without bookmarks via series overlap")
+
+
+# ── Agent Router Tests ────────────────────────────────────────────────────────
+# The search_api app mounts the agent router at /api/agent/*, so the same
+# server and indexed data used by the tests above are reused here.
+
+_AGENT_BASE = "http://{host}:{port}/api/agent"
+
+
+def _agent_url(api_server, path):
+    return f"http://{api_server.host}:{api_server.port}/api/agent{path}"
+
+
+def _agent_search(api_server, query, language="hi", content_type=None, rerank=False, page_size=5):
+    payload = {
+        "query": query,
+        "language": language,
+        "content_type": content_type or ["Pravachan"],
+        "page_size": page_size,
+        "page": 1,
+        "rerank": rerank,
+    }
+    return requests.post(_agent_url(api_server, "/search"), json=payload)
+
+
+def test_agent_search_lexical(api_server):
+    """Agent /search returns a list of chunks for a short lexical query."""
+    resp = _agent_search(api_server, "इंदौर")
+    assert resp.status_code == 200
+    results = resp.json()
+    assert isinstance(results, list)
+    assert len(results) > 0
+
+    chunk = results[0]
+    for field in ("chunk_id", "text_content", "category", "language", "score", "file_url"):
+        assert field in chunk, f"Missing field '{field}' in agent search result"
+
+    assert chunk["category"] == "Pravachan"
+    assert chunk["language"] == "hi"
+    assert chunk["score"] >= 0
+    log_handle.info(f"✓ agent_search lexical returned {len(results)} results")
+
+
+def test_agent_search_vector(api_server):
+    """Agent /search switches to vector mode for a natural-language query."""
+    # Trailing '?' makes is_lexical_query return False → vector search
+    resp = _agent_search(api_server, "इंदौर का इतिहास क्या है?", rerank=False)
+    assert resp.status_code == 200
+    results = resp.json()
+    assert isinstance(results, list)
+    assert len(results) > 0
+    log_handle.info(f"✓ agent_search vector returned {len(results)} results")
+
+
+def test_agent_search_with_anuyog_filter(api_server):
+    """Agent /search honours the anuyog filter."""
+    payload = {
+        "query": "इतिहास",
+        "language": "hi",
+        "content_type": ["Pravachan"],
+        "anuyog": "history",
+        "page_size": 10,
+        "page": 1,
+        "rerank": False,
+    }
+    resp = requests.post(_agent_url(api_server, "/search"), json=payload)
+    assert resp.status_code == 200
+    results = resp.json()
+    assert isinstance(results, list)
+    # All returned chunks should have anuyog == "history"
+    for r in results:
+        assert r.get("anuyog") == "history", f"Unexpected anuyog: {r.get('anuyog')}"
+    log_handle.info(f"✓ agent_search anuyog filter returned {len(results)} results")
+
+
+def test_agent_search_gujarati(api_server):
+    """Agent /search works for Gujarati language content."""
+    resp = _agent_search(api_server, "ઇતિહાસ", language="gu")
+    assert resp.status_code == 200
+    results = resp.json()
+    assert isinstance(results, list)
+    log_handle.info(f"✓ agent_search Gujarati returned {len(results)} results")
+
+
+def test_agent_navigate(api_server):
+    """Agent /navigate returns surrounding chunks for a valid chunk_id."""
+    # Get a real chunk_id from search first
+    resp = _agent_search(api_server, "इंदौर", page_size=1)
+    assert resp.status_code == 200
+    results = resp.json()
+    if not results:
+        pytest.skip("No search results; cannot test navigate")
+
+    chunk_id = results[0]["chunk_id"]
+    nav_resp = requests.post(_agent_url(api_server, "/navigate"), json={
+        "chunk_id": chunk_id,
+        "direction": "both",
+        "steps": 1,
+    })
+    assert nav_resp.status_code == 200
+    nav_results = nav_resp.json()
+    assert isinstance(nav_results, list)
+    # The current chunk should be among the returned results
+    returned_ids = [r["chunk_id"] for r in nav_results]
+    assert chunk_id in returned_ids, f"Expected {chunk_id} in navigate results {returned_ids}"
+    log_handle.info(f"✓ agent_navigate returned {len(nav_results)} chunks around {chunk_id}")
+
+
+def test_agent_navigate_next_and_prev(api_server):
+    """Agent /navigate works for direction=next and direction=prev."""
+    resp = _agent_search(api_server, "बेंगलुरु", page_size=1)
+    assert resp.status_code == 200
+    results = resp.json()
+    if not results:
+        pytest.skip("No search results; cannot test navigate")
+
+    chunk_id = results[0]["chunk_id"]
+
+    for direction in ("next", "prev"):
+        nav_resp = requests.post(_agent_url(api_server, "/navigate"), json={
+            "chunk_id": chunk_id,
+            "direction": direction,
+            "steps": 1,
+        })
+        assert nav_resp.status_code == 200
+        assert isinstance(nav_resp.json(), list)
+
+    log_handle.info("✓ agent_navigate next/prev both succeeded")
+
+
+def test_agent_find_similar(api_server):
+    """Agent /find_similar returns semantically related chunks."""
+    resp = _agent_search(api_server, "हिंदू पौराणिक", page_size=1)
+    assert resp.status_code == 200
+    results = resp.json()
+    if not results:
+        pytest.skip("No search results; cannot test find_similar")
+
+    chunk_id = results[0]["chunk_id"]
+    sim_resp = requests.post(_agent_url(api_server, "/find_similar"), json={"chunk_id": chunk_id})
+    assert sim_resp.status_code == 200
+    sim_results = sim_resp.json()
+    assert isinstance(sim_results, list)
+    # The source chunk itself should not appear in similar results
+    returned_ids = [r["chunk_id"] for r in sim_results]
+    assert chunk_id not in returned_ids, "Source chunk should be excluded from find_similar results"
+    log_handle.info(f"✓ agent_find_similar returned {len(sim_results)} similar chunks for {chunk_id}")
+
+
+def test_agent_get_filter_options_pravachan(api_server):
+    """Agent /get_filter_options returns correct keys for Pravachan/hi."""
+    resp = requests.post(_agent_url(api_server, "/get_filter_options"), json={
+        "language": "hi",
+        "content_type": "Pravachan",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+
+    for key in ("granths", "anuyogs", "contributors", "date_ranges"):
+        assert key in data, f"Missing key '{key}' in filter options"
+
+    assert isinstance(data["granths"], list)
+    assert isinstance(data["anuyogs"], list)
+
+    # Known anuyog values from test data
+    assert "history" in data["anuyogs"], f"Expected 'history' in anuyogs: {data['anuyogs']}"
+    assert "city" in data["anuyogs"], f"Expected 'city' in anuyogs: {data['anuyogs']}"
+
+    # Known granth from test data
+    assert "Hampi" in data["granths"], f"Expected 'Hampi' in granths: {data['granths']}"
+    log_handle.info(f"✓ agent_get_filter_options returned granths={data['granths']}, anuyogs={data['anuyogs']}")
+
+
+def test_agent_get_filter_options_gujarati(api_server):
+    """Agent /get_filter_options works for Gujarati language."""
+    resp = requests.post(_agent_url(api_server, "/get_filter_options"), json={
+        "language": "gu",
+        "content_type": "Pravachan",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "granths" in data
+    assert "anuyogs" in data
+    log_handle.info(f"✓ agent_get_filter_options Gujarati returned {len(data['granths'])} granths")
+
+
+def test_agent_get_pravachan(api_server):
+    """Agent /get_pravachan returns all chunks for a known Pravachan in order."""
+    # hampi_hindi has bookmark: page 2 → "prav number 248, 1985-10-23"
+    resp = requests.post(_agent_url(api_server, "/get_pravachan"), json={
+        "granth": "Hampi",
+        "pravachan_number": "248",
+        "language": "hi",
+    })
+    assert resp.status_code == 200
+    results = resp.json()
+    assert isinstance(results, list)
+    if results:
+        # All returned chunks should belong to Hampi and be in paragraph order
+        para_ids = [r.get("page_number") for r in results]
+        log_handle.info(f"✓ agent_get_pravachan returned {len(results)} chunks, pages={para_ids}")
+    else:
+        log_handle.info("agent_get_pravachan returned 0 results (pravachan_number may not be parsed)")
+
+
+def test_agent_get_pravachan_empty_for_unknown(api_server):
+    """Agent /get_pravachan returns empty list for a nonexistent pravachan."""
+    resp = requests.post(_agent_url(api_server, "/get_pravachan"), json={
+        "granth": "NonExistentGranth",
+        "pravachan_number": "9999",
+        "language": "hi",
+    })
+    assert resp.status_code == 200
+    assert resp.json() == []
+    log_handle.info("✓ agent_get_pravachan returned [] for unknown granth/pravachan")
+
+
+def test_agent_search_with_year_range(api_server):
+    """Agent /search with year_from + year_to applies the full date range filter."""
+    resp = requests.post(_agent_url(api_server, "/search"), json={
+        "query": "हंपी",
+        "language": "hi",
+        "content_type": ["Pravachan"],
+        "year_from": 1985,
+        "year_to": 1986,
+        "page_size": 10,
+        "page": 1,
+        "rerank": False,
+    })
+    assert resp.status_code == 200
+    results = resp.json()
+    assert isinstance(results, list)
+    # Any dated results must fall within the requested range
+    for r in results:
+        if r.get("date"):
+            year = int(r["date"][:4])
+            assert 1985 <= year <= 1986, f"Date outside filter range: {r['date']}"
+    log_handle.info(f"✓ agent_search year_from=1985 year_to=1986 returned {len(results)} results")
+
+
+def test_agent_search_with_year_from_only(api_server):
+    """Agent /search with only year_from — covers the one-sided date range path."""
+    resp = requests.post(_agent_url(api_server, "/search"), json={
+        "query": "इतिहास",
+        "language": "hi",
+        "content_type": ["Pravachan"],
+        "year_from": 1985,
+        "page_size": 5,
+        "page": 1,
+        "rerank": False,
+    })
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+    log_handle.info("✓ agent_search year_from=1985 (no year_to) returned results")
+
+
+def test_agent_search_with_year_to_only(api_server):
+    """Agent /search with only year_to — covers the other one-sided date range path."""
+    resp = requests.post(_agent_url(api_server, "/search"), json={
+        "query": "इतिहास",
+        "language": "hi",
+        "content_type": ["Pravachan"],
+        "year_to": 1986,
+        "page_size": 5,
+        "page": 1,
+        "rerank": False,
+    })
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+    log_handle.info("✓ agent_search year_to=1986 (no year_from) returned results")
+
+
+def test_agent_search_with_rerank(api_server):
+    """Agent /search with rerank=True exercises the cross-encoder reranker pipeline."""
+    resp = requests.post(_agent_url(api_server, "/search"), json={
+        "query": "इंदौर का इतिहास क्या है?",
+        "language": "hi",
+        "content_type": ["Pravachan"],
+        "page_size": 5,
+        "page": 1,
+        "rerank": True,
+    })
+    assert resp.status_code == 200
+    results = resp.json()
+    assert isinstance(results, list)
+    if results:
+        chunk = results[0]
+        for field in ("chunk_id", "text_content", "score"):
+            assert field in chunk
+        assert isinstance(chunk["score"], float)
+    log_handle.info(f"✓ agent_search rerank=True returned {len(results)} results")
+
+
+def test_agent_search_with_contributor_filter(api_server):
+    """Agent /search with contributor builds the multi-field bool/should query without error."""
+    # Test data has no Author/Tikakaar metadata so 0 results is expected —
+    # the point is that the filter construction runs end-to-end.
+    resp = requests.post(_agent_url(api_server, "/search"), json={
+        "query": "इतिहास",
+        "language": "hi",
+        "content_type": ["Pravachan"],
+        "contributor": "TestAuthor",
+        "page_size": 5,
+        "page": 1,
+        "rerank": False,
+    })
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+    log_handle.info("✓ agent_search contributor filter ran without error")

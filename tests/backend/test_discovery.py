@@ -364,6 +364,29 @@ def test_crawl_vs_crawl_and_index(initialise):
         # OCR checksum should remain the same since files didn't change
         assert vals["ocr_checksum"] == state1[doc_id]["ocr_checksum"]
 
+def test_page_list_scan_config():
+    setup()
+    config = Config()
+    sfp = SingleFileProcessor(
+        config, f"{config.BASE_PDF_PATH}/hindi/cities/metro/bangalore_hindi.pdf",
+        None, None,
+        datetime.datetime.now().isoformat(),
+        pdf_processor_factory=MockPDFProcessor
+    )
+
+    # page_list with two ranges
+    pages = sfp._get_page_list({"page_list": [{"start": 1, "end": 3}, {"start": 5, "end": 6}]})
+    assert pages == [1, 2, 3, 5, 6]
+
+    # entries missing start or end are skipped; only complete entry {start:2, end:4} contributes
+    pages = sfp._get_page_list({"page_list": [{"start": 1}, {"end": 5}, {"start": 2, "end": 4}]})
+    assert pages == [2, 3, 4]
+
+    # page_list combined with top-level start_page/end_page
+    pages = sfp._get_page_list({"page_list": [{"start": 1, "end": 2}], "start_page": 4, "end_page": 5})
+    assert pages == [1, 2, 4, 5]
+
+
 def validate(old_state, new_state, changed_keys,
              check_file_changed=False, check_config_changed=True, new_file_added=False):
     for doc_id, vals in new_state.items():

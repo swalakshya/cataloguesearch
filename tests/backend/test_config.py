@@ -1,8 +1,12 @@
+import json
 import logging
 import os
+
+import numpy as np
 import pytest
 
 from backend.config import Config
+from backend.utils import CustomJSONEncoder
 from tests.backend.base import *
 
 log_handle = logging.getLogger(__name__)
@@ -27,3 +31,23 @@ def test_config_instance():
     assert config.RERANKING_MODEL_NAME == "BAAI/bge-reranker-base"
     assert config.CHUNK_STRATEGY in ["advanced", "paragraph"]
     log_handle.info(f"END TEST_CONFIG_INSTANCE")
+
+
+def test_custom_json_encoder_numpy_float():
+    assert json.dumps(np.float32(1.5), cls=CustomJSONEncoder) == "1.5"
+    assert json.dumps(np.float64(3.14), cls=CustomJSONEncoder) == "3.14"
+
+
+def test_custom_json_encoder_numpy_int():
+    assert json.dumps(np.int32(42), cls=CustomJSONEncoder) == "42"
+    assert json.dumps(np.int64(100), cls=CustomJSONEncoder) == "100"
+
+
+def test_custom_json_encoder_numpy_array():
+    result = json.loads(json.dumps(np.array([1.0, 2.0, 3.0]), cls=CustomJSONEncoder))
+    assert result == [1.0, 2.0, 3.0]
+
+
+def test_custom_json_encoder_set():
+    result = json.loads(json.dumps({"values": {1, 2, 3}}, cls=CustomJSONEncoder))
+    assert set(result["values"]) == {1, 2, 3}
