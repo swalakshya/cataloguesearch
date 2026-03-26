@@ -387,6 +387,89 @@ def test_page_list_scan_config():
     assert pages == [1, 2, 4, 5]
 
 
+def test_force_crawl(initialise):
+    config = Config()
+    doc_ids = setup()
+    index_state = MockIndexState(config.SQLITE_DB_PATH)
+    discovery = Discovery(
+        config,
+        MockIndexGenerator(config, None),
+        index_state,
+        pdf_processor_factory=MockPDFProcessor)
+
+    # Initial full crawl + index
+    discovery.crawl(process=True, index=True)
+    state0 = index_state.load_state()
+    assert len(state0) == 12
+    for doc_id, vals in state0.items():
+        assert vals["ocr_checksum"] is not None
+        assert vals["config_hash"] != ""
+
+    # Re-crawl without force — nothing should change
+    discovery.crawl(process=True, index=True)
+    state_unchanged = index_state.load_state()
+    for doc_id, vals in state_unchanged.items():
+        assert vals["last_indexed_timestamp"] == state0[doc_id]["last_indexed_timestamp"]
+
+    # --- Case 1: --crawl --force (ocr_checksum NULLed, config_hash untouched) ---
+    target1 = doc_ids["bangalore_hindi"][1]
+    rel1 = os.path.relpath(doc_ids["bangalore_hindi"][0], config.BASE_PDF_PATH)
+    index_state.invalidate_state(rel1, crawl=True)
+
+    s = index_state.get_state(target1)
+    assert s["ocr_checksum"] is None
+    assert s["config_hash"] != ""  # config_hash untouched
+
+    discovery.crawl(process=True, index=False)
+    state1 = index_state.load_state()
+
+    assert state1[target1]["last_indexed_timestamp"] != state0[target1]["last_indexed_timestamp"]
+    assert state1[target1]["ocr_checksum"] is not None        # restored by re-crawl
+    assert state1[target1]["config_hash"] == ""               # process() clears config_hash to force re-index
+    for doc_id in state1:
+        if doc_id != target1:
+            assert state1[doc_id]["last_indexed_timestamp"] == state0[doc_id]["last_indexed_timestamp"]
+
+    # --- Case 2: --index --force (config_hash NULLed, ocr_checksum untouched) ---
+    target2 = doc_ids["hampi_hindi"][1]
+    rel2 = os.path.relpath(doc_ids["hampi_hindi"][0], config.BASE_PDF_PATH)
+    index_state.invalidate_state(rel2, index=True)
+
+    s = index_state.get_state(target2)
+    assert s["config_hash"] is None
+    assert s["ocr_checksum"] is not None  # ocr_checksum untouched
+
+    discovery.crawl(process=False, index=True)
+    state2 = index_state.load_state()
+
+    assert state2[target2]["last_indexed_timestamp"] != state1[target2]["last_indexed_timestamp"]
+    assert state2[target2]["config_hash"] is not None         # restored by re-index
+    assert state2[target2]["ocr_checksum"] == state1[target2]["ocr_checksum"]  # unchanged
+    # target1 is excluded: Case 1 left it with config_hash="" so it also gets re-indexed here
+    for doc_id in state2:
+        if doc_id not in (target2, target1):
+            assert state2[doc_id]["last_indexed_timestamp"] == state1[doc_id]["last_indexed_timestamp"]
+
+    # --- Case 3: --crawl --index --force (both NULLed) ---
+    target3 = doc_ids["indore_hindi"][1]
+    rel3 = os.path.relpath(doc_ids["indore_hindi"][0], config.BASE_PDF_PATH)
+    index_state.invalidate_state(rel3, crawl=True, index=True)
+
+    s = index_state.get_state(target3)
+    assert s["ocr_checksum"] is None
+    assert s["config_hash"] is None
+
+    discovery.crawl(process=True, index=True)
+    state3 = index_state.load_state()
+
+    assert state3[target3]["last_indexed_timestamp"] != state2[target3]["last_indexed_timestamp"]
+    assert state3[target3]["ocr_checksum"] is not None        # restored
+    assert state3[target3]["config_hash"] is not None         # restored
+    for doc_id in state3:
+        if doc_id != target3:
+            assert state3[doc_id]["last_indexed_timestamp"] == state2[doc_id]["last_indexed_timestamp"]
+
+
 def validate(old_state, new_state, changed_keys,
              check_file_changed=False, check_config_changed=True, new_file_added=False):
     for doc_id, vals in new_state.items():

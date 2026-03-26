@@ -195,6 +195,60 @@ class IndexState:
 
         return hashlib.sha256(checksum_input.encode('utf-8')).hexdigest()
 
+    def invalidate_state(self, relative_file_path: str, crawl: bool = False, index: bool = False):
+        """
+        NULL out checksums for a file and all its sub-sections to force re-processing.
+
+        crawl=True  → clears ocr_checksum  (forces re-crawl)
+        index=True  → clears config_hash   (forces re-index)
+        """
+        fields = []
+        if crawl:
+            fields.append("ocr_checksum = NULL")
+        if index:
+            fields.append("config_hash = NULL")
+        if not fields:
+            return
+
+        escaped = relative_file_path.replace('%', r'\%').replace('_', r'\_')
+        conn = sqlite3.connect(self.state_db_path)
+        c = conn.cursor()
+        c.execute(
+            f"UPDATE indexed_files_state SET {', '.join(fields)} "
+            f"WHERE file_path = ? OR file_path LIKE ? ESCAPE '\\'",
+            (relative_file_path, escaped + '#%')
+        )
+        affected = c.rowcount
+        conn.commit()
+        conn.close()
+        log_handle.info(f"Invalidated state for '{relative_file_path}' "
+                        f"(+sub-sections): {affected} row(s) affected. "
+                        f"Fields cleared: {', '.join(fields)}")
+
+    def invalidate_all_states(self, crawl: bool = False, index: bool = False):
+        """
+        NULL out checksums for every entry in the state DB.
+
+        crawl=True  → clears ocr_checksum  (forces re-crawl of everything)
+        index=True  → clears config_hash   (forces re-index of everything)
+        """
+        fields = []
+        if crawl:
+            fields.append("ocr_checksum = NULL")
+        if index:
+            fields.append("config_hash = NULL")
+        if not fields:
+            return
+
+        conn = sqlite3.connect(self.state_db_path)
+        c = conn.cursor()
+        c.execute(f"UPDATE indexed_files_state SET {', '.join(fields)}")
+        affected = c.rowcount
+        conn.commit()
+        conn.close()
+        log_handle.info(f"Invalidated all states: {affected} row(s) affected. "
+                        f"Fields cleared: {', '.join(fields)}")
+
     def delete_index_state(self):
         """
         Deletes the entire index state from the SQLite DB.

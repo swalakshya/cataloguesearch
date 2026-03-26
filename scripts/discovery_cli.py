@@ -179,7 +179,7 @@ class DiscoveryDaemon:
             logging.info("Discovery daemon stopped")
 
 
-def run_discovery_once(config: Config, crawl=False, index=False, dry_run=False, reindex_metadata_only=False):
+def run_discovery_once(config: Config, crawl=False, index=False, dry_run=False, reindex_metadata_only=False, force=False):
     """Run discovery once"""
     try:
         start = datetime.now()
@@ -189,6 +189,9 @@ def run_discovery_once(config: Config, crawl=False, index=False, dry_run=False, 
         index_state = IndexState(config.SQLITE_DB_PATH)
         indexing_module = IndexGenerator(config, get_opensearch_client(config))
         discovery = Discovery(config, indexing_module, index_state)
+
+        if force and (crawl or index):
+            index_state.invalidate_all_states(crawl=crawl, index=index)
 
         client = get_opensearch_client(config)
         create_indices_if_not_exists(config, client)
@@ -220,7 +223,7 @@ def delete_index(config: Config):
     index_state.delete_index_state()
 
 def process_folder(config: Config, folder_path: str, crawl=True,
-                   index=True, dry_run=False, reindex_metadata_only=False):
+                   index=True, dry_run=False, reindex_metadata_only=False, force=False):
     """Process all PDF files in a specific folder (non-recursive)"""
     if not os.path.exists(folder_path):
         log_handle.error(f"Folder does not exist: {folder_path}")
@@ -236,6 +239,16 @@ def process_folder(config: Config, folder_path: str, crawl=True,
     index_state = IndexState(config.SQLITE_DB_PATH)
     indexing_module = IndexGenerator(config, get_opensearch_client(config))
     discovery = Discovery(config, indexing_module, index_state)
+
+    if force and (crawl or index):
+        for fname in os.listdir(folder_path):
+            if fname.lower().endswith('.pdf'):
+                pdf_path = os.path.join(folder_path, fname)
+                try:
+                    relative_path = os.path.relpath(pdf_path, config.BASE_PDF_PATH)
+                    index_state.invalidate_state(relative_path, crawl=crawl, index=index)
+                except ValueError:
+                    log_handle.warning(f"Skipping force-invalidate for {pdf_path}: not under BASE_PDF_PATH")
 
     client = get_opensearch_client(config)
     create_indices_if_not_exists(config, client)
@@ -354,6 +367,9 @@ def main():
                         help='Process all PDF files in a specific folder (non-recursive).')
     parser.add_argument('--reindex-metadata-only', action='store_true', default=False,
                         help='Only update metadata and pravachan fields without re-generating embeddings.')
+    parser.add_argument('--force', '-f', action='store_true', default=False,
+                        help='Force re-processing: clears ocr_checksum if --crawl is set, '
+                             'config_hash if --index is set, before running.')
 
 
     args = parser.parse_args()
@@ -376,7 +392,7 @@ def main():
     if args.process_folder:
         process_folder(
             config, args.process_folder, args.crawl, args.index,
-            args.dry_run, args.reindex_metadata_only)
+            args.dry_run, args.reindex_metadata_only, args.force)
         sys.exit(0) # Exit after processing folder is done
 
     if args.command == 'discover':
@@ -391,7 +407,7 @@ def main():
             daemon = DiscoveryDaemon(config)
             daemon.start()
         else:
-            run_discovery_once(config, args.crawl, args.index, args.dry_run, args.reindex_metadata_only)
+            run_discovery_once(config, args.crawl, args.index, args.dry_run, args.reindex_metadata_only, args.force)
 
 
 if __name__ == '__main__':

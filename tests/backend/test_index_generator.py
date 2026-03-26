@@ -88,7 +88,7 @@ def indexed_documents(setup, indexing_module):
             'filename': 'hampi_hindi.pdf',
             'language': 'hi',
             'metadata': {'language': 'hi'},
-            'para_count_advanced': 20,
+            'para_count_advanced': 21,
             'para_count_paragraph': 20
         },
         {

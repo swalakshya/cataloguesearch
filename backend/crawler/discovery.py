@@ -374,12 +374,14 @@ class SingleFileProcessor:
 
         if not sub_sections:
             # --- Standard path: single document per PDF ---
+            # Pass the inner processor (without expand_pages) because effective_pages
+            # are already logical page numbers — index_generator must not re-expand them.
             index_generator.index_document(
                 document_id, relative_path, output_ocr_dir, output_text_dir,
                 effective_pages, file_metadata, self._scan_config,
                 page_to_pravachan_data,
                 reindex_metadata_only, dry_run,
-                pdf_processor=pdf_processor
+                pdf_processor=getattr(pdf_processor, 'inner_processor', pdf_processor)
             )
 
             if dry_run:
@@ -490,7 +492,7 @@ class SingleFileProcessor:
                     sub_pages, sub_metadata, self._scan_config,
                     page_to_pravachan_data,
                     reindex_metadata_only, dry_run,
-                    pdf_processor=sub_pdf_processor,
+                    pdf_processor=getattr(sub_pdf_processor, 'inner_processor', sub_pdf_processor),
                     clean_output_dir=not dir_cleaned
                 )
                 dir_cleaned = True

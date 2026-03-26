@@ -8,6 +8,10 @@ from backend.crawler.paragraph_generator.language_meta import LanguageMeta
 
 log_handle = logging.getLogger(__name__)
 
+# Superscript digits: ¹²³ (U+00B9/B2/B3) + ⁰⁴–⁹ (U+2070, U+2074–U+2079)
+# Subscript digits:  ₀–₉ (U+2080–U+2089)
+_SUPER_SUBSCRIPT_DIGITS_RE = re.compile(r'[\u00B2\u00B3\u00B9\u2070\u2074-\u2079\u2080-\u2089]')
+
 
 @dataclass
 class ParaInfo:
@@ -84,6 +88,9 @@ class BaseParagraphGenerator:
         cleaned_text = cleaned_text.replace('\u202F', ' ')  # Narrow no-break space
         cleaned_text = cleaned_text.replace('\uFEFF', '')   # Zero-width no-break space (BOM)
 
+        # Strip superscript/subscript digits (OCR footnote markers, e.g. ¹³⁶, ⁸⁷)
+        cleaned_text = self._strip_superscript_subscript_digits(cleaned_text)
+
         # Common punctuation normalization
         cleaned_text = self._normalize_punctuation(cleaned_text)
 
@@ -97,6 +104,10 @@ class BaseParagraphGenerator:
         cleaned_text = re.sub(r'\s+', ' ', cleaned_text).strip()
 
         return cleaned_text
+
+    def _strip_superscript_subscript_digits(self, text: str) -> str:
+        """Remove superscript/subscript digit characters (e.g. OCR footnote markers like ¹³⁶, ⁸⁷)."""
+        return _SUPER_SUBSCRIPT_DIGITS_RE.sub('', text)
 
     def _normalize_punctuation(self, text: str) -> str:
         # Normalize common OCR misclassifications for the purn viram (।)
