@@ -219,7 +219,9 @@ def setup(copy_ocr_files=False, add_scan_config=False, add_bookmarks=True):
                         ],
                         "crop": {
                             "top": 8,
-                            "bottom": 8
+                            "bottom": 8,
+                            "left": 1,
+                            "right": 1
                         }
                     }
                     log_handle.info(f"Added {filename_without_ext} to scan_config: pages 1-{total_pages}")

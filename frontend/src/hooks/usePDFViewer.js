@@ -49,8 +49,8 @@ const usePDFViewer = ({ setError }) => {
         }
     };
 
-    const applyCropToDataUrl = (dataUrl, cropTopPct, cropBottomPct) => {
-        if (!dataUrl || (cropTopPct === 0 && cropBottomPct === 0)) {
+    const applyCropToDataUrl = (dataUrl, cropTopPct, cropBottomPct, cropLeftPct = 0, cropRightPct = 0) => {
+        if (!dataUrl || (cropTopPct === 0 && cropBottomPct === 0 && cropLeftPct === 0 && cropRightPct === 0)) {
             setCroppedPreviewUrl(null);
             return;
         }
@@ -59,11 +59,14 @@ const usePDFViewer = ({ setError }) => {
             const { width, height } = img;
             const topPx = Math.floor(height * cropTopPct / 100);
             const bottomPx = Math.floor(height * cropBottomPct / 100);
+            const leftPx = Math.floor(width * cropLeftPct / 100);
+            const rightPx = Math.floor(width * cropRightPct / 100);
+            const croppedWidth = width - leftPx - rightPx;
             const croppedHeight = height - topPx - bottomPx;
             const canvas = document.createElement('canvas');
-            canvas.width = width;
+            canvas.width = croppedWidth;
             canvas.height = croppedHeight;
-            canvas.getContext('2d').drawImage(img, 0, topPx, width, croppedHeight, 0, 0, width, croppedHeight);
+            canvas.getContext('2d').drawImage(img, leftPx, topPx, croppedWidth, croppedHeight, 0, 0, croppedWidth, croppedHeight);
             setCroppedPreviewUrl(canvas.toDataURL('image/png'));
         };
         img.src = dataUrl;
@@ -102,7 +105,7 @@ const usePDFViewer = ({ setError }) => {
         setBookmarks([]);
     };
 
-    const handlePageNavigation = async (direction, cropTop, cropBottom, onPageChanged) => {
+    const handlePageNavigation = async (direction, cropTop, cropBottom, onPageChanged, cropLeft = 0, cropRight = 0) => {
         if (!pdfDoc) return;
         let newPage = currentPage;
         if (direction === 'prev' && currentPage > 1) newPage = currentPage - 1;
@@ -110,17 +113,17 @@ const usePDFViewer = ({ setError }) => {
         if (newPage !== currentPage) {
             setCurrentPage(newPage);
             const dataUrl = await renderPDFPage(pdfDoc, newPage);
-            applyCropToDataUrl(dataUrl, cropTop, cropBottom);
+            applyCropToDataUrl(dataUrl, cropTop, cropBottom, cropLeft, cropRight);
             if (onPageChanged) onPageChanged();
         }
     };
 
-    const jumpToPage = async (page, cropTop, cropBottom, onPageChanged) => {
+    const jumpToPage = async (page, cropTop, cropBottom, onPageChanged, cropLeft = 0, cropRight = 0) => {
         const p = parseInt(page, 10);
         if (!pdfDoc || isNaN(p) || p < 1 || p > totalPages || p === currentPage) return;
         setCurrentPage(p);
         const dataUrl = await renderPDFPage(pdfDoc, p);
-        applyCropToDataUrl(dataUrl, cropTop, cropBottom);
+        applyCropToDataUrl(dataUrl, cropTop, cropBottom, cropLeft, cropRight);
         if (onPageChanged) onPageChanged();
     };
 

@@ -41,6 +41,8 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
     const [language, setLanguage] = useState('hin');
     const [cropTop, setCropTop] = useState(0);
     const [cropBottom, setCropBottom] = useState(0);
+    const [cropLeft, setCropLeft] = useState(0);
+    const [cropRight, setCropRight] = useState(0);
     const [useDefaultScanConfig, setUseDefaultScanConfig] = useState(true);
     const [isLoading, setIsLoading] = useState(false);
     const [results, setResults] = useState(null);
@@ -193,7 +195,8 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
 
     const handleApply = () => {
         if (!selectedFile) return;
-        if (cropTop > 0 || cropBottom > 0) pdfViewer.applyCropToDataUrl(previewUrl, cropTop, cropBottom);
+        if (cropTop > 0 || cropBottom > 0 || cropLeft > 0 || cropRight > 0)
+            pdfViewer.applyCropToDataUrl(previewUrl, cropTop, cropBottom, cropLeft, cropRight);
         else setCroppedPreviewUrl(null);
         setResults(null);
         setActiveResultTab('preview');
@@ -227,6 +230,8 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
         fd.append('language', language);
         fd.append('crop_top', cropTop);
         fd.append('crop_bottom', cropBottom);
+        fd.append('crop_left', cropLeft);
+        fd.append('crop_right', cropRight);
         fd.append('mode', 'advanced');
         fd.append('image', imageFile);
         fd.append('use_default_scan_config', useDefaultScanConfig);
@@ -242,6 +247,8 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
         fd.append('model_name', modelName);
         fd.append('crop_top', cropTop);
         fd.append('crop_bottom', cropBottom);
+        fd.append('crop_left', cropLeft);
+        fd.append('crop_right', cropRight);
         fd.append('page_number', currentPage);
         fd.append('use_default_scan_config', useDefaultScanConfig);
         fd.append('image', imageFile);
@@ -278,6 +285,8 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                 formData.append('language', language);
                 formData.append('crop_top', cropTop);
                 formData.append('crop_bottom', cropBottom);
+                formData.append('crop_left', cropLeft);
+                formData.append('crop_right', cropRight);
                 formData.append('mode', 'advanced');
                 if (isFromBrowser && isPDF) {
                     formData.append('relative_path', propSelectedFile.relativePath);
@@ -494,6 +503,18 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                             <label className="text-xs text-slate-500 whitespace-nowrap">Bottom %</label>
                             <input type="number" step="0.1" min="0" max="50" value={cropBottom}
                                 onChange={(e) => setCropBottom(parseFloat(e.target.value) || 0)}
+                                className="w-16 text-xs px-2 py-1 border border-slate-300 rounded-md focus:outline-none focus:ring-sky-500 focus:border-sky-500" />
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <label className="text-xs text-slate-500 whitespace-nowrap">Left %</label>
+                            <input type="number" step="0.1" min="0" max="50" value={cropLeft}
+                                onChange={(e) => setCropLeft(parseFloat(e.target.value) || 0)}
+                                className="w-16 text-xs px-2 py-1 border border-slate-300 rounded-md focus:outline-none focus:ring-sky-500 focus:border-sky-500" />
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <label className="text-xs text-slate-500 whitespace-nowrap">Right %</label>
+                            <input type="number" step="0.1" min="0" max="50" value={cropRight}
+                                onChange={(e) => setCropRight(parseFloat(e.target.value) || 0)}
                                 className="w-16 text-xs px-2 py-1 border border-slate-300 rounded-md focus:outline-none focus:ring-sky-500 focus:border-sky-500" />
                         </div>
                         <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">

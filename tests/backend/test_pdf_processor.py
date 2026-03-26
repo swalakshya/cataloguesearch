@@ -156,6 +156,40 @@ def test_page_range_processing():
 
     log_handle.info(f"\n--- All Page Range Tests Passed ---")
 
+
+def test_side_crop():
+    """
+    Test that left/right crop percentages are applied correctly in _get_image().
+    Uses a real PDF page and verifies the output image is narrower than the original.
+    """
+    config = Config()
+    temp_base_dir = tempfile.mkdtemp(prefix="pdf_side_crop_test_")
+    config.settings()["crawler"]["base_ocr_path"] = temp_base_dir
+    pdf_dir = f"{temp_base_dir}/data/pdfs"
+    config.settings()["crawler"]["base_pdf_path"] = pdf_dir
+    shutil.copytree(f"{get_test_base_dir()}/data/pdfs", pdf_dir)
+
+    processor = create_pdf_processor(config)
+    test_pdf_path = f"{pdf_dir}/bangalore_hindi.pdf"
+
+    # Get original image dimensions (no crop)
+    images_orig, _ = processor._get_image(test_pdf_path, [1], {})
+    assert images_orig, "Expected at least one image with no crop"
+    orig_width, orig_height = images_orig[0].size
+
+    # Apply 1% left + 1% right crop
+    scan_config = {"crop": {"top": 0, "bottom": 0, "left": 1, "right": 1}}
+    images_cropped, page_nums = processor._get_image(test_pdf_path, [1], scan_config)
+    assert images_cropped, "Expected at least one image with side crop"
+    cropped_width, cropped_height = images_cropped[0].size
+
+    # Width must be reduced; height unchanged
+    assert cropped_width < orig_width, "Cropped width should be less than original"
+    assert cropped_height == orig_height, "Height should be unchanged with only side crop"
+    assert page_nums == [1]
+
+    log_handle.info(f"Side crop test passed: {orig_width}x{orig_height} → {cropped_width}x{cropped_height}")
+
 def validate(test_name, output_path, expected_extension):
     for file in os.listdir(output_path):
         assert file.endswith(expected_extension), f"{test_name} {file} has wrong extension, expected {expected_extension}"

@@ -217,6 +217,8 @@ async def process_ocr(
     language: str = Form("hin", description="Language code for OCR (hin, guj)"),
     crop_top: float = Form(0, description="Percentage to crop from top (0-50)"),
     crop_bottom: float = Form(0, description="Percentage to crop from bottom (0-50)"),
+    crop_left: float = Form(0, description="Percentage to crop from left (0-50)"),
+    crop_right: float = Form(0, description="Percentage to crop from right (0-50)"),
     relative_path: Optional[str] = Form(None, description="Relative path to PDF file from base folder"),
     page_number: Optional[int] = Form(None, description="Page number to extract from PDF (1-indexed, requires relative_path)"),
     use_default_scan_config: bool = Form(False, description="Load scan_config.json from base_dir/<language>/ when no relative_path is given")
@@ -237,7 +239,7 @@ async def process_ocr(
 
     if image and (relative_path and page_number):
         raise HTTPException(status_code=400, detail="Provide either 'image' file OR 'relative_path'+'page_number', not both")
-    if not (0 <= crop_top <= 50 and 0 <= crop_bottom <= 50):
+    if not (0 <= crop_top <= 50 and 0 <= crop_bottom <= 50 and 0 <= crop_left <= 50 and 0 <= crop_right <= 50):
         raise HTTPException(status_code=400, detail="Crop percentages must be between 0 and 50")
 
     # Build scan_config
@@ -274,11 +276,13 @@ async def process_ocr(
                 log_handle.warning(f"Failed to load default scan_config for language '{language}': {e}")
 
     # Merge crop settings (these override scan_config crop if both present)
-    if crop_top > 0 or crop_bottom > 0:
+    if crop_top > 0 or crop_bottom > 0 or crop_left > 0 or crop_right > 0:
         if "crop" not in scan_config:
             scan_config["crop"] = {}
         scan_config["crop"]["top"] = crop_top
         scan_config["crop"]["bottom"] = crop_bottom
+        scan_config["crop"]["left"] = crop_left
+        scan_config["crop"]["right"] = crop_right
 
     # Initialize PDF processor
     config = Config("configs/config.yaml")
@@ -334,11 +338,13 @@ async def process_ocr(
                 pil_image = Image.open(temp_path)
 
                 # Apply cropping if needed (for non-PDF images)
-                if crop_top > 0 or crop_bottom > 0:
+                if crop_top > 0 or crop_bottom > 0 or crop_left > 0 or crop_right > 0:
                     width, height = pil_image.size
                     top_crop_pixels = int(height * crop_top / 100)
                     bottom_crop_pixels = int(height * crop_bottom / 100)
-                    pil_image = pil_image.crop((0, top_crop_pixels, width, height - bottom_crop_pixels))
+                    left_crop_pixels = int(width * crop_left / 100)
+                    right_crop_pixels = int(width * crop_right / 100)
+                    pil_image = pil_image.crop((left_crop_pixels, top_crop_pixels, width - right_crop_pixels, height - bottom_crop_pixels))
 
                 page_num = 1
 
@@ -702,6 +708,8 @@ async def generate_ocr_preview(
     pdf_file: UploadFile = File(..., description="PDF file to preview"),
     crop_top: float = Form(0, description="Percentage to crop from top (0-50)"),
     crop_bottom: float = Form(0, description="Percentage to crop from bottom (0-50)"),
+    crop_left: float = Form(0, description="Percentage to crop from left (0-50)"),
+    crop_right: float = Form(0, description="Percentage to crop from right (0-50)"),
     offset: int = Form(0, description="Starting page number (0-indexed)"),
     limit: int = Form(50, description="Number of pages to preview (10-100)")
 ):
@@ -709,7 +717,7 @@ async def generate_ocr_preview(
     Generate preview images for PDF pages with cropping applied.
     """
     # Validate inputs
-    if not (0 <= crop_top <= 50 and 0 <= crop_bottom <= 50):
+    if not (0 <= crop_top <= 50 and 0 <= crop_bottom <= 50 and 0 <= crop_left <= 50 and 0 <= crop_right <= 50):
         raise HTTPException(status_code=400, detail="Crop percentages must be between 0 and 50")
 
     if not (10 <= limit <= 100):
@@ -738,10 +746,12 @@ async def generate_ocr_preview(
 
         # Build scan_config with crop settings
         scan_config = {}
-        if crop_top > 0 or crop_bottom > 0:
+        if crop_top > 0 or crop_bottom > 0 or crop_left > 0 or crop_right > 0:
             scan_config["crop"] = {
                 "top": crop_top,
-                "bottom": crop_bottom
+                "bottom": crop_bottom,
+                "left": crop_left,
+                "right": crop_right,
             }
 
         # Get total page count first
@@ -815,13 +825,15 @@ async def process_scripture_llm(
     model_name: str = Form("gemini-2.5-flash", description="Gemini model to use"),
     crop_top: float = Form(0, description="Percentage to crop from top (0-50)"),
     crop_bottom: float = Form(0, description="Percentage to crop from bottom (0-50)"),
+    crop_left: float = Form(0, description="Percentage to crop from left (0-50)"),
+    crop_right: float = Form(0, description="Percentage to crop from right (0-50)"),
     use_default_scan_config: bool = Form(False, description="Load scan_config from Granth/llm_extract/<language>/"),
 ):
     """
     Process a scripture page using Gemini LLM for text extraction and categorisation.
     Accepts a PDF (extracts the specified page) or an image file.
     """
-    if not (0 <= crop_top <= 50 and 0 <= crop_bottom <= 50):
+    if not (0 <= crop_top <= 50 and 0 <= crop_bottom <= 50 and 0 <= crop_left <= 50 and 0 <= crop_right <= 50):
         raise HTTPException(status_code=400, detail="Crop percentages must be between 0 and 50")
 
     allowed_models = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro"]
@@ -842,10 +854,12 @@ async def process_scripture_llm(
 
         # Build scan_config
         scan_config = _load_default_scan_config(language, "Granth/llm_extract") if use_default_scan_config else {}
-        if crop_top > 0 or crop_bottom > 0:
+        if crop_top > 0 or crop_bottom > 0 or crop_left > 0 or crop_right > 0:
             scan_config.setdefault("crop", {})
             scan_config["crop"]["top"] = crop_top
             scan_config["crop"]["bottom"] = crop_bottom
+            scan_config["crop"]["left"] = crop_left
+            scan_config["crop"]["right"] = crop_right
 
         if is_pdf:
             # Extract the specified page from PDF
@@ -861,11 +875,13 @@ async def process_scripture_llm(
             # Load image directly and apply cropping
             pil_image = Image.open(temp_path)
 
-            if crop_top > 0 or crop_bottom > 0:
+            if crop_top > 0 or crop_bottom > 0 or crop_left > 0 or crop_right > 0:
                 width, height = pil_image.size
                 top_px = int(height * crop_top / 100)
                 bottom_px = int(height * crop_bottom / 100)
-                pil_image = pil_image.crop((0, top_px, width, height - bottom_px))
+                left_px = int(width * crop_left / 100)
+                right_px = int(width * crop_right / 100)
+                pil_image = pil_image.crop((left_px, top_px, width - right_px, height - bottom_px))
 
         # Generate base64 preview of the cropped image
         buffer = io.BytesIO()

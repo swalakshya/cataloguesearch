@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Spinner } from '../SharedComponents';
+import FileOrUrlInput from './FileOrUrlInput';
 
 const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
 
@@ -8,6 +9,8 @@ const OCRPreview = ({ selectedFile: propSelectedFile, baseDirectoryHandles }) =>
     const [pdfFileName, setPdfFileName] = useState('');
     const [cropTop, setCropTop] = useState(0);
     const [cropBottom, setCropBottom] = useState(0);
+    const [cropLeft, setCropLeft] = useState(0);
+    const [cropRight, setCropRight] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
     const [previewPages, setPreviewPages] = useState([]);
@@ -19,6 +22,15 @@ const OCRPreview = ({ selectedFile: propSelectedFile, baseDirectoryHandles }) =>
     const [selectedPageForComparison, setSelectedPageForComparison] = useState(null);
     const [originalImage, setOriginalImage] = useState(null);
     const [isLoadingOriginal, setIsLoadingOriginal] = useState(false);
+
+    const handleFileReady = (file) => {
+        setPdfFile(file);
+        setPdfFileName(file.name);
+        setPreviewPages([]);
+        setCurrentOffset(0);
+        setTotalPages(0);
+        setError(null);
+    };
 
     // Effect to handle file selection from FileBrowser
     useEffect(() => {
@@ -66,7 +78,8 @@ const OCRPreview = ({ selectedFile: propSelectedFile, baseDirectoryHandles }) =>
             return;
         }
 
-        if (!(0 <= cropTop && cropTop <= 50 && 0 <= cropBottom && cropBottom <= 50)) {
+        if (!(0 <= cropTop && cropTop <= 50 && 0 <= cropBottom && cropBottom <= 50 &&
+              0 <= cropLeft && cropLeft <= 50 && 0 <= cropRight && cropRight <= 50)) {
             setError('Crop percentages must be between 0 and 50');
             return;
         }
@@ -93,6 +106,8 @@ const OCRPreview = ({ selectedFile: propSelectedFile, baseDirectoryHandles }) =>
             formData.append('pdf_file', pdfFile);
             formData.append('crop_top', String(cropTop));
             formData.append('crop_bottom', String(cropBottom));
+            formData.append('crop_left', String(cropLeft));
+            formData.append('crop_right', String(cropRight));
             formData.append('offset', String(offset));
             formData.append('limit', String(pagesPerView));
 
@@ -262,39 +277,27 @@ const OCRPreview = ({ selectedFile: propSelectedFile, baseDirectoryHandles }) =>
                 </p>
             </div>
 
-            {/* Selected File Info */}
-            {pdfFile ? (
-                <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-md">
-                    <div className="flex items-start">
-                        <svg className="w-5 h-5 text-green-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <div>
-                            <p className="text-green-800 font-medium text-sm">PDF File Selected</p>
-                            <p className="text-green-700 text-sm mt-1">
-                                <span className="font-medium">{pdfFileName}</span>
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            ) : (
-                <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
-                    <div className="flex items-start">
-                        <svg className="w-5 h-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <div>
-                            <p className="text-blue-800 font-medium text-sm">No PDF Selected</p>
-                            <p className="text-blue-700 text-sm mt-1">
-                                Click the "Browse Files" button in the navigation bar to select a PDF file
-                            </p>
-                        </div>
-                    </div>
+            {/* File input */}
+            <div className="mb-4">
+                <FileOrUrlInput
+                    onFileReady={handleFileReady}
+                    selectedFile={pdfFile}
+                    inputId="ocr-preview-file-input"
+                />
+            </div>
+
+            {/* Selected file status */}
+            {pdfFile && (
+                <div className="mb-6 p-3 bg-green-50 border border-green-200 rounded-md flex items-center gap-2">
+                    <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="text-green-800 text-sm font-medium">{pdfFileName}</span>
                 </div>
             )}
 
             {/* Crop Settings */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
                         Crop Top (%)
@@ -318,6 +321,34 @@ const OCRPreview = ({ selectedFile: propSelectedFile, baseDirectoryHandles }) =>
                         step="0.1"
                         value={cropBottom}
                         onChange={(e) => setCropBottom(parseFloat(e.target.value) || 0)}
+                        min="0"
+                        max="50"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Crop Left (%)
+                    </label>
+                    <input
+                        type="number"
+                        step="0.1"
+                        value={cropLeft}
+                        onChange={(e) => setCropLeft(parseFloat(e.target.value) || 0)}
+                        min="0"
+                        max="50"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Crop Right (%)
+                    </label>
+                    <input
+                        type="number"
+                        step="0.1"
+                        value={cropRight}
+                        onChange={(e) => setCropRight(parseFloat(e.target.value) || 0)}
                         min="0"
                         max="50"
                         className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"

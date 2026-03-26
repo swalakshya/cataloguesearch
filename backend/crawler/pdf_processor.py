@@ -169,10 +169,14 @@ class PDFProcessor:
             crop_config = scan_config["crop"]
             top_percent = crop_config.get("top", 0)
             bottom_percent = crop_config.get("bottom", 0)
-            if top_percent > 0 or bottom_percent > 0:
+            left_percent = crop_config.get("left", 0)
+            right_percent = crop_config.get("right", 0)
+            if top_percent > 0 or bottom_percent > 0 or left_percent > 0 or right_percent > 0:
                 log_handle.info(
                     f"Cropping enabled: {top_percent}% from top, "
-                    f"{bottom_percent}% from bottom")
+                    f"{bottom_percent}% from bottom, "
+                    f"{left_percent}% from left, "
+                    f"{right_percent}% from right")
             else:
                 crop_config = None  # No actual cropping needed
 
@@ -200,9 +204,11 @@ class PDFProcessor:
                     width, height = img.size
                     top_crop = int(height * top_percent / 100)
                     bottom_crop = int(height * bottom_percent / 100)
+                    left_crop = int(width * left_percent / 100)
+                    right_crop = int(width * right_percent / 100)
 
                     # Crop the image (left, top, right, bottom)
-                    img = img.crop((0, top_crop, width, height - bottom_crop))
+                    img = img.crop((left_crop, top_crop, width - right_crop, height - bottom_crop))
                 images.append(img)
                 page_numbers_for_images.append(page_num)
 
