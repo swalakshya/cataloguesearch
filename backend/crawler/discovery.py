@@ -312,7 +312,7 @@ class SingleFileProcessor:
 
         if missing_pages:
             log_handle.error(
-                f"Missing OCR files for pages {missing_pages} in {self._file_path}. "
+                f"🔴 FAILED! Missing OCR files for pages {missing_pages} in {self._file_path}. "
                 f"Run process() first.")
             return
 

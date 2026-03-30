@@ -198,15 +198,16 @@ class LLMPDFProcessor(PDFProcessor):
                         self._write_output_to_file(output_ocr_dir, [(page_num, blocks)])
                         results.append((page_num, blocks))
                     else:
-                        log_handle.warning(f"Page {page_num}: returned empty blocks, marking as failed")
-                        failed_pages.append(page_num)
+                        log_handle.info(f"Page {page_num}: returned empty blocks (blank page), marking as success")
+                        self._write_output_to_file(output_ocr_dir, [(page_num, blocks)])
+                        results.append((page_num, blocks))
                 except Exception as e:
                     log_handle.error(f"Failed to process page {page_num}: {e}")
                     failed_pages.append(page_num)
 
         results.sort(key=lambda x: x[0])
         log_handle.info(
-            f"LLM extraction summary: {len(results) - len(failed_pages)}/{len(results)} pages succeeded, "
+            f"LLM extraction summary: {len(results)}/{len(tasks)} pages succeeded, "
             f"{len(failed_pages)} failed"
         )
         return results, failed_pages
@@ -263,9 +264,6 @@ class LLMPDFProcessor(PDFProcessor):
         Writes LLM extraction results as JSON arrays to page_%04d.json files.
         """
         for page_num, blocks in paragraphs:
-            if not blocks:
-                log_handle.warning(f"No blocks for page {page_num}, skipping write")
-                continue
             fname = f"{output_ocr_dir}/page_{page_num:04d}.json"
             try:
                 with open(fname, 'w', encoding='utf-8') as fh:
