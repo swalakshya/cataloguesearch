@@ -35,6 +35,13 @@ export const searchableContent = [
     gujarati: null
   },
   {
+    granth: "Niyamsaar",
+    series: "1975-76",
+    count: 183,
+    hindi: null,
+    gujarati: "searchable"
+  },
+  {
     granth: "Panchastikaya",
     series: "1970",
     count: 88,
@@ -280,9 +287,9 @@ export const searchableGranths = [
     status: "searchable"
   },
   {
-      name: "Jain Siddhant Praveshika",
-      author: "Pandit Gopal Das Baraiya",
-      status: "searchable"
+    name: "Jain Siddhant Praveshika",
+    author: "Pandit Gopal Das Baraiya",
+    status: "searchable"
   }
 ];
 

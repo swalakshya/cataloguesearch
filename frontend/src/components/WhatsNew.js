@@ -26,6 +26,15 @@ const WhatsNew = () => {
 
     const updates = [
         {
+            date: "March 31, 2026",
+            newFeatures: [
+                "None"
+            ],
+            newContent: [
+                "Niyamsaar 1975-76 Series in Gujarati"
+            ]
+        },
+        {
             date: "March 16, 2026",
             newFeatures: [
                 "Support for indexing multi-page PDFs.",
