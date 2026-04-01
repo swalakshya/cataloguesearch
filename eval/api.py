@@ -10,6 +10,8 @@ import sys
 import tempfile
 import logging
 import time
+from datetime import datetime, timezone
+import hashlib
 import psutil
 import uuid
 import zipfile
@@ -26,7 +28,10 @@ from PIL import Image
 from backend.config import Config
 from backend.crawler.advanced_pdf_processor import AdvancedPDFProcessor
 from backend.common.scan_config import get_scan_config
+from backend.common.utils import get_merged_config
+from backend.crawler.index_state import IndexState
 from backend.crawler.bookmark_extractor.factory import create_bookmark_extractor_by_name
+from backend.utils import json_dumps
 from backend.crawler.llm_pdf_processor import extract_indic_text, BLOCK_TYPES
 from backend.crawler.paragraph_generator.advanced import AdvancedParagraphGenerator
 from backend.crawler.paragraph_generator.language_meta import get_language_meta
@@ -1275,6 +1280,171 @@ async def save_classifier_page(request: ClassifierSaveRequest):
 
 # --- Standalone Eval App ---
 # Run with: uvicorn eval.api:app --host 0.0.0.0 --port 8001 --env-file .env.local
+# ---------------------------------------------------------------------------
+# Unindexed PDFs helpers
+# ---------------------------------------------------------------------------
+
+def _config_hash(config_data: dict) -> str:
+    """Identical to SingleFileProcessor._get_config_hash in discovery.py."""
+    return hashlib.sha256(json_dumps(config_data, sort_keys=True).encode('utf-8')).hexdigest()
+
+
+def _classify_index_status(state: dict, current_config_hash: str) -> str:
+    """Map a DB state row to a status string by comparing stored vs current config_hash."""
+    if not state:
+        return "never_indexed"
+    stored_config_hash = state.get("config_hash")
+    ocr_checksum = state.get("ocr_checksum")
+    if not stored_config_hash:
+        return "ocr_only" if ocr_checksum else "never_indexed"
+    if stored_config_hash != current_config_hash:
+        return "stale"
+    return "indexed"
+
+
+def _walk_pdfs(base_pdf_path: str):
+    """Yield absolute PDF file paths, respecting _ignore markers."""
+    for dirpath, dirnames, filenames in os.walk(base_pdf_path):
+        # Prune ignored and hidden dirs in-place
+        dirnames[:] = sorted(
+            d for d in dirnames
+            if not d.startswith(".")
+            and not os.path.exists(os.path.join(dirpath, d, "_ignore"))
+        )
+        if os.path.exists(os.path.join(dirpath, "_ignore")):
+            dirnames.clear()
+            continue
+        for fn in filenames:
+            if fn.lower().endswith(".pdf"):
+                yield os.path.join(dirpath, fn)
+
+
+def _get_terminal_scan_config_dir(file_path: str, base_pdf_path: str) -> str:
+    """
+    Return relative path of the deepest directory (closest to file_path) that
+    contains a scan_config.json.  This is the 'terminal' scan_config for the file.
+    Falls back to "" if none found.
+    """
+    current = os.path.dirname(file_path)
+    while True:
+        if os.path.exists(os.path.join(current, "scan_config.json")):
+            return os.path.relpath(current, base_pdf_path)
+        if os.path.samefile(current, base_pdf_path):
+            break
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
+    return ""
+
+
+# ---------------------------------------------------------------------------
+# Endpoint
+# ---------------------------------------------------------------------------
+
+@router.get("/unindexed-pdfs")
+async def get_unindexed_pdfs():
+    """
+    Scan BASE_PDF_PATH for all PDFs and report which are unindexed, OCR-only, or stale.
+    Results are grouped by category, then by terminal scan_config.json directory.
+    Each scan_config group includes all PDFs under it (indexed + non-indexed) so the
+    UI can show context counts; groups where every PDF is indexed are omitted.
+    """
+    config = Config("configs/config.yaml")
+    base_pdf_path = config.BASE_PDF_PATH
+    db_path = config.SQLITE_DB_PATH
+
+    if not base_pdf_path or not os.path.isdir(base_pdf_path):
+        raise HTTPException(status_code=500, detail="BASE_PDF_PATH not configured or missing")
+    if not db_path or not os.path.isfile(db_path):
+        raise HTTPException(status_code=500, detail="SQLITE_DB_PATH not configured or DB missing")
+
+    index_state = IndexState(db_path)
+    all_states = index_state.load_state()
+
+    status_order = {"never_indexed": 0, "stale": 1, "ocr_only": 2, "indexed": 3}
+
+    # groups[category][scan_config_dir] = [pdf_item, ...]
+    groups: Dict[str, Dict[str, List]] = {}
+    seen_paths: set = set()
+
+    for file_path in _walk_pdfs(base_pdf_path):
+        relative_path = os.path.relpath(file_path, base_pdf_path)
+        if relative_path in seen_paths:
+            continue
+        seen_paths.add(relative_path)
+        filename = os.path.basename(file_path)
+
+        metadata = get_merged_config(file_path, base_pdf_path)
+        category = metadata.get("category", "Uncategorised")
+        scan_cfg = get_scan_config(file_path, base_pdf_path)
+        sub_sections = scan_cfg.get("sub_sections", [])
+        file_metadata = dict(metadata)
+        file_metadata["file_url"] = scan_cfg.get("file_url", "")
+
+        scan_config_dir = _get_terminal_scan_config_dir(file_path, base_pdf_path)
+
+        if sub_sections:
+            # Check base file OCR state — used to promote "never_indexed" → "ocr_only"
+            # for sub-sections when OCR has been run but sub-sections haven't been indexed yet.
+            base_doc_id = str(uuid.uuid5(uuid.NAMESPACE_URL, relative_path))
+            base_ocr_done = bool(all_states.get(base_doc_id, {}).get("ocr_checksum"))
+
+            ss_rows = []
+            for ss in sub_sections:
+                field = ss.get("field", "")
+                name = ss.get("name", "")
+                sub_key = f"{field}:{name}" if field else name
+                doc_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{relative_path}#{sub_key}"))
+                state = all_states.get(doc_id, {})
+                sub_config_hash = _config_hash({**file_metadata, "sub_section": {"field": field, "name": name}})
+                status = _classify_index_status(state, sub_config_hash)
+                if status == "never_indexed" and base_ocr_done:
+                    status = "ocr_only"
+                ss_rows.append({"name": name, "status": status})
+
+            worst = min(ss_rows, key=lambda s: status_order.get(s["status"], 9))
+            pdf_item = {
+                "filename": filename,
+                "relative_path": relative_path,
+                "sub_sections": ss_rows,
+                "status": worst["status"],
+                "last_indexed": None,
+            }
+        else:
+            doc_id = str(uuid.uuid5(uuid.NAMESPACE_URL, relative_path))
+            state = all_states.get(doc_id, {})
+            status = _classify_index_status(state, _config_hash(file_metadata))
+            pdf_item = {
+                "filename": filename,
+                "relative_path": relative_path,
+                "sub_sections": None,
+                "status": status,
+                "last_indexed": state.get("last_indexed_timestamp"),
+            }
+
+        groups.setdefault(category, {}).setdefault(scan_config_dir, []).append(pdf_item)
+
+    # Build result: emit only groups that have at least one non-indexed PDF
+    result: Dict[str, List] = {}
+    for category, dir_groups in groups.items():
+        for scan_config_dir, pdfs in dir_groups.items():
+            if all(p["status"] == "indexed" for p in pdfs):
+                continue
+            worst_status = min(pdfs, key=lambda p: status_order.get(p["status"], 9))["status"]
+            pdfs_sorted = sorted(pdfs, key=lambda p: (status_order.get(p["status"], 9), p["filename"]))
+            result.setdefault(category, []).append({
+                "scan_config_dir": scan_config_dir,
+                "worst_status": worst_status,
+                "pdfs": pdfs_sorted,
+            })
+
+    for cat in result:
+        result[cat].sort(key=lambda g: (status_order.get(g["worst_status"], 9), g["scan_config_dir"]))
+
+    return result
+
+
 app = FastAPI(title="Catalogue Eval UI", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,

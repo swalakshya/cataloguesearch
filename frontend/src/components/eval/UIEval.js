@@ -4,6 +4,7 @@ import ParagraphGenEval from './ParagraphGenEval';
 import OCRPreview from './OCRPreview';
 import FileBrowser from './FileBrowser';
 import ParaClassifier from './ParaClassifier';
+import UnindexedPDFs from './UnindexedPDFs';
 import { storeDirectoryHandles, getStoredDirectoryHandles, validateDirectoryHandles, requestStoredPermissions, clearStoredDirectoryHandles } from '../../utils/directoryHandlers';
 
 const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
@@ -247,10 +248,16 @@ const UIEval = () => {
                                         isActive={activeTab === 'paragraph-classifier'}
                                         onClick={setActiveTab}
                                     />
+                                    <NavButton
+                                        id="unindexed-pdfs"
+                                        label="Unindexed PDFs"
+                                        isActive={activeTab === 'unindexed-pdfs'}
+                                        onClick={setActiveTab}
+                                    />
                                 </div>
 
                                 {/* File Browser Button */}
-                                {(activeTab === 'pdf-parser' || activeTab === 'ocr-preview' || activeTab === 'paragraph-eval' || activeTab === 'paragraph-classifier') && (
+                                {['pdf-parser', 'ocr-preview', 'paragraph-eval', 'paragraph-classifier'].includes(activeTab) && (
                                     <button
                                         onClick={handleBrowseFiles}
                                         className="bg-green-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-green-700 transition-colors flex items-center"
@@ -524,6 +531,10 @@ const UIEval = () => {
                                 baseDirectoryHandles={baseDirectoryHandles}
                                 basePaths={basePaths}
                             />
+                        )}
+
+                        {activeTab === 'unindexed-pdfs' && (
+                            <UnindexedPDFs />
                         )}
 
                     </div>
