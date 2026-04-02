@@ -22,6 +22,7 @@ from tests.backend.base import *  # brings in module-scoped autouse `initialise`
 _DATA_DIR  = os.path.join(os.path.dirname(__file__), "../data/granth")
 _ALPHA_DIR = os.path.join(_DATA_DIR, "alpha")
 _BETA_DIR  = os.path.join(_DATA_DIR, "beta")
+_GAMMA_DIR = os.path.join(_DATA_DIR, "gamma")
 
 # ── scan config ───────────────────────────────────────────────────────────────
 _SCAN_CONFIG = {
@@ -32,6 +33,13 @@ _SCAN_CONFIG = {
     "answer_prefix":   ["उत्तर"],
     "verses":          ["hindi_verse", "prakrit_verse", "sanskrit_verse"],
     "typo_list":       [],
+}
+
+_SCAN_CONFIG_GAMMA = {
+    **_SCAN_CONFIG,
+    "qa_merge":     False,
+    "header_regex": ["^\\(\\d+\\)$"],
+    "strip_regex":  [["।\\s*\\d+", "।"]],
 }
 _ALL_VERSE_TYPES = ["hindi_verse", "prakrit_verse", "sanskrit_verse"]
 
@@ -242,6 +250,50 @@ class TestAlphaVerseFiles:
         verses = _read_verse_file(alpha_output, 12)
         types = {v["type"] for v in verses}
         assert types == {"hindi_verse", "prakrit_verse", "sanskrit_verse"}
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Gamma — header_regex, strip_regex, qa_merge=False
+# ═════════════════════════════════════════════════════════════════════════════
+
+@pytest.fixture(scope="module")
+def gamma_output(tmp_path_factory):
+    text_dir = str(tmp_path_factory.mktemp("gamma"))
+    gen = _make_gen()
+    gen.index_document(
+        "test_doc", "test.pdf",
+        _GAMMA_DIR, text_dir, _pages_list(_GAMMA_DIR),
+        {"language": "hi"}, _SCAN_CONFIG_GAMMA, {},
+        dry_run=True,
+        pdf_processor=_DirectProcessor(),
+        clean_output_dir=True,
+    )
+    return text_dir
+
+
+class TestGammaCleanupConfig:
+
+    def test_header_regex_block_not_in_output(self, gamma_output):
+        """( ९ ) is a standalone hindi_text block matching header_regex — skipped entirely."""
+        paras = _all_paragraphs(gamma_output)
+        assert not any("( ९ )" in p for p in paras)
+
+    def test_strip_regex_removes_trailing_number(self, gamma_output):
+        """Trailing '। 42' is reduced to '।' — the digit is stripped, purn viram kept."""
+        paras = _all_paragraphs(gamma_output)
+        para = next((p for p in paras if "ज्ञान का प्रकाश" in p), None)
+        assert para is not None
+        assert "42" not in para
+        assert "।" in para
+
+    def test_qa_merge_false_each_pair_is_separate_paragraph(self, gamma_output):
+        """With qa_merge=False, Q1+A1 and Q2+A2 are in two separate paragraphs."""
+        paras = _all_paragraphs(gamma_output)
+        first_pair  = next((p for p in paras if "आत्मा का स्वभाव" in p), None)
+        second_pair = next((p for p in paras if "मोक्ष कैसे" in p), None)
+        assert first_pair is not None
+        assert second_pair is not None
+        assert first_pair is not second_pair
 
 
 # ═════════════════════════════════════════════════════════════════════════════

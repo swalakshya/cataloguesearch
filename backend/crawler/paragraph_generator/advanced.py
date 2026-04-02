@@ -381,6 +381,7 @@ class AdvancedParagraphGenerator(BaseParagraphGenerator):
             List of (page_num, paragraph_text, paragraph_type) tuples
         """
         header_regexes = scan_config.get("header_regex", [])
+        strip_regex = scan_config.get("strip_regex", [])
         question_prefix = scan_config.get("question_prefix", [])
         answer_prefix = scan_config.get("answer_prefix", [])
         typo_list = scan_config.get("typo_list", [])
@@ -416,7 +417,7 @@ class AdvancedParagraphGenerator(BaseParagraphGenerator):
             for line_data in lines_data:
                 # Normalize text using base class method (which delegates to language_meta)
                 raw_text = line_data.get("text", "")
-                normalized_text = self._normalize_text(raw_text, typo_list)
+                normalized_text = self._normalize_text(raw_text, typo_list, strip_regex)
 
                 # Create classified line
                 classified_line = classifier.classify(

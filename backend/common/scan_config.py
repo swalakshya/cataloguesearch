@@ -63,6 +63,7 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
     scan_meta = {
         "header_prefix": [],
         "header_regex": [],
+        "strip_regex": [],
         "page_list": [],
         "typo_list": [],
         "crop": {},
@@ -86,6 +87,7 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
                 default_config = scan_config_data.get("default", {})
                 scan_meta["header_prefix"].extend(default_config.get("header_prefix", []))
                 scan_meta["header_regex"].extend(default_config.get("header_regex", []))
+                scan_meta["strip_regex"].extend(default_config.get("strip_regex", []))
                 scan_meta["page_list"].extend(default_config.get("page_list", []))
                 scan_meta["typo_list"].extend(default_config.get("typo_list", []))
                 scan_meta["question_prefix"].extend(default_config.get("question_prefix", []))
@@ -126,6 +128,10 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
                     if key in default_config:
                         scan_meta[key] = default_config[key]
 
+                # Update qa_merge setting from default config (if present)
+                if "qa_merge" in default_config:
+                    scan_meta["qa_merge"] = default_config["qa_merge"]
+
                 # Update multi-page PDF settings from default config (if present)
                 for key in ("multi_page", "book_start_page", "book_start_side", "split_percentage"):
                     if key in default_config:
@@ -140,6 +146,7 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
     if file_config:
         scan_meta["header_prefix"].extend(file_config.get("header_prefix", []))
         scan_meta["header_regex"].extend(file_config.get("header_regex", []))
+        scan_meta["strip_regex"].extend(file_config.get("strip_regex", []))
         scan_meta["question_prefix"].extend(file_config.get("question_prefix", []))
         scan_meta["answer_prefix"].extend(file_config.get("answer_prefix", []))
         scan_meta["stop_words"].extend(file_config.get("stop_words", []))

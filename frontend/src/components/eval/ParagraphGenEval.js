@@ -489,6 +489,19 @@ Please select the SOURCE directory (${selection.sourcePath})`;
         return `${basePaths.base_text_path}/${selectedFolder.relativePath}/${txtFileName}`;
     };
 
+    const getScanConfigPath = () => {
+        if (!basePaths || !selectedFolder?.relativePath) return '';
+        return `${basePaths.base_pdf_path}/${selectedFolder.relativePath}/scan_config.json`;
+    };
+
+    const getDebugInfo = () => {
+        return [
+            `scan_config: ${getScanConfigPath()}`,
+            `ocr json:    ${getJsonPath()}`,
+            `txt:         ${getTxtPath()}`,
+        ].join('\n');
+    };
+
     // Show directory selection if no directories selected
     if (!sourceHandle || !targetHandle) {
         return (
@@ -762,11 +775,19 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                     <div className="flex-1 p-4">
                         <div className="flex justify-between items-center mb-3">
                             <h3 className="text-lg font-semibold text-slate-800">Generated Paragraphs</h3>
-                            <CopyPathButton
-                                path={getTxtPath()}
-                                label="TXT"
-                                disabled={!selectedFolder || !basePaths}
-                            />
+                            <div className="flex items-center gap-2">
+                                <CopyPathButton
+                                    path={getTxtPath()}
+                                    label="TXT"
+                                    disabled={!selectedFolder || !basePaths}
+                                />
+                                <span className="text-slate-400">|</span>
+                                <CopyPathButton
+                                    path={getDebugInfo()}
+                                    label="Debug"
+                                    disabled={!selectedFolder || !basePaths}
+                                />
+                            </div>
                         </div>
                         <div className="bg-slate-50 border border-slate-300 rounded-lg overflow-hidden">
                             <div className="p-4 space-y-3 max-h-[700px] overflow-y-auto">
