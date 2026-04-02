@@ -81,8 +81,8 @@ class TestStructuralIntegrity:
     """Overall count and ordering sanity checks."""
 
     def test_total_paragraph_count(self, paragraphs):
-        """5 pages of hand-crafted data produce exactly 13 final paragraphs."""
-        assert len(paragraphs) == 13
+        """5 pages of hand-crafted data produce exactly 11 final paragraphs."""
+        assert len(paragraphs) == 11
 
     def test_no_empty_paragraphs(self, paragraphs):
         assert all(p.strip() for p in paragraphs)
@@ -102,7 +102,7 @@ class TestStructuralIntegrity:
 class TestBaselineProse:
     """
     Page 1: two prose paragraphs formed by IS_INDENTED start + terminating line.
-    Each ends with '।' → Phase 3 refuses to merge them.
+    Both are below the 50-word minimum so Phase 3 merges them together.
     """
 
     def test_first_prose_paragraph_content(self, paragraphs):
@@ -112,18 +112,18 @@ class TestBaselineProse:
         assert "प्रत्यक्ष रूप से प्रभावित करती है" in p
 
     def test_second_prose_paragraph_content(self, paragraphs):
-        """Page 1 para 2: factory smoke topic in a separate paragraph."""
+        """Page 1 para 2: factory smoke topic present in output."""
         p = next((p for p in paragraphs if "कारखानों" in p), None)
         assert p is not None
         assert "हानि पहुंचाते हैं" in p
 
-    def test_two_page1_prose_paragraphs_are_separate(self, paragraphs):
-        """Prose paragraphs ending with '।' are NOT merged by Phase 3."""
+    def test_short_page1_prose_paragraphs_merged_by_phase3(self, paragraphs):
+        """Both page 1 prose blocks are below min-word threshold → merged into one."""
         p1 = next((p for p in paragraphs if "वायु प्रदूषण" in p), None)
         p2 = next((p for p in paragraphs if "कारखानों" in p), None)
-        assert p1 is not p2
-        assert "कारखानों" not in p1
-        assert "वायु प्रदूषण" not in p2
+        assert p1 is p2  # same merged paragraph
+        assert "कारखानों" in p1
+        assert "वायु प्रदूषण" in p1
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -324,14 +324,15 @@ class TestQABlock:
     def test_is_indented_in_qa_block_exits_to_prose(self, paragraphs):
         """
         Page 5 L11 is IS_INDENTED (x_start=130) inside QA_BLOCK → flushes QA,
-        switches to STANDARD_PROSE.
+        switches to STANDARD_PROSE. Phase 3 type-change boundary keeps the prose
+        fragment separate from the preceding QA block.
         Covers advanced.py lines 302-306.
         """
-        # The IS_INDENTED line "बड़ा शत्रु है।" becomes a STANDARD_PROSE fragment
-        # that Phase 3 then pulls into the preceding QA block (output 13).
-        last_para = next((p for p in paragraphs if "अज्ञान ही मनुष्य का सबसे" in p), None)
-        assert last_para is not None
-        assert "बड़ा शत्रु है" in last_para
+        qa_para = next((p for p in paragraphs if "अज्ञान ही मनुष्य का सबसे" in p), None)
+        assert qa_para is not None
+        # The IS_INDENTED prose fragment is a separate paragraph, not pulled into QA
+        assert "बड़ा शत्रु है" not in qa_para
+        assert any("बड़ा शत्रु है" in p for p in paragraphs)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -395,8 +396,8 @@ class TestEmptyPage:
     """
 
     def test_empty_page_does_not_add_paragraphs(self, paragraphs):
-        """Total count is unchanged (13) even though 6 pages are loaded."""
-        assert len(paragraphs) == 13
+        """Total count is unchanged (11) even though 6 pages are loaded."""
+        assert len(paragraphs) == 11
 
 
 class TestPhase3ProseCombining:
@@ -415,19 +416,19 @@ class TestPhase3ProseCombining:
         # Must NOT contain the QA content that follows
         assert "प्रश्न: संसार" not in prose_frag
 
-    def test_qa_block_pulls_trailing_prose_fragment(self, paragraphs):
+    def test_qa_block_does_not_pull_trailing_prose_fragment(self, paragraphs):
         """
-        Phase 3: QA block whose last text has no terminal punctuation pulls the
-        following STANDARD_PROSE fragment into the same paragraph.
-        'उत्तर: अज्ञान ही मनुष्य का सबसे' + 'बड़ा शत्रु है।' → combined.
+        Phase 3: QA ↔ STANDARD_PROSE type change is a hard boundary.
+        'उत्तर: अज्ञान ही मनुष्य का सबसे' (QA) and 'बड़ा शत्रु है।' (prose)
+        stay in separate paragraphs.
         """
-        combined = next(
+        qa_para = next(
             (p for p in paragraphs if "मनुष्य का सबसे बड़ा शत्रु कौन है" in p),
             None,
         )
-        assert combined is not None
-        assert "अज्ञान ही मनुष्य का सबसे" in combined
-        assert "बड़ा शत्रु है" in combined
+        assert qa_para is not None
+        assert "अज्ञान ही मनुष्य का सबसे" in qa_para
+        assert "बड़ा शत्रु है" not in qa_para  # prose fragment is separate
 
     def test_prose_after_verse_breaks_before_next_qa_block(self, paragraphs):
         """

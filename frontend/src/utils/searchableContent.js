@@ -91,7 +91,7 @@ export const searchableContent = [
     gujarati: null
   },
   {
-    granth: "Natak Samaysar",
+    granth: "Natak Samaysaar",
     series: "1971-72",
     count: 197,
     hindi: "searchable",
@@ -159,7 +159,13 @@ export const searchableContent = [
     count: null,
     hindi: "searchable",
     gujarati: null
-  }
+  },
+  {
+    granth: "Bruhad Dravya Sangrah",
+    count: null,
+    hindi: "searchable",
+    gujarati: null
+  },
 ];
 
 /**
@@ -290,7 +296,27 @@ export const searchableGranths = [
     name: "Jain Siddhant Praveshika",
     author: "Pandit Gopal Das Baraiya",
     status: "searchable"
-  }
+  },
+  {
+    name: "Satta Swaroop",
+    author: "Pandit Bhagchandra Chhajed",
+    status: "searchable"
+  },
+  {
+    name: "Jambu Swami Charitra",
+    author: "Pandit Rajmal Pandey",
+    status: "searchable"
+  },
+  {
+    name: "Aaradhansaar",
+    author: "Acharya Devsen",
+    status: "searchable"
+  },
+  {
+    name: "Gyan Goshthi",
+    author: "Shri Kanji Swami",
+    status: "searchable"
+  },
 ];
 
 /**

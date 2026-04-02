@@ -1,6 +1,6 @@
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List
 
 from backend.config import Config
@@ -26,6 +26,7 @@ class ParaInfo:
     """
     page_num: int
     text: str
+    page_spans: list = field(default_factory=list)  # [(page_num, word_offset), ...] sorted ascending
     is_chapter_start: bool = False
     is_verse_end: bool = False
     is_question: bool = False
@@ -76,7 +77,7 @@ class BaseParagraphGenerator:
                     return True
         return False
 
-    def _normalize_text(self, text: str, typo_list: List) -> str:
+    def _normalize_text(self, text: str, typo_list: List, strip_regex: List = None) -> str:
         if not isinstance(text, str):
             return ""
 
@@ -97,6 +98,10 @@ class BaseParagraphGenerator:
         # Apply typo corrections
         cleaned_text = self._apply_typo_corrections(cleaned_text, typo_list)
 
+        # Apply strip_regex patterns (e.g. trailing paragraph numbers)
+        if strip_regex:
+            cleaned_text = self._apply_strip_regex(cleaned_text, strip_regex)
+
         # Language-specific dialogue pattern normalization
         cleaned_text = self._normalize_dialogue_patterns(cleaned_text)
 
@@ -112,7 +117,7 @@ class BaseParagraphGenerator:
     def _normalize_punctuation(self, text: str) -> str:
         # Normalize common OCR misclassifications for the purn viram (।)
         # The purn viram is often misread as |, I, l, or 1.
-        purn_viram_errors = ['|', 'I', 'l', '1']
+        purn_viram_errors = ['|', 'I', 'l']
         for error_char in purn_viram_errors:
             text = text.replace(error_char, '।')
 
@@ -138,6 +143,11 @@ class BaseParagraphGenerator:
     def _apply_typo_corrections(self, text: str, typo_list: List) -> str:
         for typo in typo_list:
             text = text.replace(typo[0], typo[1])
+        return text
+
+    def _apply_strip_regex(self, text: str, strip_regex: List) -> str:
+        for pattern, replacement in strip_regex:
+            text = re.sub(pattern, replacement, text)
         return text
 
     def _normalize_dialogue_patterns(self, text: str) -> str:

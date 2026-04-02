@@ -31,7 +31,8 @@ const WhatsNew = () => {
                 "None"
             ],
             newContent: [
-                "Niyamsaar 1975-76 Series in Gujarati"
+                "Pravachan Series: Niyamsar 1975 series in Gujarati",
+                "Granths: Aaradhansaar, Gyan Goshthi, Jambu Swami Charitra and Satta Swaroop"
             ]
         },
         {

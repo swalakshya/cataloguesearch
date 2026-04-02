@@ -6,8 +6,9 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import List, Set, Optional, Tuple
 
-from backend.crawler.paragraph_generator.base import BaseParagraphGenerator
+from backend.crawler.paragraph_generator.base import BaseParagraphGenerator, ParaInfo
 from backend.crawler.paragraph_generator.language_meta import LanguageMeta
+from backend.crawler.paragraph_generator.sizer import split_long_para, ABSOLUTE_TERM_RE
 
 log_handle = logging.getLogger(__name__)
 
@@ -57,6 +58,9 @@ HEADING_MARKERS = ()
 
 HINDI_SENTENCE_TERMINATORS = ('।', '?', '!', '।।', ')', ']', '}')
 GUJARATI_SENTENCE_TERMINATORS = ('।', '.', '?', '!', '।।', ')', ']', '}')
+
+_MIN_PARA_LENGTH = 50   # default minimum words per output paragraph
+_MAX_PARA_LENGTH = 250  # default maximum words per output paragraph (override via scan_config max_words_per_para)
 
 
 # --- LineClassifier (EXACT copy from para_gen.py) ---
@@ -339,6 +343,9 @@ class AdvancedParagraphGenerator(BaseParagraphGenerator):
         Returns:
             List of (page_num, paragraph_text) tuples
         """
+        min_words = scan_config.get("min_words_per_para", _MIN_PARA_LENGTH)
+        max_words = scan_config.get("max_words_per_para", _MAX_PARA_LENGTH)
+
         # Phase 1: Convert lines to typed paragraphs
         typed_paragraphs = self._phase1_lines_to_typed_paragraphs(
             pages_data, scan_config
@@ -347,10 +354,16 @@ class AdvancedParagraphGenerator(BaseParagraphGenerator):
         # Phase 2: Combine consecutive blocks by type
         combined_by_type = self._phase2_combine_by_type(typed_paragraphs)
 
-        # Phase 3: Combine prose blocks based on punctuation
-        final_paragraphs = self._phase3_combine_prose(combined_by_type)
+        # Phase 3: Merge to min word length, build page_spans
+        phase3 = self._phase3_combine_prose(combined_by_type, min_words)
 
-        return final_paragraphs
+        # Phase 4: Split oversized paragraphs (only if max configured)
+        if max_words is not None:
+            phase4 = self._phase4_split_to_max(phase3, max_words)
+        else:
+            phase4 = phase3
+
+        return [(p.page_num, p.text) for p in phase4]
 
     def _phase1_lines_to_typed_paragraphs(
             self, pages_data: list[dict],
@@ -366,6 +379,7 @@ class AdvancedParagraphGenerator(BaseParagraphGenerator):
             List of (page_num, paragraph_text, paragraph_type) tuples
         """
         header_regexes = scan_config.get("header_regex", [])
+        strip_regex = scan_config.get("strip_regex", [])
         question_prefix = scan_config.get("question_prefix", [])
         answer_prefix = scan_config.get("answer_prefix", [])
         typo_list = scan_config.get("typo_list", [])
@@ -401,7 +415,7 @@ class AdvancedParagraphGenerator(BaseParagraphGenerator):
             for line_data in lines_data:
                 # Normalize text using base class method (which delegates to language_meta)
                 raw_text = line_data.get("text", "")
-                normalized_text = self._normalize_text(raw_text, typo_list)
+                normalized_text = self._normalize_text(raw_text, typo_list, strip_regex)
 
                 # Create classified line
                 classified_line = classifier.classify(
@@ -466,66 +480,104 @@ class AdvancedParagraphGenerator(BaseParagraphGenerator):
         return combined
 
     def _phase3_combine_prose(
-            self, typed_paragraphs: List[Tuple[int, str, State]]) -> List[Tuple[int, str]]:
+            self,
+            typed_paragraphs: List[Tuple[int, str, State]],
+            min_para_len: int = _MIN_PARA_LENGTH,
+    ) -> List[ParaInfo]:
         """
-        Phase 3: Combine prose-like blocks (STANDARD_PROSE + QA_BLOCK) based on punctuation.
+        Phase 3: Merge paragraphs to min word length, same logic as granth Phase 2.
 
-        Rules:
-        - Starting with QA_BLOCK: can pull following STANDARD_PROSE until punctuation
-        - Starting with STANDARD_PROSE: can only pull STANDARD_PROSE (QA_BLOCK breaks)
-        - Combine until block ends with punctuation
+        Hard flush boundaries:
+          - VERSE_BLOCK: emit immediately, never merged
+          - QA_BLOCK ↔ STANDARD_PROSE type change
 
-        Returns:
-            List of (page_num, paragraph_text) tuples (final format)
+        For STANDARD_PROSE: merge consecutive blocks until min_para_len words.
+        For QA_BLOCK: combine with '\\n'; type change is the only hard boundary.
+
+        Builds page_spans tracking word offsets at page transitions.
         """
         if not typed_paragraphs:
             return []
 
-        final_paragraphs = []
-        i = 0
+        result: List[ParaInfo] = []
+        buffer: List[str] = []
+        buffer_len: int = 0       # word count for threshold (prose only)
+        buffer_wc: int = 0        # total word count for page_spans tracking
+        buffer_page: int | None = None
+        buffer_type: State | None = None
+        buffer_page_spans: list = []
 
-        while i < len(typed_paragraphs):
-            page_num, text, para_type = typed_paragraphs[i]
+        def _flush():
+            nonlocal buffer, buffer_len, buffer_wc, buffer_page, buffer_type, buffer_page_spans
+            if buffer:
+                separator = '\n' if buffer_type == State.QA_BLOCK else ' '
+                result.append(ParaInfo(
+                    page_num=buffer_page,
+                    text=separator.join(buffer),
+                    page_spans=buffer_page_spans[:],
+                ))
+            buffer.clear()
+            buffer_len = 0
+            buffer_wc = 0
+            buffer_page = None
+            buffer_type = None
+            buffer_page_spans = []
 
-            # VERSE_BLOCK: already combined, just strip type tag
+        for page_num, text, para_type in typed_paragraphs:
+            # VERSE_BLOCK: flush buffer, emit immediately
             if para_type == State.VERSE_BLOCK:
-                final_paragraphs.append((page_num, text))
-                i += 1
+                _flush()
+                result.append(ParaInfo(
+                    page_num=page_num,
+                    text=text,
+                    page_spans=[(page_num, 0)],
+                ))
                 continue
 
-            # Prose-like blocks (STANDARD_PROSE or QA_BLOCK)
-            buffer = [text]
-            starting_type = para_type
-            i += 1
+            # Type change: flush
+            if buffer and para_type != buffer_type:
+                _flush()
 
-            # Combine based on starting type
-            while i < len(typed_paragraphs):
-                next_page, next_text, next_type = typed_paragraphs[i]
+            wc = len(text.split())
 
-                # VERSE_BLOCK always breaks
-                if next_type == State.VERSE_BLOCK:
-                    break
+            if not buffer:
+                buffer_page = page_num
+                buffer_type = para_type
+                buffer_page_spans = [(page_num, 0)]
+            else:
+                if page_num != buffer_page_spans[-1][0]:
+                    buffer_page_spans.append((page_num, buffer_wc))
 
-                # If started with STANDARD_PROSE, QA_BLOCK breaks
-                if starting_type == State.STANDARD_PROSE and next_type == State.QA_BLOCK:
-                    break
+            buffer.append(text)
+            buffer_wc += wc
 
-                # If started with QA_BLOCK, can pull STANDARD_PROSE or QA_BLOCK
-                # Check if previous text ends with punctuation
-                last_text = buffer[-1].strip()
-                if last_text.endswith(self.punctuation_suffixes):
-                    break
+            if para_type == State.STANDARD_PROSE:
+                buffer_len += wc
+                if ABSOLUTE_TERM_RE.search(text):
+                    _flush()
+                elif buffer_len >= min_para_len and text.strip().endswith(
+                        tuple(self._language_meta.sentence_terminators)):
+                    _flush()
+            # QA_BLOCK: no word-count threshold; type change flushes
 
-                # Add to buffer
-                buffer.append(next_text)
-                i += 1
+        _flush()
+        return result
 
-                # If this text ends with punctuation, stop
-                if next_text.strip().endswith(self.punctuation_suffixes):
-                    break
+    # ------------------------------------------------------------------
+    # Phase 4 — split oversized paragraphs
+    # ------------------------------------------------------------------
 
-            # Combine buffer
-            combined_text = ' '.join(buffer)
-            final_paragraphs.append((page_num, combined_text))
+    def _phase4_split_to_max(
+            self,
+            paragraphs: List[ParaInfo],
+            max_words: int,
+    ) -> List[ParaInfo]:
+        """
+        Split any paragraph exceeding max_words at sentence boundaries.
+        Delegates to sizer.split_long_para using language-specific terminators.
+        """
+        result: List[ParaInfo] = []
+        for para in paragraphs:
+            result.extend(split_long_para(para, max_words, self._language_meta.sentence_terminators))
+        return result
 
-        return final_paragraphs

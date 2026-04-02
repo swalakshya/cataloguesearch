@@ -88,7 +88,7 @@ def indexed_documents(setup, indexing_module):
             'filename': 'hampi_hindi.pdf',
             'language': 'hi',
             'metadata': {'language': 'hi'},
-            'para_count_advanced': 21,
+            'para_count_advanced': 17,
             'para_count_paragraph': 20
         },
         {
@@ -97,7 +97,7 @@ def indexed_documents(setup, indexing_module):
             'filename': 'jaipur_hindi.pdf',
             'language': 'hi',
             'metadata': {'language': 'hi'},
-            'para_count_advanced': 21,
+            'para_count_advanced': 17,
             'para_count_paragraph': 20
         },
         {
@@ -106,7 +106,7 @@ def indexed_documents(setup, indexing_module):
             'filename': 'indore_gujarati.pdf',
             'language': 'gu',
             'metadata': {'language': 'gu'},
-            'para_count_advanced': 21,
+            'para_count_advanced': 17,
             'para_count_paragraph': 20
         },
         {
@@ -115,7 +115,7 @@ def indexed_documents(setup, indexing_module):
             'filename': 'thanjavur_gujarati.pdf',
             'language': 'gu',
             'metadata': {'language': 'gu'},
-            'para_count_advanced': 22,
+            'para_count_advanced': 17,
             'para_count_paragraph': 20
         }
     ]
@@ -546,7 +546,7 @@ def test_dry_run_behavior(setup, indexing_module):
             'filename': 'bangalore_hindi.pdf',
             'language': 'hi',
             'metadata': {'language': 'hi'},
-            'para_count_advanced': 20,
+            'para_count_advanced': 17,
             'para_count_paragraph': 20
         }
     ]
