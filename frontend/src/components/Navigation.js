@@ -53,7 +53,7 @@ export const Navigation = ({ currentPage, setCurrentPage }) => {
                                 key={item.id}
                                 to={item.path}
                                 onClick={() => handleMenuClick(item.id)}
-                                className={`px-4 py-2 text-sm font-medium rounded-full transition-all duration-200 ${
+                                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
                                     isActive(item)
                                         ? 'text-sky-700 bg-sky-50 font-semibold'
                                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'

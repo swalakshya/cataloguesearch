@@ -328,11 +328,11 @@ export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData
     if (!hasAnyResults) return null;
 
     return (
-        <div className="flex items-center gap-2 mb-3 p-1 bg-slate-100 rounded-xl w-fit">
+        <div className="flex items-center gap-1 mb-3 p-1 bg-slate-100 rounded-md w-fit">
             {!hasSuggestions && pravachanCount > 0 && (
                 <button
                     onClick={() => setActiveTab('pravachan')}
-                    className={`flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+                    className={`flex items-center gap-2 px-3 py-1 text-sm font-medium rounded transition-all duration-200 ${
                         activeTab === 'pravachan'
                             ? 'bg-white text-sky-700 shadow-sm font-semibold'
                             : 'text-slate-500 hover:text-slate-700'
@@ -345,7 +345,7 @@ export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData
             {!hasSuggestions && granthCount > 0 && (
                 <button
                     onClick={() => setActiveTab('granth')}
-                    className={`flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+                    className={`flex items-center gap-2 px-3 py-1 text-sm font-medium rounded transition-all duration-200 ${
                         activeTab === 'granth'
                             ? 'bg-white text-amber-700 shadow-sm font-semibold'
                             : 'text-slate-500 hover:text-slate-700'
@@ -358,7 +358,7 @@ export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData
             {similarDocumentsData && (
                 <button
                     onClick={() => setActiveTab('similar')}
-                    className={`flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+                    className={`flex items-center gap-2 px-3 py-1 text-sm font-medium rounded transition-all duration-200 ${
                         activeTab === 'similar'
                             ? 'bg-white text-slate-700 shadow-sm font-semibold'
                             : 'text-slate-500 hover:text-slate-700'

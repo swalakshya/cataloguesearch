@@ -411,7 +411,7 @@ const TransliterationInput = ({
                     onKeyDown={handleKeyDown}
                     placeholder={getDynamicPlaceholder()}
                     disabled={disabled}
-                    className={`w-full p-3 pl-4 pr-20 text-sm md:text-lg bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-slate-900 font-sans ${className}`}
+                    className={`w-full py-2 pl-4 pr-20 text-sm md:text-base bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-slate-900 font-sans ${className}`}
                 />
 
                 {/* Toggle Button */}
@@ -419,7 +419,7 @@ const TransliterationInput = ({
                     type="button"
                     onClick={handleToggle}
                     disabled={disabled}
-                    className={`absolute right-3 top-1/2 -translate-y-1/2 px-3 py-1.5 flex items-center justify-center rounded-lg transition-all duration-300 font-semibold text-sm ${
+                    className={`absolute right-2 top-1/2 -translate-y-1/2 px-2.5 py-1 flex items-center justify-center rounded-md transition-all duration-300 font-semibold text-xs ${
                         isEnabled
                             ? 'bg-green-500 text-white hover:bg-green-600 shadow-md'
                             : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
