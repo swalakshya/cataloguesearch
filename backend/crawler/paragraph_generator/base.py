@@ -1,6 +1,6 @@
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List
 
 from backend.config import Config
@@ -26,6 +26,7 @@ class ParaInfo:
     """
     page_num: int
     text: str
+    page_spans: list = field(default_factory=list)  # [(page_num, word_offset), ...] sorted ascending
     is_chapter_start: bool = False
     is_verse_end: bool = False
     is_question: bool = False

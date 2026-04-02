@@ -778,6 +778,7 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                                 {targetContent.split('----').map((paragraph, index) => {
                                     const trimmedParagraph = paragraph.trim();
                                     if (!trimmedParagraph) return null;
+                                    const wordCount = trimmedParagraph.split(/\s+/).filter(Boolean).length;
 
                                     return (
                                         <div
@@ -788,6 +789,9 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                                                 <div className="text-xs text-slate-500 font-semibold">
                                                     Paragraph {index + 1}
                                                 </div>
+                                                <span className="text-xs text-slate-400 bg-slate-200 rounded-full px-2 py-0.5 leading-none">
+                                                    {wordCount}w
+                                                </span>
                                             </div>
                                             <div className="text-sm text-slate-800 whitespace-pre-wrap font-mono">
                                                 {trimmedParagraph}

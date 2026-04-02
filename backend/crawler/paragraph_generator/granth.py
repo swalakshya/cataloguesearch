@@ -47,7 +47,8 @@ from backend.crawler.paragraph_generator.language_meta import LanguageMeta
 
 log_handle = logging.getLogger(__name__)
 
-_MIN_PARA_LENGTH = 50  # minimum words per output paragraph
+_MIN_PARA_LENGTH = 50   # minimum words per output paragraph
+_MAX_PARA_LENGTH = 250  # maximum words per output paragraph (override via scan_config max_words_per_para)
 
 # Strips optional leading number markers like '(२) ', '(3) ', '3. ' before
 # QA prefix matching. Handles ASCII and Devanagari digits.
@@ -101,17 +102,24 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
         answer_prefixes = tuple(scan_config.get("answer_prefix", []))
         typo_list = scan_config.get("typo_list", [])
         qa_merge = scan_config.get("qa_merge", True)
+        min_words = scan_config.get("min_words_per_para", _MIN_PARA_LENGTH)
+        max_words = scan_config.get("max_words_per_para", _MAX_PARA_LENGTH)
 
         qa_prefixes = question_prefixes + answer_prefixes
         phase1 = self._phase1_sentence_boundaries(pages_data, stop_prefixes, qa_prefixes, typo_list)
         phase1_5 = self._phase1_5_tag_qa(phase1, question_prefixes, answer_prefixes)
-        phase2 = self._phase2_min_length(phase1_5, stop_prefixes, qa_merge)
+        phase2 = self._phase2_min_length(phase1_5, stop_prefixes, qa_merge, min_words)
+
+        if max_words is not None:
+            phase3 = self._phase3_split_to_max(phase2, max_words)
+        else:
+            phase3 = phase2
 
         log_handle.info(
-            "GranthParagraphGenerator: %d pages → %d (phase1) → %d (phase2) paragraphs",
-            len(pages_data), len(phase1), len(phase2)
+            "GranthParagraphGenerator: %d pages → %d (phase1) → %d (phase2) → %d (phase3) paragraphs",
+            len(pages_data), len(phase1), len(phase2), len(phase3)
         )
-        return phase2
+        return [(p.page_num, p.text) for p in phase3]
 
     # ------------------------------------------------------------------
     # Phase 1 — sentence-boundary combining
@@ -229,10 +237,11 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
         paragraphs: List[ParaInfo],
         stop_prefixes: tuple,
         qa_merge: bool = True,
-    ) -> List[Tuple[int, str]]:
+        min_para_len: int = _MIN_PARA_LENGTH,
+    ) -> List[ParaInfo]:
         """
         Combine consecutive QA paragraphs with '\\n', and greedily merge
-        consecutive non-QA paragraphs until _MIN_PARA_LENGTH words.
+        consecutive non-QA paragraphs until min_para_len words.
 
         Hard flush boundaries (never merge across), in priority order:
           - is_chapter_start=True  — chapter boundary, flushes before
@@ -241,22 +250,45 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
           - stop prefix            — paragraph begins a commentary section (non-QA only)
           - is_verse_end=True      — flushes after adding the paragraph
 
-        Soft flush: once non-QA buffer_len >= _MIN_PARA_LENGTH words, flush.
+        Soft flush: once non-QA buffer reaches min_para_len words, flush.
+        Builds page_spans tracking word offsets at page transitions.
         """
-        result: List[Tuple[int, str]] = []
+        result: List[ParaInfo] = []
         buffer: List[str] = []
-        buffer_len: int = 0
+        buffer_len: int = 0         # word count for min threshold (non-QA only)
+        buffer_wc: int = 0          # total word count for page_spans tracking
         buffer_page: int | None = None
         buffer_is_qa: bool = False
+        buffer_page_spans: list = []
+        buffer_is_chapter_start: bool = False
+        buffer_is_verse_end: bool = False
+        buffer_is_question: bool = False
+        buffer_is_answer: bool = False
 
         def _flush():
-            nonlocal buffer, buffer_len, buffer_page, buffer_is_qa
+            nonlocal buffer, buffer_len, buffer_wc, buffer_page, buffer_is_qa
+            nonlocal buffer_page_spans, buffer_is_chapter_start, buffer_is_verse_end
+            nonlocal buffer_is_question, buffer_is_answer
             if buffer:
-                result.append((buffer_page, '\n'.join(buffer)))
+                result.append(ParaInfo(
+                    page_num=buffer_page,
+                    text='\n'.join(buffer),
+                    page_spans=buffer_page_spans[:],
+                    is_chapter_start=buffer_is_chapter_start,
+                    is_verse_end=buffer_is_verse_end,
+                    is_question=buffer_is_question,
+                    is_answer=buffer_is_answer,
+                ))
             buffer.clear()
             buffer_len = 0
+            buffer_wc = 0
             buffer_page = None
             buffer_is_qa = False
+            buffer_page_spans = []
+            buffer_is_chapter_start = False
+            buffer_is_verse_end = False
+            buffer_is_question = False
+            buffer_is_answer = False
 
         for para in paragraphs:
             # Chapter boundary always flushes — regardless of QA or non-QA
@@ -276,19 +308,50 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
             if not para.is_qa and buffer and self._starts_with_prefix(para.text, stop_prefixes):
                 _flush()
 
+            wc = len(para.text.split())
+
             if not buffer:
                 buffer_page = para.page_num
                 buffer_is_qa = para.is_qa
+                buffer_page_spans = [(para.page_num, 0)]
+                buffer_is_chapter_start = para.is_chapter_start
+                buffer_is_question = para.is_question
+                buffer_is_answer = para.is_answer
+            else:
+                # Track page transitions
+                if para.page_num != buffer_page_spans[-1][0]:
+                    buffer_page_spans.append((para.page_num, buffer_wc))
 
             buffer.append(para.text)
+            buffer_wc += wc
+            buffer_is_verse_end = para.is_verse_end
 
             # Verse-end: flush immediately after adding (hard post-flush boundary)
             if para.is_verse_end:
                 _flush()
             elif not para.is_qa:
-                buffer_len += len(para.text.split())
-                if buffer_len >= _MIN_PARA_LENGTH:
+                buffer_len += wc
+                if buffer_len >= min_para_len:
                     _flush()
 
         _flush()
+        return result
+
+    # ------------------------------------------------------------------
+    # Phase 3 — split oversized paragraphs
+    # ------------------------------------------------------------------
+
+    def _phase3_split_to_max(
+        self,
+        paragraphs: List[ParaInfo],
+        max_words: int,
+    ) -> List[ParaInfo]:
+        """
+        Split any paragraph exceeding max_words at sentence boundaries.
+        Delegates to sizer.split_long_para using language-specific terminators.
+        """
+        from backend.crawler.paragraph_generator.sizer import split_long_para
+        result: List[ParaInfo] = []
+        for para in paragraphs:
+            result.extend(split_long_para(para, max_words, self._language_meta.sentence_terminators))
         return result
