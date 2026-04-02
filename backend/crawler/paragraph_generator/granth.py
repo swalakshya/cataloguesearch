@@ -44,6 +44,7 @@ from typing import List, Tuple
 from backend.config import Config
 from backend.crawler.paragraph_generator.base import BaseParagraphGenerator, ParaInfo
 from backend.crawler.paragraph_generator.language_meta import LanguageMeta
+from backend.crawler.paragraph_generator.sizer import split_long_para
 
 log_handle = logging.getLogger(__name__)
 
@@ -360,7 +361,6 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
         Split any paragraph exceeding max_words at sentence boundaries.
         Delegates to sizer.split_long_para using language-specific terminators.
         """
-        from backend.crawler.paragraph_generator.sizer import split_long_para
         result: List[ParaInfo] = []
         for para in paragraphs:
             result.extend(split_long_para(para, max_words, self._language_meta.sentence_terminators))

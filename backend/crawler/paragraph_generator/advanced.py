@@ -8,6 +8,7 @@ from typing import List, Set, Optional, Tuple
 
 from backend.crawler.paragraph_generator.base import BaseParagraphGenerator, ParaInfo
 from backend.crawler.paragraph_generator.language_meta import LanguageMeta
+from backend.crawler.paragraph_generator.sizer import split_long_para, ABSOLUTE_TERM_RE
 
 log_handle = logging.getLogger(__name__)
 
@@ -60,9 +61,6 @@ GUJARATI_SENTENCE_TERMINATORS = ('।', '.', '?', '!', '।।', ')', ']', '}')
 
 _MIN_PARA_LENGTH = 50   # default minimum words per output paragraph
 _MAX_PARA_LENGTH = 250  # default maximum words per output paragraph (override via scan_config max_words_per_para)
-
-# Matches verse-number markers at end of text, e.g. ।।3।।  — same pattern as granth.py
-_ABSOLUTE_TERM_RE = re.compile(r'।।\d+।।\s*$')
 
 
 # --- LineClassifier (EXACT copy from para_gen.py) ---
@@ -555,7 +553,7 @@ class AdvancedParagraphGenerator(BaseParagraphGenerator):
 
             if para_type == State.STANDARD_PROSE:
                 buffer_len += wc
-                if _ABSOLUTE_TERM_RE.search(text):
+                if ABSOLUTE_TERM_RE.search(text):
                     _flush()
                 elif buffer_len >= min_para_len and text.strip().endswith(
                         tuple(self._language_meta.sentence_terminators)):
@@ -578,7 +576,6 @@ class AdvancedParagraphGenerator(BaseParagraphGenerator):
         Split any paragraph exceeding max_words at sentence boundaries.
         Delegates to sizer.split_long_para using language-specific terminators.
         """
-        from backend.crawler.paragraph_generator.sizer import split_long_para
         result: List[ParaInfo] = []
         for para in paragraphs:
             result.extend(split_long_para(para, max_words, self._language_meta.sentence_terminators))

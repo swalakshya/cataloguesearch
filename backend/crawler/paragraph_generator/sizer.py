@@ -7,7 +7,12 @@ Provides:
 """
 from __future__ import annotations
 
+import re
+
 from backend.crawler.paragraph_generator.base import ParaInfo
+
+# Matches verse-number markers at end of text, e.g. ।।3।।
+ABSOLUTE_TERM_RE = re.compile(r'।।\d+।।\s*$')
 
 
 def split_into_sentences(text: str, terminators: tuple) -> list[str]:

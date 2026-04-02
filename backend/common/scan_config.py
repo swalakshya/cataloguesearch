@@ -187,10 +187,13 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
         if "llm_workers" in file_config:
             scan_meta["llm_workers"] = file_config["llm_workers"]
 
-        # Update min/max words per paragraph from file-specific config (overrides default)
+        # Update min/max words per paragraph and qa_merge from file-specific config (overrides default)
         for key in ("min_words_per_para", "max_words_per_para"):
             if key in file_config:
                 scan_meta[key] = file_config[key]
+
+        if "qa_merge" in file_config:
+            scan_meta["qa_merge"] = file_config["qa_merge"]
 
         # Update multi-page PDF settings from file-specific config (overrides defaults)
         for key in ("multi_page", "book_start_page", "book_start_side", "split_percentage"):
