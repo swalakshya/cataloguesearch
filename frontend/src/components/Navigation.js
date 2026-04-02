@@ -29,31 +29,34 @@ export const Navigation = ({ currentPage, setCurrentPage }) => {
     };
     
     return (
-        <nav className="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-40">
-            {/* CORRECTED: Changed max-w-6xl to max-w-[1080px] to match the banner width */}
-            <div className="max-w-[1080px] mx-auto px-4">
-                <div className="flex items-center justify-between h-16">
-                    {/* Logo */}
-                    <div className="flex items-center space-x-4">
-                        <img
-                            src="/images/swalakshya_wide.png"
-                            alt="Swalakshya Logo"
-                            className="h-[2.5rem] w-auto"
-                            onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/40x40/f1f5f9/475569?text=S' }}
-                        />
+        <nav className="bg-white/95 backdrop-blur-sm shadow-sm border-b border-slate-200 sticky top-0 z-40 overflow-visible">
+            <div className="max-w-[1080px] mx-auto px-4 overflow-visible">
+                <div className="flex items-center justify-between h-16 overflow-visible">
+                    {/* Logo - pops out below navbar */}
+                    <div className="flex-shrink-0 overflow-visible translate-y-2">
+                        <Link to="/" onClick={() => handleMenuClick('home')}>
+                            <div className="bg-white shadow-md rounded-2xl border border-slate-100 px-3 py-2 hover:shadow-lg transition-shadow duration-200">
+                                <img
+                                    src="/images/swalakshya_wide.png"
+                                    alt="Swalakshya Logo"
+                                    className="h-[3.5rem] w-auto"
+                                    onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/40x40/f1f5f9/475569?text=S' }}
+                                />
+                            </div>
+                        </Link>
                     </div>
 
                     {/* Desktop Menu */}
-                    <div className="hidden md:flex space-x-8">
+                    <div className="hidden md:flex space-x-1">
                         {menuItems.map((item) => (
                             <Link
                                 key={item.id}
                                 to={item.path}
                                 onClick={() => handleMenuClick(item.id)}
-                                className={`px-3 py-2 text-base font-medium transition-colors duration-200 ${
+                                className={`px-4 py-2 text-sm font-medium rounded-full transition-all duration-200 ${
                                     isActive(item)
-                                        ? 'text-sky-600 border-b-2 border-sky-600'
-                                        : 'text-slate-600 hover:text-slate-900'
+                                        ? 'text-sky-700 bg-sky-50 font-semibold'
+                                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                                 }`}
                             >
                                 {item.label}
@@ -193,10 +196,9 @@ export const Header = ({ currentPage }) => {
 
     // For 'home' and 'aagam-khoj' pages
     return (
-        <div className="text-center py-6 mb-4">
-            {/* CORRECTED: Removed 'inline-block' class to allow the div to expand to the full width of its container */}
+        <div className="text-center pt-6 pb-2 mb-2">
             <div>
-                <div className="bg-slate-100 h-32 md:h-40 flex items-center justify-center mb-4 overflow-hidden">
+                <div className="bg-slate-100 h-32 md:h-40 flex items-center justify-center mb-0 overflow-hidden rounded-lg mx-auto max-w-[1080px]">
                     <img
                         src="/images/banner.jpg"
                         alt="Swa-Lakshya Banner"
@@ -204,9 +206,9 @@ export const Header = ({ currentPage }) => {
                         onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/1080x160/f1f5f9/475569?text=Aagam+Khoj' }}
                     />
                 </div>
-                <div className="h-32 md:h-40 flex flex-col items-center justify-center">
-                    <h1 className="text-4xl font-bold text-slate-800 font-display">Aagam-Khoj (आगम-खोज)</h1>
-                    <p className="text-base text-slate-500 mt-1 font-sans">Explore Jain Shastras/Books and Pravachans of Pujya Gurudev Shri Kanji Swami!</p>
+                <div className="py-4 flex flex-col items-center justify-center">
+                    <h1 className="text-3xl font-bold text-slate-800 font-display tracking-tight">Aagam-Khoj <span className="text-slate-500 font-normal">(आगम-खोज)</span></h1>
+                    <p className="text-sm text-slate-400 mt-1 font-sans">Explore Jain Shastras/Books and Pravachans of Pujya Gurudev Shri Kanji Swami</p>
                 </div>
             </div>
         </div>

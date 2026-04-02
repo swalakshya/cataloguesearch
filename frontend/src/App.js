@@ -876,7 +876,7 @@ const AppContent = () => {
                             )}
 
                                     <SearchableContentWidget />
-                                    <div className="bg-white p-3 md:p-4 rounded-lg shadow-sm border border-slate-200 mb-4">
+                                    <div className="bg-white p-3 md:p-4 rounded-2xl shadow-md border border-slate-200 mb-4">
                                         {/* Row 1: Search Bar and Button */}
                                         <div className="flex items-center gap-2">
                                             <div className="flex-grow">
@@ -891,7 +891,7 @@ const AppContent = () => {
                                                 <button
                                                     onClick={() => handleSearch(1)}
                                                     disabled={isLoading}
-                                                    className="bg-sky-600 text-white font-bold py-3 px-4 rounded-md text-base hover:bg-sky-700 transition duration-300 disabled:bg-slate-300 flex items-center justify-center"
+                                                    className="bg-sky-600 text-white font-bold py-3 px-5 rounded-xl text-base hover:bg-sky-700 active:bg-sky-800 transition duration-200 disabled:bg-slate-300 flex items-center justify-center shadow-sm whitespace-nowrap"
                                                 >
                                                     {isLoading ? <Spinner /> : 'Search'}
                                                 </button>
@@ -900,7 +900,7 @@ const AppContent = () => {
                                                 <button
                                                     onClick={handleAnswer}
                                                     disabled={llmLoading}
-                                                    className="bg-lime-500 text-slate-900 font-bold py-3 px-4 rounded-md text-base hover:bg-lime-600 transition duration-300 disabled:bg-slate-300 flex items-center justify-center"
+                                                    className="bg-lime-500 text-slate-900 font-bold py-3 px-5 rounded-xl text-base hover:bg-lime-600 transition duration-200 disabled:bg-slate-300 flex items-center justify-center shadow-sm whitespace-nowrap"
                                                 >
                                                     {llmLoading ? <Spinner /> : 'Ask'}
                                                 </button>

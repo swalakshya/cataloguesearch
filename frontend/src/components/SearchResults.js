@@ -144,65 +144,68 @@ export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, re
 
     return (
         <div className={cardClasses}>
-            <div className="border-b border-slate-200 pb-2 mb-2 text-sm text-slate-500 flex flex-wrap gap-x-3 gap-y-1 items-center">
-                {result.metadata?.Granth && <span className="font-bold text-slate-700">{result.metadata.Granth}</span>}
+            {/* Row 1: metadata */}
+            <div className="flex flex-wrap gap-x-2 gap-y-1 items-baseline mb-1 text-sm">
+                {result.metadata?.Granth && <span className="font-semibold text-slate-800">{result.metadata.Granth}</span>}
                 {result.metadata?.sub_section && (
-                    <span className="text-slate-700">({result.metadata.sub_section.name})</span>
+                    <span className="text-slate-500 text-xs">({result.metadata.sub_section.name})</span>
                 )}
-                {result.metadata?.title && resultType === 'granth' && <span className="font-bold text-slate-700">{result.metadata.title}</span>}
+                {result.metadata?.title && resultType === 'granth' && <span className="font-semibold text-slate-800">{result.metadata.title}</span>}
                 {resultType === 'granth' && result.metadata?.adhikar && (
-                    <span className="text-slate-700">Adhikar: {result.metadata.adhikar}</span>
+                    <span className="text-slate-500 text-xs">Adhikar: {result.metadata.adhikar}</span>
                 )}
                 {resultType === 'granth' && result.metadata?.verse_type && result.metadata?.verse_type_start_num !== undefined && result.metadata?.verse_type_end_num !== undefined && (
-                    <span className="text-slate-700">
+                    <span className="text-slate-500 text-xs">
                         {result.metadata.verse_type}: {result.metadata.verse_type_start_num === result.metadata.verse_type_end_num
                             ? result.metadata.verse_type_start_num
                             : `${result.metadata.verse_type_start_num}-${result.metadata.verse_type_end_num}`}
                     </span>
                 )}
                 {resultType === 'granth' && result.metadata?.Author && (
-                    <span className="text-slate-600">Author: {result.metadata.Author}</span>
+                    <span className="text-slate-500 text-xs">· {result.metadata.Author}</span>
                 )}
-                {result.metadata?.Series && <span>{result.metadata.Series}</span>}
+                {result.metadata?.Series && <span className="text-slate-500 text-xs">· {result.metadata.Series}</span>}
                 {result.date && result.pravachan_number ? (
                     <>
-                        <span className="text-slate-600">Date: {result.date}</span>
-                        <span className="text-slate-600">Pravachan Number: {result.pravachan_number}</span>
+                        <span className="text-slate-400 text-xs">· {result.date}</span>
+                        <span className="text-slate-400 text-xs">· #{result.pravachan_number}</span>
                     </>
                 ) : (
                     <>
-                        {resultType !== 'granth' && <span className="text-slate-600">{result.filename}</span>}
+                        {resultType !== 'granth' && <span className="text-slate-400 text-xs">· {result.filename}</span>}
                         {resultType === 'granth' ? (
                             <>
-                                {result.gatha && <span className="text-slate-600">Gatha: {result.gatha}</span>}
-                                {result.kalash && <span className="text-slate-600">Kalash: {result.kalash}</span>}
-                                {result.shlok && <span className="text-slate-600">Shlok: {result.shlok}</span>}
+                                {result.gatha && <span className="text-slate-400 text-xs">· Gatha: {result.gatha}</span>}
+                                {result.kalash && <span className="text-slate-400 text-xs">· Kalash: {result.kalash}</span>}
+                                {result.shlok && <span className="text-slate-400 text-xs">· Shlok: {result.shlok}</span>}
                             </>
                         ) : (
-                            <span>Page Number: {result.page_number}</span>
+                            <span className="text-slate-400 text-xs">· p.{result.page_number}</span>
                         )}
                     </>
                 )}
+            </div>
+            {/* Row 2: actions */}
+            <div className="flex items-center gap-1 mb-2 pb-2 border-b border-slate-100">
                 {result.file_url && (
                     <a
                         href={`${result.file_url}#page=${result.pdf_page_number ?? result.page_number}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800 font-medium flex items-center"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-blue-600 px-2 py-1 rounded-md hover:bg-blue-50 transition-colors"
                     >
-                        <PdfIcon />View PDF
+                        <PdfIcon />PDF
                     </a>
                 )}
-
-                <div className="ml-auto flex items-center gap-3 text-sm">
-                    <button onClick={() => setShowShareModal(true)} className="text-sky-600 hover:text-sky-800 font-medium flex items-center">
+                <div className="ml-auto flex items-center gap-1">
+                    <button onClick={() => setShowShareModal(true)} title="Share" className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-sky-600 px-2 py-1 rounded-md hover:bg-sky-50 transition-colors">
                         <ShareIcon />Share
                     </button>
-                    <button onClick={handleExpandClick} className="text-sky-600 hover:text-sky-800 font-medium flex items-center">
+                    <button onClick={handleExpandClick} title="Expand context" className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-sky-600 px-2 py-1 rounded-md hover:bg-sky-50 transition-colors">
                         <ExpandIcon />Expand
                     </button>
                     {resultType !== 'granth' && (
-                        <button onClick={() => onFindSimilar(result)} className="text-sky-600 hover:text-sky-800 font-medium flex items-center">
+                        <button onClick={() => onFindSimilar(result)} title="Find similar" className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-sky-600 px-2 py-1 rounded-md hover:bg-sky-50 transition-colors">
                             <SimilarIcon />More Like This
                         </button>
                     )}
@@ -320,44 +323,52 @@ export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData
     const granthCount = searchData?.granth_results?.total_hits || 0;
     const similarCount = similarDocumentsData?.total_results || 0;
     const hasSuggestions = searchData?.suggestions && searchData.suggestions.length > 0;
-    const tabStyle = "px-3 py-2 font-semibold text-base rounded-t-md cursor-pointer transition-colors duration-200 flex items-center gap-2 border-b-2";
-    const activeTabStyle = "bg-white text-sky-600 border-sky-500";
-    const inactiveTabStyle = "bg-transparent text-slate-500 hover:text-slate-700 border-transparent";
-
     // Don't render tabs if there are no results and no similar documents
     const hasAnyResults = (!hasSuggestions && (pravachanCount > 0 || granthCount > 0)) || similarDocumentsData;
     if (!hasAnyResults) return null;
 
     return (
-        <div className="flex border-b border-slate-200">
+        <div className="flex items-center gap-2 mb-3 p-1 bg-slate-100 rounded-xl w-fit">
             {!hasSuggestions && pravachanCount > 0 && (
                 <button
                     onClick={() => setActiveTab('pravachan')}
-                    className={`${tabStyle} ${activeTab === 'pravachan' ? activeTabStyle : inactiveTabStyle}`}
+                    className={`flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+                        activeTab === 'pravachan'
+                            ? 'bg-white text-sky-700 shadow-sm font-semibold'
+                            : 'text-slate-500 hover:text-slate-700'
+                    }`}
                 >
-                    🎙️ Pravachan Results
-                    <span className="text-sm font-normal bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full">{pravachanCount}</span>
+                    🎙️ Pravachan
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full font-normal ${activeTab === 'pravachan' ? 'bg-sky-100 text-sky-600' : 'bg-slate-200 text-slate-500'}`}>{pravachanCount}</span>
                 </button>
             )}
             {!hasSuggestions && granthCount > 0 && (
                 <button
                     onClick={() => setActiveTab('granth')}
-                    className={`${tabStyle} ${activeTab === 'granth' ? activeTabStyle : inactiveTabStyle}`}
+                    className={`flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+                        activeTab === 'granth'
+                            ? 'bg-white text-amber-700 shadow-sm font-semibold'
+                            : 'text-slate-500 hover:text-slate-700'
+                    }`}
                 >
-                    📜 Granth Results
-                    <span className="text-sm font-normal bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full">{granthCount}</span>
+                    📜 Granth
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full font-normal ${activeTab === 'granth' ? 'bg-amber-100 text-amber-600' : 'bg-slate-200 text-slate-500'}`}>{granthCount}</span>
                 </button>
             )}
             {similarDocumentsData && (
                 <button
                     onClick={() => setActiveTab('similar')}
-                    className={`${tabStyle} ${activeTab === 'similar' ? activeTabStyle : inactiveTabStyle}`}
+                    className={`flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+                        activeTab === 'similar'
+                            ? 'bg-white text-slate-700 shadow-sm font-semibold'
+                            : 'text-slate-500 hover:text-slate-700'
+                    }`}
                 >
                     More Like This
-                    <span className="text-sm font-normal bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full">{similarCount}</span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full font-normal ${activeTab === 'similar' ? 'bg-slate-200 text-slate-600' : 'bg-slate-200 text-slate-500'}`}>{similarCount}</span>
                     <span
                         onClick={(e) => { e.stopPropagation(); onClearSimilar(); }}
-                        className="text-red-400 hover:text-red-600 font-bold text-lg ml-1"
+                        className="text-red-400 hover:text-red-600 font-bold text-base ml-0.5 leading-none"
                     >
                         &times;
                     </span>
