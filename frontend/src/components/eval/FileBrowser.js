@@ -289,7 +289,8 @@ const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectory
             onClick={onClose}
         >
             <div 
-                className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col"
+                className="rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col"
+                style={{ backgroundColor: 'var(--bg-card)' }}
                 onClick={e => e.stopPropagation()}
             >
                 {/* Header */}
@@ -307,7 +308,7 @@ const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectory
 
                 {/* Breadcrumbs - only show when base folder is selected */}
                 {basePdfHandle && (
-                    <div className="px-4 py-2 bg-slate-50 border-b border-slate-200">
+                    <div className="px-4 py-2 border-b border-slate-200" style={{ backgroundColor: 'var(--bg-surface)' }}>
                         <div className="flex items-center space-x-1 text-sm">
                             {getBreadcrumbs().map((crumb, index) => (
                                 <React.Fragment key={crumb.path}>
@@ -334,7 +335,7 @@ const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectory
 
                 {/* Navigation Controls - only show when base folder is selected */}
                 {basePdfHandle && (
-                    <div className="px-4 py-2 bg-slate-50 border-b border-slate-200">
+                    <div className="px-4 py-2 border-b border-slate-200" style={{ backgroundColor: 'var(--bg-surface)' }}>
                         <div className="flex items-center justify-between">
                             <button
                                 onClick={handleBackClick}
@@ -425,7 +426,7 @@ const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectory
                                 directories.map((item) => (
                                     <div
                                         key={item.path}
-                                        className={`flex items-center p-3 border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 cursor-pointer transition-colors ${
+                                        className={`flex items-center p-3 border border-slate-200 rounded-lg hover:bg-neutral-100 hover:border-slate-300 cursor-pointer transition-colors ${
                                             item.type === 'file' ? (item.fileType === 'markdown' ? 'bg-green-50 border-green-200 hover:bg-green-100' : 'bg-orange-50 border-orange-200 hover:bg-orange-100') : ''
                                         }`}
                                         onClick={() => handleItemClick(item)}

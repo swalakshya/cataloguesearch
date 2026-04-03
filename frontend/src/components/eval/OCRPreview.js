@@ -269,7 +269,7 @@ const OCRPreview = ({ selectedFile: propSelectedFile, baseDirectoryHandles }) =>
     }
 
     return (
-        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
+        <div className="rounded-lg shadow-sm border border-slate-200 p-6" style={{ backgroundColor: 'var(--bg-card)' }}>
             <div className="mb-6">
                 <h2 className="text-2xl font-bold text-slate-800 mb-2">OCR Preview</h2>
                 <p className="text-slate-600">
@@ -384,7 +384,7 @@ const OCRPreview = ({ selectedFile: propSelectedFile, baseDirectoryHandles }) =>
             {/* Preview Controls */}
             {previewPages.length > 0 && (
                 <>
-                    <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-md">
+                    <div className="mb-6 p-4 border border-slate-200 rounded-md" style={{ backgroundColor: 'var(--bg-surface)' }}>
                         <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
                             {/* Navigation Controls */}
                             <div className="flex items-center space-x-3">
@@ -495,9 +495,9 @@ const OCRPreview = ({ selectedFile: propSelectedFile, baseDirectoryHandles }) =>
             {/* Comparison Modal */}
             {showModal && selectedPageForComparison && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={handleCloseModal}>
-                    <div className="bg-white rounded-lg shadow-xl max-w-7xl w-full max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+                    <div className="rounded-lg shadow-xl max-w-7xl w-full max-h-[90vh] overflow-auto" style={{ backgroundColor: 'var(--bg-card)' }} onClick={(e) => e.stopPropagation()}>
                         {/* Modal Header */}
-                        <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between z-10">
+                        <div className="sticky top-0 border-b border-slate-200 px-6 py-4 flex items-center justify-between z-10" style={{ backgroundColor: 'var(--bg-card)' }}>
                             <h3 className="text-xl font-bold text-slate-800">
                                 Page {selectedPageForComparison.page_number} - Comparison
                             </h3>
@@ -519,7 +519,7 @@ const OCRPreview = ({ selectedFile: propSelectedFile, baseDirectoryHandles }) =>
                                     <div className="bg-slate-100 px-4 py-2 border-b border-slate-300">
                                         <h4 className="font-semibold text-slate-700">Original (No Cropping)</h4>
                                     </div>
-                                    <div className="p-4 bg-slate-50">
+                                    <div className="p-4" style={{ backgroundColor: 'var(--bg-surface)' }}>
                                         {isLoadingOriginal ? (
                                             <div className="flex justify-center items-center py-20">
                                                 <Spinner />
@@ -557,7 +557,7 @@ const OCRPreview = ({ selectedFile: propSelectedFile, baseDirectoryHandles }) =>
                         </div>
 
                         {/* Modal Footer */}
-                        <div className="sticky bottom-0 bg-slate-50 border-t border-slate-200 px-6 py-4 flex justify-end">
+                        <div className="sticky bottom-0 border-t border-slate-200 px-6 py-4 flex justify-end" style={{ backgroundColor: 'var(--bg-surface)' }}>
                             <button
                                 onClick={handleCloseModal}
                                 className="bg-slate-600 text-white px-6 py-2 rounded-md hover:bg-slate-700 transition-colors"

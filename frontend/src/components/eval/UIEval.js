@@ -182,7 +182,7 @@ const UIEval = () => {
             className={`px-4 py-2 font-medium text-sm rounded-md transition-colors ${
                 isActive 
                     ? 'bg-sky-600 text-white' 
-                    : 'text-slate-700 hover:bg-slate-100 border border-slate-300'
+                    : 'text-slate-700 hover:bg-neutral-100 border border-slate-300'
             }`}
             style={{ pointerEvents: 'auto', zIndex: 1 }}
         >
@@ -191,7 +191,7 @@ const UIEval = () => {
     );
 
     return (
-        <div className="min-h-screen bg-slate-50">
+        <div className="min-h-screen">
             {/* File Browser Modal */}
             {showFileBrowser && (
                 <FileBrowser
@@ -214,7 +214,7 @@ const UIEval = () => {
                     </div>
 
                     {/* Navigation Bar */}
-                    <div className="bg-white rounded-lg shadow-sm border border-slate-200 mb-6">
+                    <div className="rounded-lg shadow-sm border border-slate-200 mb-6" style={{ backgroundColor: 'var(--bg-card)' }}>
                         <div className="p-4">
                             <div className="flex items-center justify-between">
                                 <div className="flex space-x-2">
@@ -306,7 +306,7 @@ const UIEval = () => {
                             <div className="space-y-6">
                                 {/* Directory Permissions Setup */}
                                 {basePaths && (
-                                    <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
+                                    <div className="rounded-lg shadow-sm border border-slate-200 p-6" style={{ backgroundColor: 'var(--bg-card)' }}>
                                         <div className="mb-4">
                                             <h3 className="text-lg font-semibold text-slate-800 mb-2">Directory Permissions</h3>
                                             <p className="text-slate-600 text-sm">
@@ -424,7 +424,7 @@ const UIEval = () => {
                                 )}
 
                                 {/* Evaluation Tools */}
-                                <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8">
+                                <div className="rounded-lg shadow-sm border border-slate-200 p-8" style={{ backgroundColor: 'var(--bg-card)' }}>
                                     <div className="text-center max-w-2xl mx-auto">
                                         <div className="mb-6">
                                             <svg className="mx-auto h-16 w-16 text-sky-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -437,7 +437,8 @@ const UIEval = () => {
                                         </div>
 
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 hover:bg-slate-100 transition-colors cursor-pointer"
+                                            <div className="border border-slate-200 rounded-lg p-6 hover:bg-neutral-100 transition-colors cursor-pointer"
+                                                 style={{ backgroundColor: 'var(--bg-surface)' }}
                                                  onClick={() => setActiveTab('pdf-parser')}>
                                                 <div className="text-sky-600 mb-3">
                                                     <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -451,7 +452,8 @@ const UIEval = () => {
                                                 </p>
                                             </div>
 
-                                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 hover:bg-slate-100 transition-colors cursor-pointer"
+                                            <div className="border border-slate-200 rounded-lg p-6 hover:bg-neutral-100 transition-colors cursor-pointer"
+                                                 style={{ backgroundColor: 'var(--bg-surface)' }}
                                                  onClick={() => setActiveTab('paragraph-eval')}>
                                                 <div className="text-green-600 mb-3">
                                                     <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -464,7 +466,8 @@ const UIEval = () => {
                                                 </p>
                                             </div>
 
-                                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 hover:bg-slate-100 transition-colors cursor-pointer"
+                                            <div className="border border-slate-200 rounded-lg p-6 hover:bg-neutral-100 transition-colors cursor-pointer"
+                                                 style={{ backgroundColor: 'var(--bg-surface)' }}
                                                  onClick={() => setActiveTab('paragraph-classifier')}>
                                                 <div className="text-orange-600 mb-3">
                                                     <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
