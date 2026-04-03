@@ -73,6 +73,11 @@ code {
 /* Ensure the font-family is set correctly in your main CSS file (e.g., App.css) */
 body {
   font-family: 'Noto Sans', 'Noto Sans Devanagari', sans-serif;
+  color: #1e293b; /* slate-800 — darker default so un-styled text is never washed out */
+  font-weight: 450; /* between regular (400) and medium (500) — crisper without being bold */
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .llm-citation-line {

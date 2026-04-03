@@ -269,9 +269,9 @@ const TypingGuide = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+            <div style={{ backgroundColor: 'var(--bg-card, white)' }} className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
                 {/* Header */}
-                <div 
+                <div
                     className="bg-amber-50 border-b border-amber-100 px-6 py-4 cursor-pointer hover:bg-amber-100 transition-colors duration-200"
                     onClick={toggleSection}
                 >
@@ -321,7 +321,7 @@ const TypingGuide = () => {
                                         className={`w-full px-4 py-3 text-left flex items-center justify-between transition-colors duration-200 rounded-lg ${
                                             activeTab === platform.id 
                                                 ? 'bg-sky-50 text-sky-800 border-sky-200' 
-                                                : 'hover:bg-slate-50 text-slate-700'
+                                                : 'hover:bg-neutral-50 text-slate-700'
                                         }`}
                                     >
                                         <div className="flex items-center">
@@ -344,7 +344,7 @@ const TypingGuide = () => {
 
                                     {/* Tab Content */}
                                     {activeTab === platform.id && (
-                                        <div className="px-4 pb-4 pt-2 bg-slate-50 border-t border-slate-200">
+                                        <div style={{ backgroundColor: 'var(--bg-surface, #f8fafc)' }} className="px-4 pb-4 pt-2 bg-slate-50 border-t border-slate-200">
                                             <div className="space-y-6">
                                                 {/* Setup Steps */}
                                                 <div>

@@ -5,7 +5,7 @@ import { GoogleReCaptchaProvider } from 'react-google-recaptcha-v3';
 // Import components
 import { Navigation, Header } from './components/Navigation';
 import { SearchBar, MetadataFilters, AdvancedSearch, SearchOptions } from './components/SearchInterface';
-import { ResultsList, SuggestionsCard, Tabs, SimilarSourceInfoCard } from './components/SearchResults';
+import { ResultsList, SuggestionsCard, Tabs, SimilarSourceInfoCard, SkeletonResultsList } from './components/SearchResults';
 import { ExpandModal, GranthVerseModal, GranthProseModal, WelcomeModal } from './components/Modals';
 import { FeedbackForm } from './components/Feedback';
 import About from './components/About';
@@ -18,6 +18,7 @@ import { Spinner, ChevronUpIcon, ChevronDownIcon, ExpandIcon, PdfIcon } from './
 
 // Import API service
 import { api } from './services/api';
+import { getRandomSuggestedQueries } from './utils/suggestedQueries';
 
 // --- TIPS MODAL COMPONENT ---
 const TipsModal = ({ onClose }) => {
@@ -238,6 +239,9 @@ const AppContent = () => {
     const [metadata, setMetadata] = useState({});
     const [searchData, setSearchData] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [suggestedQueries] = useState(() => getRandomSuggestedQueries(5));
+    const [compact, setCompact] = useState(() => localStorage.getItem('resultDensity') === 'compact');
+    const toggleCompact = () => setCompact(v => { const next = !v; localStorage.setItem('resultDensity', next ? 'compact' : 'comfortable'); return next; });
     const [activeTab, setActiveTab] = useState('pravachan');
     const [pravachanPage, setPravachanPage] = useState(1);
     const [granthPage, setGranthPage] = useState(1);
@@ -805,7 +809,7 @@ const AppContent = () => {
     };
 
     return (
-        <div className="bg-slate-50 text-slate-900 min-h-screen font-sans">
+        <div style={{ backgroundColor: '#f0f4f9', '--bg-card': '#ffffff', '--bg-surface': '#dce7f0' }} className="text-slate-900 min-h-screen font-sans">
             {modalData && (
                 <ExpandModal
                     data={modalData}
@@ -876,7 +880,7 @@ const AppContent = () => {
                             )}
 
                                     <SearchableContentWidget />
-                                    <div className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 mb-4">
+                                    <div style={{ backgroundColor: 'var(--bg-card)' }} className="bg-white p-3 rounded shadow-sm border border-slate-200 mb-4">
                                         {/* Row 1: Search Bar and Button */}
                                         <div className="flex items-center gap-2">
                                             <div className="flex-grow">
@@ -891,7 +895,7 @@ const AppContent = () => {
                                                 <button
                                                     onClick={() => handleSearch(1)}
                                                     disabled={isLoading}
-                                                    className="bg-sky-600 text-white font-semibold py-2 px-4 rounded-md text-sm hover:bg-sky-700 active:bg-sky-800 transition duration-200 disabled:bg-slate-300 flex items-center justify-center whitespace-nowrap"
+                                                    className="bg-sky-600 text-white font-semibold h-8 px-4 rounded text-sm hover:bg-sky-700 active:bg-sky-800 transition duration-200 disabled:bg-slate-300 flex items-center justify-center whitespace-nowrap"
                                                 >
                                                     {isLoading ? <Spinner /> : 'Search'}
                                                 </button>
@@ -900,7 +904,7 @@ const AppContent = () => {
                                                 <button
                                                     onClick={handleAnswer}
                                                     disabled={llmLoading}
-                                                    className="bg-lime-500 text-slate-900 font-semibold py-2 px-4 rounded-md text-sm hover:bg-lime-600 transition duration-200 disabled:bg-slate-300 flex items-center justify-center whitespace-nowrap"
+                                                    className="bg-lime-500 text-slate-900 font-semibold h-8 px-4 rounded text-sm hover:bg-lime-600 transition duration-200 disabled:bg-slate-300 flex items-center justify-center whitespace-nowrap"
                                                 >
                                                     {llmLoading ? <Spinner /> : 'Ask'}
                                                 </button>
@@ -933,7 +937,7 @@ const AppContent = () => {
                                 {/* Filters section that shows/hides */}
                                         {showFilters && (
                                             <div className="mt-4 border-t border-slate-200 pt-4">
-                                                <div className={`grid grid-cols-1 ${isChatMode ? 'lg:grid-cols-2' : 'lg:grid-cols-3'} gap-8`}>
+                                                <div className={`grid grid-cols-1 ${isChatMode ? 'lg:grid-cols-2' : 'lg:grid-cols-3'} gap-5`}>
                                                     <MetadataFilters
                                                         metadata={allMetadata}
                                                         activeFilters={activeFilters}
@@ -964,12 +968,7 @@ const AppContent = () => {
                                         )}
                                     </div>
 
-                            {homeMode && isLoading && (
-                                <div className="text-center py-8">
-                                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-sky-500"></div>
-                                    <p className="mt-3 text-base text-slate-500">Searching...</p>
-                                </div>
-                            )}
+                            {homeMode && isLoading && <SkeletonResultsList />}
 
                             {homeMode && llmAvailable && !chatEnabled && (llmAnswer || llmError || llmLoading) && (
                                 <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 mb-4">
@@ -1039,7 +1038,7 @@ const AppContent = () => {
                                     )}
                                     <div className="llm-answer-scroll space-y-4">
                                         {chatMessages.map((msg, idx) => (
-                                            <div key={`${msg.role}-${idx}`} className={msg.role === 'user' ? 'bg-slate-50 p-3 rounded-md' : 'bg-white'}>
+                                            <div key={`${msg.role}-${idx}`} className={msg.role === 'user' ? 'bg-neutral-50 p-3 rounded' : 'bg-white'}>
                                                 {msg.role === 'user' ? (
                                                     <div className="text-slate-700 text-sm font-semibold">You</div>
                                                 ) : (
@@ -1107,7 +1106,7 @@ const AppContent = () => {
                                                 value={chatInput}
                                                 onChange={(e) => setChatInput(e.target.value)}
                                                 placeholder="Ask a follow-up question..."
-                                                className="flex-grow p-2 bg-slate-50 border border-slate-300 rounded-md text-slate-800 text-base focus:ring-1 focus:ring-sky-500"
+                                                className="flex-grow p-2 bg-white border border-slate-300 rounded text-slate-800 text-base focus:ring-1 focus:ring-sky-500"
                                             />
                                             <button
                                                 onClick={() => handleChatSend(chatSessionId, chatInput)}
@@ -1129,75 +1128,117 @@ const AppContent = () => {
                                         onSuggestionClick={handleSuggestionClick}
                                         hasResults={(searchData?.pravachan_results?.total_hits || 0) > 0 || (searchData?.granth_results?.total_hits || 0) > 0}
                                     />
-                                    <Tabs 
-                                        activeTab={activeTab} 
-                                        setActiveTab={setActiveTab} 
-                                        searchData={searchData} 
-                                        similarDocumentsData={similarDocumentsData} 
-                                        onClearSimilar={handleClearSimilar} 
-                                    />
-                                    {activeTab === 'pravachan' && searchData?.pravachan_results?.results.length > 0 && (
-                                        <ResultsList
-                                            results={searchData.pravachan_results.results}
-                                            totalResults={searchData.pravachan_results.total_hits}
-                                            pageSize={PAGE_SIZE}
-                                            currentPage={pravachanPage}
-                                            onPageChange={handlePageChange}
-                                            resultType="pravachan"
-                                            onFindSimilar={handleFindSimilar}
-                                            onExpand={handleExpand}
-                                            searchType={searchType}
-                                            query={query}
-                                            currentFilters={activeFilters}
-                                            language={language}
-                                        />
-                                    )}
-                                    {activeTab === 'granth' && searchData?.granth_results?.results.length > 0 && (
-                                        <ResultsList
-                                            results={searchData.granth_results.results}
-                                            totalResults={searchData.granth_results.total_hits}
-                                            pageSize={PAGE_SIZE}
-                                            currentPage={granthPage}
-                                            onPageChange={handlePageChange}
-                                            resultType="granth"
-                                            onFindSimilar={handleFindSimilar}
-                                            onExpand={handleExpand}
-                                            onExpandGranth={handleExpandGranth}
-                                            searchType={searchType}
-                                            query={query}
-                                            currentFilters={activeFilters}
-                                            language={language}
-                                        />
-                                    )}
-                                    {activeTab === 'similar' && (
-                                        <div className="bg-white p-3 md:p-4 rounded-b-md">
-                                            <SimilarSourceInfoCard sourceDoc={sourceDocForSimilarity} />
-                                            {similarDocumentsData?.results.length > 0 ? (
-                                                <ResultsList 
-                                                    results={paginatedSimilarResults} 
-                                                    totalResults={similarDocumentsData.total_results} 
-                                                    pageSize={PAGE_SIZE} 
-                                                    currentPage={similarDocsPage} 
-                                                    onPageChange={handlePageChange} 
-                                                    resultType="similar" 
-                                                    onFindSimilar={handleFindSimilar} 
-                                                    onExpand={handleExpand} 
-                                                    searchType={searchType}
-                                                    query={query}
-                                                    currentFilters={activeFilters}
-                                                    language={language} 
-                                                />
-                                            ) : (
-                                                <div className="text-center py-8 text-base text-slate-500">
-                                                    No similar documents found.
-                                                </div>
-                                            )}
+                                    {/* Query echo + density toggle */}
+                                    {searchData && query && (
+                                        <div className="flex items-center justify-between mb-2">
+                                            <p className="text-sm text-slate-900">
+                                                <span className="font-semibold text-slate-900">
+                                                    {((searchData.pravachan_results?.total_hits || 0) + (searchData.granth_results?.total_hits || 0)).toLocaleString()}
+                                                </span> results for <span className="font-semibold text-slate-800">"{query}"</span>
+                                            </p>
+                                            <button
+                                                onClick={toggleCompact}
+                                                className="text-xs text-slate-700 hover:text-slate-900 flex items-center gap-1 transition-colors font-medium"
+                                                title={compact ? 'Switch to comfortable view' : 'Switch to compact view'}
+                                            >
+                                                {compact ? (
+                                                    <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor"><rect y="2" width="16" height="2" rx="1"/><rect y="7" width="16" height="2" rx="1"/><rect y="12" width="16" height="2" rx="1"/></svg>
+                                                ) : (
+                                                    <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor"><rect y="1" width="16" height="3" rx="1"/><rect y="6" width="16" height="3" rx="1"/><rect y="11" width="16" height="3" rx="1"/></svg>
+                                                )}
+                                                {compact ? 'Comfortable' : 'Compact'}
+                                            </button>
                                         </div>
                                     )}
+                                    <div style={{ backgroundColor: 'var(--bg-card)' }} className="border border-slate-200 rounded shadow-sm overflow-hidden">
+                                        <Tabs
+                                            activeTab={activeTab}
+                                            setActiveTab={setActiveTab}
+                                            searchData={searchData}
+                                            similarDocumentsData={similarDocumentsData}
+                                            onClearSimilar={handleClearSimilar}
+                                        />
+                                        {activeTab === 'pravachan' && searchData?.pravachan_results?.results.length > 0 && (
+                                            <ResultsList
+                                                results={searchData.pravachan_results.results}
+                                                totalResults={searchData.pravachan_results.total_hits}
+                                                pageSize={PAGE_SIZE}
+                                                currentPage={pravachanPage}
+                                                onPageChange={handlePageChange}
+                                                resultType="pravachan"
+                                                onFindSimilar={handleFindSimilar}
+                                                onExpand={handleExpand}
+                                                searchType={searchType}
+                                                query={query}
+                                                currentFilters={activeFilters}
+                                                language={language}
+                                                compact={compact}
+                                            />
+                                        )}
+                                        {activeTab === 'granth' && searchData?.granth_results?.results.length > 0 && (
+                                            <ResultsList
+                                                results={searchData.granth_results.results}
+                                                totalResults={searchData.granth_results.total_hits}
+                                                pageSize={PAGE_SIZE}
+                                                currentPage={granthPage}
+                                                onPageChange={handlePageChange}
+                                                resultType="granth"
+                                                onFindSimilar={handleFindSimilar}
+                                                onExpand={handleExpand}
+                                                onExpandGranth={handleExpandGranth}
+                                                searchType={searchType}
+                                                query={query}
+                                                currentFilters={activeFilters}
+                                                language={language}
+                                                compact={compact}
+                                            />
+                                        )}
+                                        {activeTab === 'similar' && (
+                                            <div className="bg-white p-3 md:p-4">
+                                                <SimilarSourceInfoCard sourceDoc={sourceDocForSimilarity} />
+                                                {similarDocumentsData?.results.length > 0 ? (
+                                                    <ResultsList
+                                                        results={paginatedSimilarResults}
+                                                        totalResults={similarDocumentsData.total_results}
+                                                        pageSize={PAGE_SIZE}
+                                                        currentPage={similarDocsPage}
+                                                        onPageChange={handlePageChange}
+                                                        resultType="similar"
+                                                        onFindSimilar={handleFindSimilar}
+                                                        onExpand={handleExpand}
+                                                        searchType={searchType}
+                                                        query={query}
+                                                        currentFilters={activeFilters}
+                                                        compact={compact}
+                                                        language={language}
+                                                    />
+                                                ) : (
+                                                    <div className="text-center py-8 text-sm text-slate-500">
+                                                        No similar documents found.
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             )}
                             
-                            {!isLoading && !searchData && null}
+                            {homeMode && !isLoading && !searchData && !similarDocumentsData && (
+                                <div className="mt-5">
+                                    <p className="text-xs text-slate-400 uppercase tracking-wider mb-2.5 font-medium">Try searching for</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {suggestedQueries.map(term => (
+                                            <button
+                                                key={term}
+                                                onClick={() => handleSuggestionClick(term)}
+                                                className="px-3 py-1 text-sm bg-white border border-slate-200 rounded text-slate-600 hover:border-sky-300 hover:text-sky-700 hover:bg-sky-50 transition-colors"
+                                            >
+                                                {term}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </main>
                     )}
 

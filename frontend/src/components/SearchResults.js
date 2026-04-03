@@ -22,7 +22,7 @@ export const GranthResultCard = ({ result, isFirst }) => {
                     {granth.metadata?.language && <span>Language: {granth.metadata.language}</span>}
                     {granth.metadata?.author && <span>Author: {granth.metadata.author}</span>}
                     {granth.metadata?.anuyog && <span>Anuyog: {granth.metadata.anuyog}</span>}
-                    {granth.original_filename && <span className="text-slate-600">{granth.original_filename}</span>}
+                    {granth.original_filename && <span className="text-slate-800">{granth.original_filename}</span>}
                     {granth.metadata?.file_url && (
                         <a
                             href={granth.metadata.file_url}
@@ -43,17 +43,17 @@ export const GranthResultCard = ({ result, isFirst }) => {
                         <div className="flex items-center gap-2 mb-2 flex-wrap">
                             <span className="font-bold text-slate-800">{granth.name}</span>
                             {verse.adhikar && (
-                                <span className="font-bold text-slate-700">Adhikar: {verse.adhikar}</span>
+                                <span className="font-bold text-slate-900">Adhikar: {verse.adhikar}</span>
                             )}
                             {verse.type && verse.type_start_num !== undefined && verse.type_end_num !== undefined && (
-                                <span className="text-slate-700">
+                                <span className="text-slate-900">
                                     Verse Type ({verse.type}): {verse.type_start_num === verse.type_end_num
                                         ? verse.type_start_num
                                         : `${verse.type_start_num}-${verse.type_end_num}`}
                                 </span>
                             )}
                             {verse.page_num && (
-                                <span className="text-slate-700">Page Number: {verse.page_num}</span>
+                                <span className="text-slate-900">Page Number: {verse.page_num}</span>
                             )}
                             {granth.metadata?.file_url && (
                                 <a
@@ -69,35 +69,35 @@ export const GranthResultCard = ({ result, isFirst }) => {
 
                         {verse.verse && (
                             <div className="mb-2">
-                                <p className="text-base font-semibold text-slate-700 leading-relaxed whitespace-pre-wrap">{verse.verse}</p>
+                                <p className="text-base font-semibold text-slate-900 leading-relaxed whitespace-pre-wrap">{verse.verse}</p>
                             </div>
                         )}
 
                         {verse.translation && (
                             <div className="mb-2">
-                                <p className="text-sm font-medium text-slate-600 mb-1">Translation:</p>
-                                <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">{verse.translation}</p>
+                                <p className="text-sm font-medium text-slate-800 mb-1">Translation:</p>
+                                <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">{verse.translation}</p>
                             </div>
                         )}
 
                         {verse.meaning && (
                             <div className="mb-2">
-                                <p className="text-sm font-medium text-slate-600 mb-1">Meaning:</p>
-                                <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">{verse.meaning}</p>
+                                <p className="text-sm font-medium text-slate-800 mb-1">Meaning:</p>
+                                <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">{verse.meaning}</p>
                             </div>
                         )}
 
                         {verse.teeka && (
                             <div className="mb-2">
-                                <p className="text-sm font-medium text-slate-600 mb-1">Teeka:</p>
-                                <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">{verse.teeka}</p>
+                                <p className="text-sm font-medium text-slate-800 mb-1">Teeka:</p>
+                                <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">{verse.teeka}</p>
                             </div>
                         )}
 
                         {verse.bhavarth && (
                             <div>
-                                <p className="text-sm font-medium text-slate-600 mb-1">Bhavarth:</p>
-                                <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">{verse.bhavarth}</p>
+                                <p className="text-sm font-medium text-slate-800 mb-1">Bhavarth:</p>
+                                <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">{verse.bhavarth}</p>
                             </div>
                         )}
                     </div>
@@ -107,7 +107,7 @@ export const GranthResultCard = ({ result, isFirst }) => {
     );
 };
 
-export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, resultType, isFirst, query, currentFilters, language, searchType }) => {
+export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, resultType, isFirst, query, currentFilters, language, searchType, compact }) => {
     const [showShareModal, setShowShareModal] = useState(false);
     const getHighlightedHTML = () => {
         const content = result.content_snippet || '';
@@ -115,9 +115,8 @@ export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, re
         return { __html: content.replace(/<em>/g, `<mark class="bg-sky-200 text-slate-800 px-1 rounded">`).replace(/<\/em>/g, '</mark>') };
     };
 
-    const cardClasses = isFirst
-        ? "bg-white p-4 rounded-lg border-2 border-sky-500 shadow-md"
-        : "bg-white p-3 rounded-md border border-slate-200 transition-shadow hover:shadow-sm";
+    const cardClasses = `bg-white ${compact ? 'p-2' : 'p-3'} rounded border border-slate-200 hover:border-slate-300 transition-colors`;
+    const cardStyle = { backgroundColor: 'var(--bg-card, white)' };
 
     const handleExpandClick = () => {
         if (resultType === 'granth') {
@@ -143,75 +142,76 @@ export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, re
     };
 
     return (
-        <div className={cardClasses}>
-            {/* Row 1: metadata */}
-            <div className="flex flex-wrap gap-x-2 gap-y-1 items-baseline mb-1 text-sm">
-                {result.metadata?.Granth && <span className="font-semibold text-slate-800">{result.metadata.Granth}</span>}
-                {result.metadata?.sub_section && (
-                    <span className="text-slate-500 text-xs">({result.metadata.sub_section.name})</span>
-                )}
-                {result.metadata?.title && resultType === 'granth' && <span className="font-semibold text-slate-800">{result.metadata.title}</span>}
-                {resultType === 'granth' && result.metadata?.adhikar && (
-                    <span className="text-slate-500 text-xs">Adhikar: {result.metadata.adhikar}</span>
-                )}
-                {resultType === 'granth' && result.metadata?.verse_type && result.metadata?.verse_type_start_num !== undefined && result.metadata?.verse_type_end_num !== undefined && (
-                    <span className="text-slate-500 text-xs">
-                        {result.metadata.verse_type}: {result.metadata.verse_type_start_num === result.metadata.verse_type_end_num
-                            ? result.metadata.verse_type_start_num
-                            : `${result.metadata.verse_type_start_num}-${result.metadata.verse_type_end_num}`}
-                    </span>
-                )}
-                {resultType === 'granth' && result.metadata?.Author && (
-                    <span className="text-slate-500 text-xs">· {result.metadata.Author}</span>
-                )}
-                {result.metadata?.Series && <span className="text-slate-500 text-xs">· {result.metadata.Series}</span>}
-                {result.date && result.pravachan_number ? (
-                    <>
-                        <span className="text-slate-400 text-xs">· {result.date}</span>
-                        <span className="text-slate-400 text-xs">· #{result.pravachan_number}</span>
-                    </>
-                ) : (
-                    <>
-                        {resultType !== 'granth' && <span className="text-slate-400 text-xs">· {result.filename}</span>}
-                        {resultType === 'granth' ? (
-                            <>
-                                {result.gatha && <span className="text-slate-400 text-xs">· Gatha: {result.gatha}</span>}
-                                {result.kalash && <span className="text-slate-400 text-xs">· Kalash: {result.kalash}</span>}
-                                {result.shlok && <span className="text-slate-400 text-xs">· Shlok: {result.shlok}</span>}
-                            </>
-                        ) : (
-                            <span className="text-slate-400 text-xs">· p.{result.page_number}</span>
-                        )}
-                    </>
-                )}
-            </div>
-            {/* Row 2: actions */}
-            <div className="flex items-center gap-1 mb-2 pb-2 border-b border-slate-100">
-                {result.file_url && (
-                    <a
-                        href={`${result.file_url}#page=${result.pdf_page_number ?? result.page_number}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-blue-600 px-2 py-1 rounded-md hover:bg-blue-50 transition-colors"
-                    >
-                        <PdfIcon />PDF
-                    </a>
-                )}
-                <div className="ml-auto flex items-center gap-1">
-                    <button onClick={() => setShowShareModal(true)} title="Share" className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-sky-600 px-2 py-1 rounded-md hover:bg-sky-50 transition-colors">
+        <div className={cardClasses} style={cardStyle}>
+            {/* Single header row: metadata left, actions right */}
+            <div className="flex items-center gap-2 pb-2 mb-2 border-b border-slate-100">
+                {/* Metadata */}
+                <div className="flex flex-wrap gap-x-2 gap-y-0.5 items-baseline flex-1 min-w-0">
+                    {result.metadata?.Granth && <span style={{ color: '#111827', fontWeight: 600, fontSize: '0.8rem' }}>{result.metadata.Granth}</span>}
+                    {result.metadata?.sub_section && (
+                        <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>({result.metadata.sub_section.name})</span>
+                    )}
+                    {result.metadata?.title && resultType === 'granth' && <span style={{ color: '#111827', fontWeight: 600, fontSize: '0.8rem' }}>{result.metadata.title}</span>}
+                    {resultType === 'granth' && result.metadata?.adhikar && (
+                        <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>Adhikar: {result.metadata.adhikar}</span>
+                    )}
+                    {resultType === 'granth' && result.metadata?.verse_type && result.metadata?.verse_type_start_num !== undefined && result.metadata?.verse_type_end_num !== undefined && (
+                        <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>
+                            {result.metadata.verse_type}: {result.metadata.verse_type_start_num === result.metadata.verse_type_end_num
+                                ? result.metadata.verse_type_start_num
+                                : `${result.metadata.verse_type_start_num}-${result.metadata.verse_type_end_num}`}
+                        </span>
+                    )}
+                    {resultType === 'granth' && result.metadata?.Author && (
+                        <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· {result.metadata.Author}</span>
+                    )}
+                    {result.metadata?.Series && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· {result.metadata.Series}</span>}
+                    {result.date && result.pravachan_number ? (
+                        <>
+                            <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· {result.date}</span>
+                            <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· #{result.pravachan_number}</span>
+                        </>
+                    ) : (
+                        <>
+                            {resultType !== 'granth' && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· {result.filename}</span>}
+                            {resultType === 'granth' ? (
+                                <>
+                                    {result.gatha && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Gatha: {result.gatha}</span>}
+                                    {result.kalash && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Kalash: {result.kalash}</span>}
+                                    {result.shlok && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Shlok: {result.shlok}</span>}
+                                </>
+                            ) : (
+                                <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· p.{result.page_number}</span>
+                            )}
+                        </>
+                    )}
+                </div>
+                {/* Actions */}
+                <div className="flex items-center gap-0.5 flex-shrink-0">
+                    {result.file_url && (
+                        <a
+                            href={`${result.file_url}#page=${result.pdf_page_number ?? result.page_number}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-slate-900 hover:text-blue-700 px-1.5 py-0.5 rounded hover:bg-blue-50 transition-colors"
+                        >
+                            <PdfIcon />PDF
+                        </a>
+                    )}
+                    <button onClick={() => setShowShareModal(true)} className="inline-flex items-center gap-1 text-xs text-slate-900 hover:text-sky-700 px-1.5 py-0.5 rounded hover:bg-sky-50 transition-colors">
                         <ShareIcon />Share
                     </button>
-                    <button onClick={handleExpandClick} title="Expand context" className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-sky-600 px-2 py-1 rounded-md hover:bg-sky-50 transition-colors">
+                    <button onClick={handleExpandClick} className="inline-flex items-center gap-1 text-xs text-slate-900 hover:text-sky-700 px-1.5 py-0.5 rounded hover:bg-sky-50 transition-colors">
                         <ExpandIcon />Expand
                     </button>
                     {resultType !== 'granth' && (
-                        <button onClick={() => onFindSimilar(result)} title="Find similar" className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-sky-600 px-2 py-1 rounded-md hover:bg-sky-50 transition-colors">
-                            <SimilarIcon />More Like This
+                        <button onClick={() => onFindSimilar(result)} className="inline-flex items-center gap-1 text-xs text-slate-900 hover:text-sky-700 px-1.5 py-0.5 rounded hover:bg-sky-50 transition-colors">
+                            <SimilarIcon />Similar
                         </button>
                     )}
                 </div>
             </div>
-            <div className={`${isFirst ? 'text-lg' : 'text-base'} text-slate-700 leading-relaxed font-sans`}>
+            <div className={`text-base text-slate-900 ${compact ? 'leading-snug' : 'leading-relaxed'} font-sans`}>
                 <p className="whitespace-pre-wrap" dangerouslySetInnerHTML={getHighlightedHTML()} />
             </div>
 
@@ -279,7 +279,7 @@ export const Pagination = ({ currentPage, totalPages, onPageChange }) => {
             <button 
                 onClick={() => onPageChange(currentPage - 1)} 
                 disabled={currentPage === 1} 
-                className="px-2 py-1 text-sm bg-white border border-slate-300 rounded-md hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-2 py-1 text-sm bg-white border border-slate-300 rounded hover:bg-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 &laquo;
             </button>
@@ -295,10 +295,10 @@ export const Pagination = ({ currentPage, totalPages, onPageChange }) => {
                     <button
                         key={page}
                         onClick={() => onPageChange(page)}
-                        className={`px-2.5 py-1 text-sm rounded-md border ${
-                            currentPage === page 
-                                ? 'bg-sky-600 text-white border-sky-600 font-bold' 
-                                : 'bg-white border-slate-300 hover:bg-slate-50'
+                        className={`px-2.5 py-1 text-sm rounded border ${
+                            currentPage === page
+                                ? 'bg-sky-600 text-white border-sky-600 font-bold'
+                                : 'bg-white border-slate-300 hover:bg-neutral-50'
                         }`}
                     >
                         {page}
@@ -310,7 +310,7 @@ export const Pagination = ({ currentPage, totalPages, onPageChange }) => {
             <button 
                 onClick={() => onPageChange(currentPage + 1)} 
                 disabled={currentPage === totalPages} 
-                className="px-2 py-1 text-sm bg-white border border-slate-300 rounded-md hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-2 py-1 text-sm bg-white border border-slate-300 rounded hover:bg-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 &raquo;
             </button>
@@ -328,47 +328,47 @@ export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData
     if (!hasAnyResults) return null;
 
     return (
-        <div className="flex items-center gap-1 mb-3 p-1 bg-slate-100 rounded-md w-fit">
+        <div style={{ backgroundColor: 'var(--bg-card, white)' }} className="flex items-center border-b border-slate-200 bg-white px-3 rounded-t">
             {!hasSuggestions && pravachanCount > 0 && (
                 <button
                     onClick={() => setActiveTab('pravachan')}
-                    className={`flex items-center gap-2 px-3 py-1 text-sm font-medium rounded transition-all duration-200 ${
+                    className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                         activeTab === 'pravachan'
-                            ? 'bg-white text-sky-700 shadow-sm font-semibold'
-                            : 'text-slate-500 hover:text-slate-700'
+                            ? 'border-sky-500 text-sky-700'
+                            : 'border-transparent text-slate-900 hover:text-slate-900'
                     }`}
                 >
                     🎙️ Pravachan
-                    <span className={`text-xs px-1.5 py-0.5 rounded-full font-normal ${activeTab === 'pravachan' ? 'bg-sky-100 text-sky-600' : 'bg-slate-200 text-slate-500'}`}>{pravachanCount}</span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeTab === 'pravachan' ? 'bg-sky-100 text-sky-600' : 'bg-neutral-200 text-slate-900'}`}>{pravachanCount}</span>
                 </button>
             )}
             {!hasSuggestions && granthCount > 0 && (
                 <button
                     onClick={() => setActiveTab('granth')}
-                    className={`flex items-center gap-2 px-3 py-1 text-sm font-medium rounded transition-all duration-200 ${
+                    className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                         activeTab === 'granth'
-                            ? 'bg-white text-amber-700 shadow-sm font-semibold'
-                            : 'text-slate-500 hover:text-slate-700'
+                            ? 'border-amber-500 text-amber-700'
+                            : 'border-transparent text-slate-900 hover:text-slate-900'
                     }`}
                 >
                     📜 Granth
-                    <span className={`text-xs px-1.5 py-0.5 rounded-full font-normal ${activeTab === 'granth' ? 'bg-amber-100 text-amber-600' : 'bg-slate-200 text-slate-500'}`}>{granthCount}</span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeTab === 'granth' ? 'bg-amber-100 text-amber-600' : 'bg-neutral-200 text-slate-900'}`}>{granthCount}</span>
                 </button>
             )}
             {similarDocumentsData && (
                 <button
                     onClick={() => setActiveTab('similar')}
-                    className={`flex items-center gap-2 px-3 py-1 text-sm font-medium rounded transition-all duration-200 ${
+                    className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                         activeTab === 'similar'
-                            ? 'bg-white text-slate-700 shadow-sm font-semibold'
-                            : 'text-slate-500 hover:text-slate-700'
+                            ? 'border-slate-500 text-slate-900'
+                            : 'border-transparent text-slate-900 hover:text-slate-900'
                     }`}
                 >
                     More Like This
-                    <span className={`text-xs px-1.5 py-0.5 rounded-full font-normal ${activeTab === 'similar' ? 'bg-slate-200 text-slate-600' : 'bg-slate-200 text-slate-500'}`}>{similarCount}</span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeTab === 'similar' ? 'bg-neutral-200 text-slate-800' : 'bg-neutral-200 text-slate-900'}`}>{similarCount}</span>
                     <span
                         onClick={(e) => { e.stopPropagation(); onClearSimilar(); }}
-                        className="text-red-400 hover:text-red-600 font-bold text-base ml-0.5 leading-none"
+                        className="text-red-400 hover:text-red-600 font-bold text-base ml-1 leading-none"
                     >
                         &times;
                     </span>
@@ -385,8 +385,8 @@ export const SuggestionsCard = ({ suggestions, originalQuery, onSuggestionClick,
     // If there are no results and no suggestions, show simple "no results" message
     if (!suggestions || suggestions.length === 0) {
         return (
-            <div className="bg-slate-50 border border-slate-200 p-4 rounded-lg mb-4">
-                <div className="text-base text-slate-700 text-center">
+            <div className="bg-white border border-slate-200 p-4 rounded mb-4">
+                <div className="text-base text-slate-900 text-center">
                     <p>No results found for "<span className="font-bold text-slate-900">{originalQuery}</span>".</p>
                     <p className="text-sm text-slate-500 mt-2">Try different keywords or adjust your filters.</p>
                 </div>
@@ -439,20 +439,19 @@ export const SimilarSourceInfoCard = ({ sourceDoc }) => {
                 <span className="font-medium">{sourceDoc.original_filename}</span>
                 <span className="ml-3">Page: {sourceDoc.page_number}</span>
             </div>
-            <blockquote className="border-l-4 border-sky-300 pl-2 text-base italic text-slate-600 font-sans">
+            <blockquote className="border-l-4 border-sky-300 pl-2 text-base italic text-slate-800 font-sans">
                 <p className="whitespace-pre-wrap" dangerouslySetInnerHTML={getHighlightedHTML()} />
             </blockquote>
         </div>
     );
 };
 
-export const ResultsList = ({ results, totalResults, pageSize, currentPage, onPageChange, resultType, onFindSimilar, onExpand, onExpandGranth, searchType, query, currentFilters, language }) => {
+export const ResultsList = ({ results, totalResults, pageSize, currentPage, onPageChange, resultType, onFindSimilar, onExpand, onExpandGranth, searchType, query, currentFilters, language, compact }) => {
     const totalPages = Math.ceil(totalResults / pageSize);
 
     return (
-        <div className="bg-white p-3 md:p-4 rounded-b-md">
-            <div className="text-sm text-slate-500 mb-3">Showing {results.length} of {totalResults} results.</div>
-            <div className="space-y-3">
+        <div style={{ backgroundColor: 'var(--bg-card, white)' }} className="bg-white p-3 md:p-4">
+            <div className={compact ? 'space-y-1.5' : 'space-y-3'}>
                 {results.map((result, index) => (
                     <ResultCard
                         key={`${resultType}-${result.document_id}`}
@@ -466,6 +465,7 @@ export const ResultsList = ({ results, totalResults, pageSize, currentPage, onPa
                         currentFilters={currentFilters}
                         language={language}
                         searchType={searchType}
+                        compact={compact}
                     />
                 ))}
             </div>
@@ -493,3 +493,28 @@ export const GranthResultsList = ({ results, totalResults, pageSize, currentPage
         </div>
     );
 };
+
+const SkeletonCard = ({ wide }) => (
+    <div style={{ backgroundColor: 'var(--bg-card, white)' }} className="bg-white p-3 rounded border border-slate-200 animate-pulse">
+        <div className="flex gap-3 mb-2 pb-2 border-b border-slate-100 items-center">
+            <div className="h-2.5 bg-neutral-200 rounded w-24"></div>
+            <div className="h-2.5 bg-neutral-200 rounded w-16"></div>
+            <div className="h-2.5 bg-neutral-200 rounded w-20"></div>
+            <div className="ml-auto flex gap-2">
+                <div className="h-2.5 bg-neutral-200 rounded w-10"></div>
+                <div className="h-2.5 bg-neutral-200 rounded w-14"></div>
+            </div>
+        </div>
+        <div className="space-y-2">
+            <div className="h-3 bg-neutral-200 rounded w-full"></div>
+            <div className="h-3 bg-neutral-200 rounded w-full"></div>
+            <div className="h-3 bg-neutral-200 rounded" style={{ width: wide ? '70%' : '85%' }}></div>
+        </div>
+    </div>
+);
+
+export const SkeletonResultsList = () => (
+    <div className="mt-4 space-y-2.5">
+        {[false, true, false, true, false].map((wide, i) => <SkeletonCard key={i} wide={wide} />)}
+    </div>
+);

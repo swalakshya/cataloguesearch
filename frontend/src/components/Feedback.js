@@ -109,7 +109,7 @@ export const FeedbackForm = ({ onReturnToAagamKhoj }) => {
 
     return (
         <div className="max-w-2xl mx-auto">
-            <form onSubmit={handleSubmit} className="bg-white p-6 md:p-8 rounded-lg shadow-sm border border-slate-200 space-y-6">
+            <form onSubmit={handleSubmit} style={{ backgroundColor: 'var(--bg-card, white)' }} className="bg-white p-6 md:p-8 rounded-lg shadow-sm border border-slate-200 space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <label htmlFor="name" className="block text-sm font-semibold text-slate-700 mb-2">

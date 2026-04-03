@@ -35,7 +35,7 @@ export const Navigation = ({ currentPage, setCurrentPage }) => {
                     {/* Logo - pops out below navbar */}
                     <div className="flex-shrink-0 overflow-visible translate-y-2">
                         <Link to="/" onClick={() => handleMenuClick('home')}>
-                            <div className="bg-white shadow-md rounded-2xl border border-slate-100 px-3 py-2 hover:shadow-lg transition-shadow duration-200">
+                            <div className="bg-white shadow-md rounded border border-slate-100 px-3 py-2 hover:shadow-lg transition-shadow duration-200">
                                 <img
                                     src="/images/swalakshya_wide.png"
                                     alt="Swalakshya Logo"
@@ -56,7 +56,7 @@ export const Navigation = ({ currentPage, setCurrentPage }) => {
                                 className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
                                     isActive(item)
                                         ? 'text-sky-700 bg-sky-50 font-semibold'
-                                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                                        : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
                                 }`}
                             >
                                 {item.label}
@@ -68,7 +68,7 @@ export const Navigation = ({ currentPage, setCurrentPage }) => {
                     <div className="md:hidden">
                         <button
                             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                            className="p-2 rounded-md text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors duration-200"
+                            className="p-2 rounded-md text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors duration-200"
                         >
                             {isMobileMenuOpen ? <CloseIcon /> : <MenuIcon />}
                         </button>
@@ -87,7 +87,7 @@ export const Navigation = ({ currentPage, setCurrentPage }) => {
                                     className={`block w-full text-left px-3 py-2 text-base font-medium rounded-md transition-colors duration-200 ${
                                         isActive(item)
                                             ? 'text-sky-600 bg-sky-50'
-                                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                                            : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
                                     }`}
                                 >
                                     {item.label}
@@ -207,8 +207,8 @@ export const Header = ({ currentPage }) => {
                     />
                 </div>
                 <div className="py-4 flex flex-col items-center justify-center">
-                    <h1 className="text-3xl font-bold text-slate-800 font-display tracking-tight">Aagam-Khoj <span className="text-slate-500 font-normal">(आगम-खोज)</span></h1>
-                    <p className="text-sm text-slate-400 mt-1 font-sans">Explore Jain Shastras/Books and Pravachans of Pujya Gurudev Shri Kanji Swami</p>
+                    <h1 className="text-3xl font-bold text-slate-900 font-display tracking-tight">Aagam-Khoj <span className="text-slate-700 font-normal">(आगम-खोज)</span></h1>
+                    <p className="text-sm text-slate-600 mt-1 font-sans">Explore Jain Shastras/Books and Pravachans of Pujya Gurudev Shri Kanji Swami</p>
                 </div>
             </div>
         </div>
