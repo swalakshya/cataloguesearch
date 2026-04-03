@@ -208,7 +208,7 @@ const WhatsNew = () => {
 
             <div className="space-y-8">
                 {updates.map((update, index) => (
-                    <div key={index} className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+                    <div key={index} style={{ backgroundColor: 'var(--bg-card, white)' }} className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
                         {/* Header with Date */}
                         <div className="bg-sky-50 border-b border-sky-100 px-6 py-4">
                             <h2 className="text-xl font-semibold text-sky-800">{update.date}</h2>

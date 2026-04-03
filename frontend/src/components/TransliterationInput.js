@@ -121,6 +121,18 @@ const TransliterationInput = ({
         }
     }, [autoFocus]);
 
+    // Press '/' anywhere to focus the search input
+    useEffect(() => {
+        const handleSlash = (e) => {
+            if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+                inputRef.current?.focus();
+            }
+        };
+        window.addEventListener('keydown', handleSlash);
+        return () => window.removeEventListener('keydown', handleSlash);
+    }, []);
+
     // Clear input when language changes
     useEffect(() => {
         onChange('');
@@ -403,6 +415,7 @@ const TransliterationInput = ({
         <div className="relative w-full">
             {/* Input with toggle button */}
             <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm pointer-events-none select-none">🔍</span>
                 <input
                     ref={inputRef}
                     type="text"
@@ -411,7 +424,7 @@ const TransliterationInput = ({
                     onKeyDown={handleKeyDown}
                     placeholder={getDynamicPlaceholder()}
                     disabled={disabled}
-                    className={`w-full p-3 pl-4 pr-20 text-sm md:text-lg bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-slate-900 font-sans ${className}`}
+                    className={`w-full h-8 pl-8 pr-20 text-sm bg-white border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-slate-900 font-sans ${className}`}
                 />
 
                 {/* Toggle Button */}
@@ -419,10 +432,10 @@ const TransliterationInput = ({
                     type="button"
                     onClick={handleToggle}
                     disabled={disabled}
-                    className={`absolute right-3 top-1/2 -translate-y-1/2 px-3 py-1.5 flex items-center justify-center rounded-md transition-all duration-300 font-semibold text-sm ${
+                    className={`absolute right-2 top-1/2 -translate-y-1/2 px-2 py-0.5 flex items-center justify-center rounded transition-all duration-300 font-semibold text-xs ${
                         isEnabled
                             ? 'bg-green-500 text-white hover:bg-green-600 shadow-md'
-                            : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                            : 'bg-neutral-200 text-neutral-600 hover:bg-neutral-300'
                     } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${
                         showTooltip && !isEnabled ? 'animate-pulse' : ''
                     }`}
@@ -488,7 +501,7 @@ const TransliterationInput = ({
                             className={`px-4 py-2 cursor-pointer transition-colors ${
                                 index === selectedIndex
                                     ? 'bg-sky-100 text-sky-900'
-                                    : 'bg-white text-slate-700 hover:bg-slate-50'
+                                    : 'bg-white text-slate-700 hover:bg-neutral-50'
                             }`}
                         >
                             <span className="text-lg">{suggestion}</span>

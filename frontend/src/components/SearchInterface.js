@@ -194,16 +194,17 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
     };
 
     return (
-        <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-slate-600 uppercase tracking-wider">Refine Search</h3>
+        <div className="space-y-2">
+            <p className="text-xs text-slate-900 font-semibold uppercase tracking-wide">Refine search</p>
 
             {/* Filter Button */}
             <button
                 onClick={() => setIsOpen(true)}
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-md text-left text-slate-800 text-base hover:bg-slate-100 transition-colors focus:ring-2 focus:ring-sky-500 flex items-center justify-between"
+                style={{ backgroundColor: 'var(--bg-surface, white)' }}
+                className="w-full py-1 px-3 bg-white border border-slate-300 rounded text-left text-slate-900 text-sm font-medium hover:bg-neutral-50 transition-colors focus:ring-2 focus:ring-sky-500 flex items-center justify-between"
             >
                 <span>{getSummaryText()}</span>
-                <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
             </button>
@@ -211,7 +212,7 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
             {/* Active Filters */}
             {(granthFilterCount > 0 || (!contentTypes.pravachans || !contentTypes.granths) || startYear || endYear) && (
                 <div className="flex flex-wrap gap-1.5 items-center">
-                    <span className="font-semibold text-slate-500 text-sm">Active:</span>
+                    <span className="font-semibold text-slate-600 text-sm">Active:</span>
 
                     {/* Content Type Chip (only if not "Both") */}
                     {(!contentTypes.pravachans || !contentTypes.granths) && (
@@ -288,9 +289,9 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
 
                     {/* Modal Content */}
                     <div className="fixed inset-x-0 bottom-0 md:inset-0 md:flex md:items-center md:justify-center z-50">
-                        <div className="bg-white rounded-t-xl md:rounded-xl shadow-2xl w-full md:max-w-lg md:max-h-[80vh] flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+                        <div className="bg-white rounded-t-lg md:rounded-lg shadow-2xl w-full md:max-w-lg md:max-h-[80vh] flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
                             {/* Header */}
-                            <div className="p-4 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white rounded-t-xl md:rounded-t-xl">
+                            <div className="p-4 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white rounded-t-lg md:rounded-t-lg">
                                 <h3 className="text-lg font-bold text-slate-800">Filters</h3>
                                 <button
                                     onClick={() => setIsOpen(false)}
@@ -310,7 +311,7 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
                                     <div className="grid grid-cols-2 gap-2">
                                         <button
                                             onClick={() => setContentTypes(prev => ({ ...prev, pravachans: !prev.pravachans }))}
-                                            className={`p-2.5 rounded-md border-2 font-medium transition-all text-sm flex items-center justify-center gap-1.5 ${
+                                            className={`p-2 rounded border-2 font-medium transition-all text-sm flex items-center justify-center gap-1.5 ${
                                                 contentTypes.pravachans
                                                     ? 'border-sky-500 bg-sky-50 text-sky-700'
                                                     : 'border-slate-300 bg-white text-slate-600'
@@ -325,7 +326,7 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
                                         </button>
                                         <button
                                             onClick={() => setContentTypes(prev => ({ ...prev, granths: !prev.granths }))}
-                                            className={`p-2.5 rounded-md border-2 font-medium transition-all text-sm flex items-center justify-center gap-1.5 ${
+                                            className={`p-2 rounded border-2 font-medium transition-all text-sm flex items-center justify-center gap-1.5 ${
                                                 contentTypes.granths
                                                     ? 'border-sky-500 bg-sky-50 text-sky-700'
                                                     : 'border-slate-300 bg-white text-slate-600'
@@ -377,7 +378,7 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
                                     {/* Granth Selection */}
                                     {granthMode === 'specific' && (
                                         <div className="space-y-3">
-                                            <div className="text-sm text-slate-500 mb-2">
+                                            <div className="text-sm text-slate-600 mb-2">
                                                 Select specific Granths:
                                             </div>
 
@@ -387,13 +388,13 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
                                                 value={searchTerm}
                                                 onChange={(e) => setSearchTerm(e.target.value)}
                                                 placeholder="🔍 Search Granths..."
-                                                className="w-full p-2 bg-slate-50 border border-slate-300 rounded-md text-slate-800 text-base focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                                                className="w-full p-2 bg-white border border-slate-300 rounded text-slate-800 text-base focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
                                             />
 
                                             {/* Granth List */}
                                             <div className="relative">
                                                 <div
-                                                    className="max-h-64 overflow-y-auto border border-slate-200 rounded-md"
+                                                    className="max-h-64 overflow-y-auto border border-slate-200 rounded"
                                                     style={{
                                                         scrollbarWidth: 'thin',
                                                         scrollbarColor: '#94a3b8 #f1f5f9'
@@ -419,7 +420,7 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
                                                         filteredGranths.map((granth, index) => (
                                                             <label
                                                                 key={index}
-                                                                className="flex items-center gap-3 p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-b-0"
+                                                                className="flex items-center gap-3 p-3 hover:bg-neutral-50 cursor-pointer border-b border-neutral-100 last:border-b-0"
                                                             >
                                                                 <input
                                                                     type="checkbox"
@@ -431,7 +432,7 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
                                                             </label>
                                                         ))
                                                     ) : (
-                                                        <div className="p-4 text-center text-slate-500 text-sm">
+                                                        <div className="p-4 text-center text-slate-600 text-sm">
                                                             No Granths found
                                                         </div>
                                                     )}
@@ -471,7 +472,7 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
                                                         setEndYear(null);
                                                     }
                                                 }}
-                                                className="w-full p-2 bg-slate-50 border border-slate-300 rounded-md text-slate-800 text-base focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                                                className="w-full p-2 bg-white border border-slate-300 rounded text-slate-800 text-base focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
                                             >
                                                 <option value="">Any</option>
                                                 {availableYears.map(year => (
@@ -486,7 +487,7 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
                                             <select
                                                 value={endYear || ''}
                                                 onChange={(e) => setEndYear(e.target.value ? parseInt(e.target.value) : null)}
-                                                className="w-full p-2 bg-slate-50 border border-slate-300 rounded-md text-slate-800 text-base focus:ring-2 focus:ring-sky-500 focus:border-sky-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                className="w-full p-2 bg-white border border-slate-300 rounded-md text-slate-800 text-base focus:ring-2 focus:ring-sky-500 focus:border-sky-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                                 disabled={!startYear}
                                             >
                                                 <option value="">Any</option>
@@ -495,7 +496,7 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
                                                 ))}
                                             </select>
                                             {!startYear && (
-                                                <p className="text-xs text-slate-500 mt-1">Select start year first</p>
+                                                <p className="text-xs text-slate-600 mt-1">Select start year first</p>
                                             )}
                                         </div>
                                     </div>
@@ -503,16 +504,16 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
                             </div>
 
                             {/* Footer */}
-                            <div className="p-4 border-t border-slate-200 flex gap-2 sticky bottom-0 bg-white rounded-b-xl md:rounded-b-xl">
+                            <div className="p-4 border-t border-slate-200 flex gap-2 sticky bottom-0 bg-white rounded-b-lg md:rounded-b-lg">
                                 <button
                                     onClick={handleClearAll}
-                                    className="flex-1 px-4 py-2 border border-slate-300 rounded-md text-slate-700 font-semibold hover:bg-slate-50 transition-colors"
+                                    className="flex-1 px-4 py-1.5 border border-slate-300 rounded text-slate-700 font-semibold hover:bg-slate-50 transition-colors"
                                 >
                                     Clear All
                                 </button>
                                 <button
                                     onClick={handleApply}
-                                    className="flex-1 px-4 py-2 bg-sky-600 text-white rounded-md font-semibold hover:bg-sky-700 transition-colors"
+                                    className="flex-1 px-4 py-1.5 bg-sky-600 text-white rounded font-semibold hover:bg-sky-700 transition-colors"
                                 >
                                     Apply {granthMode === 'specific' && selectedGranths.length > 0 && `(${selectedGranths.length})`}
                                 </button>
@@ -530,55 +531,56 @@ export const AdvancedSearch = ({ exactMatch, setExactMatch, excludeWords, setExc
     const [showExcludeWordsTooltip, setShowExcludeWordsTooltip] = useState(false);
 
     return (
-        <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-slate-600 uppercase tracking-wider">Advanced Search</h3>
-            <div className="space-y-3">
-                <div className="relative">
-                    <label className="flex items-center gap-2 text-slate-700">
+        <div className="space-y-2">
+            <p className="text-xs text-slate-900 font-semibold uppercase tracking-wide">Advanced search</p>
+            <div className="space-y-2.5">
+                {/* Exact Match toggle */}
+                <div className="relative flex items-center gap-2">
+                    <label className="flex items-center gap-2 text-slate-700 cursor-pointer select-none">
                         <input
                             type="checkbox"
                             checked={exactMatch}
                             onChange={(e) => setExactMatch(e.target.checked)}
-                            className="form-checkbox h-4 w-4 text-sky-600 focus:ring-sky-500 rounded"
+                            className="form-checkbox h-3.5 w-3.5 text-sky-600 focus:ring-sky-500 rounded"
                         />
-                        <span className="text-base font-medium">Exact Phrase Match</span>
-                        <button
-                            type="button"
-                            className="text-slate-400 hover:text-slate-600 cursor-help ml-1 transition-colors"
-                            onMouseEnter={() => setShowExactMatchTooltip(true)}
-                            onMouseLeave={() => setShowExactMatchTooltip(false)}
-                            onClick={() => setShowExactMatchTooltip(!showExactMatchTooltip)}
-                        >
-                            <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-                            </svg>
-                        </button>
+                        <span className="text-sm">Exact phrase match</span>
                     </label>
+                    <button
+                        type="button"
+                        className="text-slate-300 hover:text-slate-600 transition-colors"
+                        onMouseEnter={() => setShowExactMatchTooltip(true)}
+                        onMouseLeave={() => setShowExactMatchTooltip(false)}
+                        onClick={() => setShowExactMatchTooltip(!showExactMatchTooltip)}
+                    >
+                        <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                        </svg>
+                    </button>
                     {showExactMatchTooltip && (
                         <div className="absolute left-0 top-full mt-1 bg-slate-800 text-white text-xs rounded px-2 py-1 z-10 whitespace-nowrap">
                             Search for the exact phrase rather than individual words
                         </div>
                     )}
                 </div>
-                <div>
-                    <div className="relative">
-                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Exclude Words
-                            <button
-                                type="button"
-                                className="text-slate-400 hover:text-slate-600 cursor-help ml-1 transition-colors"
-                                onMouseEnter={() => setShowExcludeWordsTooltip(true)}
-                                onMouseLeave={() => setShowExcludeWordsTooltip(false)}
-                                onClick={() => setShowExcludeWordsTooltip(!showExcludeWordsTooltip)}
-                            >
-                                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-                                </svg>
-                            </button>
-                        </label>
+
+                {/* Exclude Words */}
+                <div className="relative">
+                    <div className="flex items-center gap-1 mb-1">
+                        <span className="text-xs text-slate-600">Exclude words</span>
+                        <button
+                            type="button"
+                            className="text-slate-300 hover:text-slate-600 transition-colors"
+                            onMouseEnter={() => setShowExcludeWordsTooltip(true)}
+                            onMouseLeave={() => setShowExcludeWordsTooltip(false)}
+                            onClick={() => setShowExcludeWordsTooltip(!showExcludeWordsTooltip)}
+                        >
+                            <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                            </svg>
+                        </button>
                         {showExcludeWordsTooltip && (
                             <div className="absolute left-0 top-full mt-1 bg-slate-800 text-white text-xs rounded px-2 py-1 z-10 whitespace-nowrap">
-                                Enter words separated by commas to exclude from results
+                                Comma-separated words to exclude from results
                             </div>
                         )}
                     </div>
@@ -586,8 +588,9 @@ export const AdvancedSearch = ({ exactMatch, setExactMatch, excludeWords, setExc
                         type="text"
                         value={excludeWords}
                         onChange={(e) => setExcludeWords(e.target.value)}
-                        placeholder="word1, word2, word3..."
-                        className="w-1/2 p-2 bg-slate-50 border border-slate-300 rounded-md text-slate-800 text-base focus:ring-1 focus:ring-sky-500 font-sans"
+                        placeholder="word1, word2, ..."
+                        style={{ backgroundColor: 'var(--bg-surface, white)' }}
+                        className="w-full py-1 px-2.5 bg-white border border-slate-200 rounded text-slate-800 text-sm focus:ring-1 focus:ring-sky-500 focus:border-sky-400 font-sans"
                     />
                 </div>
             </div>
@@ -596,34 +599,23 @@ export const AdvancedSearch = ({ exactMatch, setExactMatch, excludeWords, setExc
 };
 
 export const SearchOptions = ({ language, setLanguage }) => {
-    const languageOptions = [
-        { value: 'hindi', label: 'Hindi', disabled: false },
-        { value: 'gujarati', label: 'Gujarati', disabled: false }
-    ];
-    
     return (
-        <div>
-            <div>
-                <h3 className="text-sm font-semibold mb-2 text-slate-600 uppercase tracking-wider">Language</h3>
-                <div className="flex gap-4">
-                    {languageOptions.map(lang => (
-                        <label key={lang.value} className={`flex items-center gap-1.5 text-base ${lang.disabled ? 'text-slate-400 cursor-not-allowed' : 'text-slate-700 cursor-pointer'}`}>
-                            <input 
-                                type="radio" 
-                                name="language" 
-                                value={lang.value} 
-                                checked={language === lang.value} 
-                                onChange={(e) => setLanguage(e.target.value)} 
-                                disabled={lang.disabled}
-                                className="form-radio h-4 w-4 text-sky-600 focus:ring-sky-500 disabled:opacity-50 disabled:cursor-not-allowed" 
-                            />
-                            <span className="capitalize">
-                                {lang.label}
-                                {lang.disabled && <span className="ml-1 text-xs text-slate-400">(Coming soon)</span>}
-                            </span>
-                        </label>
-                    ))}
-                </div>
+        <div className="space-y-2">
+            <p className="text-xs text-slate-900 font-semibold uppercase tracking-wide">Language</p>
+            <div style={{ backgroundColor: 'var(--bg-surface, #f5f5f5)' }} className="flex items-center p-0.5 bg-neutral-100 rounded w-fit">
+                {[{ value: 'hindi', label: 'Hindi' }, { value: 'gujarati', label: 'Gujarati' }].map(lang => (
+                    <button
+                        key={lang.value}
+                        onClick={() => setLanguage(lang.value)}
+                        className={`px-3 py-0.5 text-sm font-medium rounded transition-all duration-150 ${
+                            language === lang.value
+                                ? 'bg-white text-slate-800 shadow-sm'
+                                : 'text-slate-800 hover:text-slate-900'
+                        }`}
+                    >
+                        {lang.label}
+                    </button>
+                ))}
             </div>
         </div>
     );

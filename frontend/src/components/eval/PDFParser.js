@@ -449,7 +449,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                 onBookmarkClick={handleBookmarkClick}
             />
 
-            <div className="bg-white rounded-lg shadow-sm border border-slate-200" style={{ width: '130%', maxWidth: 'none' }}>
+            <div className="rounded-lg shadow-sm border border-slate-200" style={{ width: '130%', maxWidth: 'none', backgroundColor: 'var(--bg-card)' }}>
                 {/* Header */}
                 <div className="p-4 border-b border-slate-200">
                     <h2 className="text-2xl font-bold text-slate-800 mb-1">PDF Parser</h2>
@@ -457,7 +457,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                 </div>
 
                 {/* Controls */}
-                <div className="px-4 pt-3 pb-2 border-b border-slate-200 bg-slate-50 space-y-2">
+                <div className="px-4 pt-3 pb-2 border-b border-slate-200 space-y-2" style={{ backgroundColor: 'var(--bg-surface)' }}>
 
                     {/* Line 1: File input + language */}
                     <div>

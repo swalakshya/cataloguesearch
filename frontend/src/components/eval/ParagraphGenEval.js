@@ -505,7 +505,7 @@ Please select the SOURCE directory (${selection.sourcePath})`;
     // Show directory selection if no directories selected
     if (!sourceHandle || !targetHandle) {
         return (
-            <div className="bg-white rounded-lg shadow-sm border border-slate-200" style={{ width: '130%', maxWidth: 'none' }}>
+            <div className="rounded-lg shadow-sm border border-slate-200" style={{ width: '130%', maxWidth: 'none', backgroundColor: 'var(--bg-card)' }}>
                 {/* Header */}
                 <div className="p-4 border-b border-slate-200">
                     <h2 className="text-2xl font-bold text-slate-800 mb-2">Paragraph Generation Evaluation</h2>
@@ -518,7 +518,7 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                     <p className="text-slate-600 mb-6">Please select the source and target directories to begin comparison.</p>
                     
                     {basePaths && (
-                        <div className="mb-6 p-4 bg-slate-50 rounded-lg">
+                        <div className="mb-6 p-4 rounded-lg" style={{ backgroundColor: 'var(--bg-surface)' }}>
                             <h4 className="font-semibold text-slate-700 mb-2">Configuration Paths:</h4>
                             <div className="text-sm text-slate-600 space-y-1">
                                 <div><strong>Base PDF:</strong> {basePaths.base_pdf_path}</div>
@@ -632,7 +632,7 @@ Please select the SOURCE directory (${selection.sourcePath})`;
     }
 
     return (
-        <div className="bg-white rounded-lg shadow-sm border border-slate-200" style={{ width: '130%', maxWidth: 'none' }}>
+        <div className="rounded-lg shadow-sm border border-slate-200" style={{ width: '130%', maxWidth: 'none', backgroundColor: 'var(--bg-card)' }}>
                 {/* Header */}
                 <div className="p-4 border-b border-slate-200">
                     <h2 className="text-2xl font-bold text-slate-800 mb-2">Paragraph Generation Evaluation</h2>
@@ -645,7 +645,7 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                 </div>
 
             {/* Controls */}
-            <div className="p-4 border-b border-slate-200 bg-slate-50">
+            <div className="p-4 border-b border-slate-200" style={{ backgroundColor: 'var(--bg-surface)' }}>
                 <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                         {/* Navigation Controls */}
@@ -749,7 +749,7 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                                 disabled={!selectedFolder || !basePaths}
                             />
                         </div>
-                        <div className="bg-slate-50 border border-slate-300 rounded-lg overflow-hidden">
+                        <div className="border border-slate-300 rounded-lg overflow-hidden" style={{ backgroundColor: 'var(--bg-surface)' }}>
                             <div className="p-4 max-h-[700px] overflow-y-auto flex justify-center">
                                 {pdfPageDataUrl ? (
                                     <img
@@ -789,7 +789,7 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                                 />
                             </div>
                         </div>
-                        <div className="bg-slate-50 border border-slate-300 rounded-lg overflow-hidden">
+                        <div className="border border-slate-300 rounded-lg overflow-hidden" style={{ backgroundColor: 'var(--bg-surface)' }}>
                             <div className="p-4 space-y-3 max-h-[700px] overflow-y-auto">
                                 {!targetContent && (
                                     <div className="text-slate-400 text-sm text-center py-8 italic">
@@ -804,7 +804,8 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                                     return (
                                         <div
                                             key={index}
-                                            className="bg-slate-50 border border-slate-200 rounded-lg p-3 transition-colors relative"
+                                            className="border border-slate-200 rounded-lg p-3 transition-colors relative"
+                                            style={{ backgroundColor: 'var(--bg-card)' }}
                                         >
                                             <div className="flex items-center justify-between mb-2">
                                                 <div className="text-xs text-slate-500 font-semibold">

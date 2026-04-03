@@ -23,13 +23,14 @@
 .widget-info h4 {
   margin: 0 0 4px 0;
   font-size: 0.9rem;
-  font-weight: 600;
-  color: #334155;
+  font-weight: 700;
+  color: #0f172a;
 }
 
 .widget-stats {
   font-size: 0.8rem;
-  color: #64748b;
+  color: #334155;
+  font-weight: 500;
 }
 
 .widget-actions {

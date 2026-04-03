@@ -93,9 +93,9 @@ const SearchIndex = () => {
     if (!status) return '-';
     return (
       <span className={`status-badge ${status}`}>
-        {status === 'searchable' ? '✅ Searchable' :
-         status === 'in_progress' ? '🔄 In Progress' :
-         '📅 Planned'}
+        {status === 'searchable' ? 'Available' :
+         status === 'in_progress' ? 'In Progress' :
+         'Planned'}
       </span>
     );
   };
@@ -105,7 +105,7 @@ const SearchIndex = () => {
 
     return (
       <div className="content-section">
-        <h2 className="section-title">🎙️ Pravachan Content</h2>
+        <h2 className="section-title">Pravachan Content</h2>
         <div className="table-container">
           <table className="content-table">
             <thead>
@@ -167,7 +167,7 @@ const SearchIndex = () => {
 
     return (
       <div className="content-section" style={{ marginTop: '3rem' }}>
-        <h2 className="section-title">📜 Mool Shastra / Granth Content</h2>
+        <h2 className="section-title">Mool Shastra / Granth Content</h2>
         <div className="table-container">
           <table className="content-table">
             <thead>
@@ -198,40 +198,26 @@ const SearchIndex = () => {
     <div className="search-index-page">
 
       <div className="stats-overview">
-        {/* Pravachan Widgets */}
         <div className="overview-card">
-          <div className="overview-icon">🎙️</div>
-          <div className="overview-number">{getContentByStatus('searchable').hindi.length + getContentByStatus('searchable').gujarati.length} Series</div>
-          <div className="overview-secondary">{allStats.pravachan.grandTotal.toLocaleString()} Pravachans</div>
+          <div className="overview-emoji">🎙️</div>
+          <div className="overview-number">{allStats.pravachan.grandTotal.toLocaleString()}</div>
+          <div className="overview-secondary">{getContentByStatus('searchable').hindi.length + getContentByStatus('searchable').gujarati.length} series</div>
+          <div className="overview-label">Pravachans</div>
         </div>
-        <div className="overview-card language-split">
-          <div className="overview-icon">🎙️</div>
-          <div className="language-stat">
-            <div className="overview-number">{allStats.pravachan.hindiTotal.toLocaleString()}</div>
-            <div className="overview-label">Hindi</div>
-          </div>
-          <div className="language-divider"></div>
-          <div className="language-stat">
-            <div className="overview-number">{allStats.pravachan.gujaratiTotal.toLocaleString()}</div>
-            <div className="overview-label">Gujarati</div>
-          </div>
-        </div>
-        {(() => {
-          const inProgressCount = getContentByStatus('in_progress').hindi.length + getContentByStatus('in_progress').gujarati.length;
-          return inProgressCount > 0 ? (
-            <div className="overview-card">
-              <div className="overview-icon">🎙️</div>
-              <div className="overview-number">{inProgressCount}</div>
-              <div className="overview-label">Series in Progress</div>
-            </div>
-          ) : null;
-        })()}
-
-        {/* Granth Widget */}
         <div className="overview-card">
-          <div className="overview-icon">📜</div>
-          <div className="overview-number">{allStats.granth.searchable} Granths</div>
-          <div className="overview-secondary">Searchable</div>
+          <div className="overview-emoji">अ</div>
+          <div className="overview-number">{allStats.pravachan.hindiTotal.toLocaleString()}</div>
+          <div className="overview-label">Hindi</div>
+        </div>
+        <div className="overview-card">
+          <div className="overview-emoji">અ</div>
+          <div className="overview-number">{allStats.pravachan.gujaratiTotal.toLocaleString()}</div>
+          <div className="overview-label">Gujarati</div>
+        </div>
+        <div className="overview-card">
+          <div className="overview-emoji">📜</div>
+          <div className="overview-number">{allStats.granth.searchable}</div>
+          <div className="overview-label">Granths</div>
         </div>
       </div>
 
@@ -243,7 +229,7 @@ const SearchIndex = () => {
       <div className="page-footer">
         <div className="footer-actions">
           <Link to="/" className="btn btn-primary">
-            🔍 Start Searching
+            Start Searching
           </Link>
         </div>
         

@@ -193,10 +193,10 @@ const CategorySection = ({ category, groups, activeStatuses }) => {
     }));
 
     return (
-        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+        <div className="rounded-lg border border-slate-200 overflow-hidden" style={{ backgroundColor: 'var(--bg-card)' }}>
             <button
                 onClick={() => setCollapsed(c => !c)}
-                className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors text-left"
+                className="w-full flex items-center justify-between p-4 hover:bg-neutral-100 transition-colors text-left"
             >
                 <div className="flex items-center gap-3 flex-wrap">
                     <span className="text-base font-semibold text-slate-800">{category}</span>
@@ -218,7 +218,7 @@ const CategorySection = ({ category, groups, activeStatuses }) => {
             {!collapsed && (
                 <div className="border-t border-slate-200 overflow-x-auto">
                     <table className="w-full text-sm">
-                        <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
+                        <thead className="text-slate-500 text-xs uppercase tracking-wider" style={{ backgroundColor: 'var(--bg-surface)' }}>
                             <tr>
                                 <th className="px-4 py-2 text-left font-medium w-64">Directory</th>
                                 <th className="px-4 py-2 text-left font-medium">Status</th>
@@ -284,7 +284,7 @@ const UnindexedPDFs = () => {
     return (
         <div className="space-y-4">
             {/* Header */}
-            <div className="bg-white rounded-lg border border-slate-200 p-4">
+            <div className="rounded-lg border border-slate-200 p-4" style={{ backgroundColor: 'var(--bg-card)' }}>
                 <div className="flex items-center justify-between flex-wrap gap-3">
                     <div>
                         <h2 className="text-lg font-semibold text-slate-800">Unindexed PDFs</h2>
@@ -346,7 +346,7 @@ const UnindexedPDFs = () => {
             {loading && !data && (
                 <div className="space-y-3">
                     {[1, 2, 3].map(i => (
-                        <div key={i} className="bg-white rounded-lg border border-slate-200 p-4 animate-pulse">
+                        <div key={i} className="rounded-lg border border-slate-200 p-4 animate-pulse" style={{ backgroundColor: 'var(--bg-card)' }}>
                             <div className="h-4 bg-slate-200 rounded w-32 mb-2" />
                             <div className="h-3 bg-slate-100 rounded w-48" />
                         </div>
