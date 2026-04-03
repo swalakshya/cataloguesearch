@@ -28,7 +28,8 @@ const WhatsNew = () => {
         {
             date: "March 31, 2026",
             newFeatures: [
-                "None"
+                "Developer API! Build your own AI chatbots, RAG pipelines etc. using Swalakshya's data.",
+                "UI refresh! More modern, compact, sharper fonts."
             ],
             newContent: [
                 "Pravachan Series: Niyamsar 1975 series in Gujarati",

@@ -6,28 +6,29 @@ import { MenuIcon, CloseIcon } from './SharedComponents';
 export const Navigation = ({ currentPage, setCurrentPage }) => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const location = useLocation();
-    
+
     const menuItems = [
         { id: 'home', label: 'Home', showSearch: true, path: '/' },
         { id: 'about', label: 'About', showSearch: false, path: '/about' },
         { id: 'search-index', label: 'Content', showSearch: false, path: '/search-index' },
         { id: 'usage-guide', label: 'Usage Guide', showSearch: false, path: '/usage-guide' },
         { id: 'whats-new', label: 'What\'s New?', showSearch: false, path: '/whats-new' },
+        { id: 'developer', label: 'Developer APIs', showSearch: false, path: '/developer' },
         { id: 'feedback', label: 'Feedback', showSearch: false, path: '/feedback' }
     ];
-    
+
     const handleMenuClick = (itemId) => {
         setCurrentPage(itemId);
         setIsMobileMenuOpen(false);
     };
-    
+
     const isActive = (item) => {
         if (item.id === 'home') {
             return location.pathname === '/' && currentPage === item.id;
         }
         return location.pathname === item.path;
     };
-    
+
     return (
         <nav className="bg-white/95 backdrop-blur-sm shadow-sm border-b border-slate-200 sticky top-0 z-40 overflow-visible">
             <div className="max-w-[1080px] mx-auto px-4 overflow-visible">
@@ -35,12 +36,12 @@ export const Navigation = ({ currentPage, setCurrentPage }) => {
                     {/* Logo - pops out below navbar */}
                     <div className="flex-shrink-0 overflow-visible translate-y-2">
                         <Link to="/" onClick={() => handleMenuClick('home')}>
-                            <div className="bg-white shadow-md rounded border border-slate-100 px-3 py-2 hover:shadow-lg transition-shadow duration-200">
+                            <div className="bg-white shadow-md rounded border border-slate-100 px-2 py-1 hover:shadow-lg transition-shadow duration-200">
                                 <img
                                     src="/images/swalakshya_wide.png"
                                     alt="Swalakshya Logo"
-                                    className="h-[3.5rem] w-auto"
-                                    onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/40x40/f1f5f9/475569?text=S' }}
+                                    className="h-[3.75rem] w-auto"
+                                    onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/40x40/f1f5f9/475569?text=S' }}
                                 />
                             </div>
                         </Link>
@@ -53,11 +54,10 @@ export const Navigation = ({ currentPage, setCurrentPage }) => {
                                 key={item.id}
                                 to={item.path}
                                 onClick={() => handleMenuClick(item.id)}
-                                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
-                                    isActive(item)
+                                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${isActive(item)
                                         ? 'text-sky-700 bg-sky-50 font-semibold'
                                         : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
-                                }`}
+                                    }`}
                             >
                                 {item.label}
                             </Link>
@@ -84,11 +84,10 @@ export const Navigation = ({ currentPage, setCurrentPage }) => {
                                     key={item.id}
                                     to={item.path}
                                     onClick={() => handleMenuClick(item.id)}
-                                    className={`block w-full text-left px-3 py-2 text-base font-medium rounded-md transition-colors duration-200 ${
-                                        isActive(item)
+                                    className={`block w-full text-left px-3 py-2 text-base font-medium rounded-md transition-colors duration-200 ${isActive(item)
                                             ? 'text-sky-600 bg-sky-50'
                                             : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
-                                    }`}
+                                        }`}
                                 >
                                     {item.label}
                                 </Link>
@@ -111,7 +110,7 @@ export const Header = ({ currentPage }) => {
                         src="/images/banner.jpg"
                         alt="Swa-Lakshya Banner"
                         className="h-full object-contain"
-                        onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/1080x160/f1f5f9/475569?text=Aagam+Khoj' }}
+                        onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/1080x160/f1f5f9/475569?text=Aagam+Khoj' }}
                     />
                 </div>
                 <div className="h-32 md:h-40 flex flex-col items-center justify-center">
@@ -132,7 +131,7 @@ export const Header = ({ currentPage }) => {
                         src="/images/banner.jpg"
                         alt="Swa-Lakshya Banner"
                         className="h-full object-contain"
-                        onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/1080x160/f1f5f9/475569?text=Aagam+Khoj' }}
+                        onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/1080x160/f1f5f9/475569?text=Aagam+Khoj' }}
                     />
                 </div>
             </div>
@@ -147,7 +146,7 @@ export const Header = ({ currentPage }) => {
                         src="/images/banner.jpg"
                         alt="Swa-Lakshya Banner"
                         className="h-full object-contain"
-                        onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/1080x160/f1f5f9/475569?text=Aagam+Khoj' }}
+                        onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/1080x160/f1f5f9/475569?text=Aagam+Khoj' }}
                     />
                 </div>
             </div>
@@ -162,7 +161,7 @@ export const Header = ({ currentPage }) => {
                         src="/images/banner.jpg"
                         alt="Swa-Lakshya Banner"
                         className="h-full object-contain"
-                        onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/1080x160/f1f5f9/475569?text=Aagam+Khoj' }}
+                        onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/1080x160/f1f5f9/475569?text=Aagam+Khoj' }}
                     />
                 </div>
             </div>
@@ -177,7 +176,7 @@ export const Header = ({ currentPage }) => {
                         src="/images/banner.jpg"
                         alt="Swa-Lakshya Banner"
                         className="h-full object-contain"
-                        onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/1080x160/f1f5f9/475569?text=Aagam+Khoj' }}
+                        onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/1080x160/f1f5f9/475569?text=Aagam+Khoj' }}
                     />
                 </div>
                 <div className="h-32 md:h-40 flex flex-col items-center justify-center">
@@ -191,7 +190,22 @@ export const Header = ({ currentPage }) => {
     }
 
     if (currentPage === 'eval') {
-        return null; // No header/banner for UI Eval page
+        return null;
+    }
+
+    if (currentPage === 'developer') {
+        return (
+            <div className="mb-0">
+                <div className="bg-slate-100 h-32 md:h-40 flex items-center justify-center overflow-hidden">
+                    <img
+                        src="/images/banner.jpg"
+                        alt="Swa-Lakshya Banner"
+                        className="h-full object-contain"
+                        onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/1080x160/f1f5f9/475569?text=Aagam+Khoj' }}
+                    />
+                </div>
+            </div>
+        );
     }
 
     // For 'home' and 'aagam-khoj' pages
@@ -203,7 +217,7 @@ export const Header = ({ currentPage }) => {
                         src="/images/banner.jpg"
                         alt="Swa-Lakshya Banner"
                         className="h-full object-contain"
-                        onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/1080x160/f1f5f9/475569?text=Aagam+Khoj' }}
+                        onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/1080x160/f1f5f9/475569?text=Aagam+Khoj' }}
                     />
                 </div>
                 <div className="py-4 flex flex-col items-center justify-center">

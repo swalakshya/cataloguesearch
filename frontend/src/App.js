@@ -11,6 +11,7 @@ import { FeedbackForm } from './components/Feedback';
 import About from './components/About';
 import WhatsNew from './components/WhatsNew';
 import UsageGuide from './components/UsageGuide';
+import DeveloperAPI from './components/DeveloperAPI';
 import SearchIndex from './components/SearchIndex';
 import UIEval from './components/eval/UIEval';
 import SearchableContentWidget from './components/SearchableContentWidget';
@@ -192,7 +193,7 @@ const AppContent = () => {
         setChatMessages([]);
         setChatInput('');
         setChatInputVisible(false);
-        setHomeMode(null);
+        setHomeMode('search');
         if (chatSessionId) {
             api.closeChatSession(chatSessionId).catch(() => null);
             setChatSessionId(null);
@@ -1276,6 +1277,12 @@ const AppContent = () => {
                         </main>
                     )}
 
+                    {currentPage === 'developer' && (
+                        <main>
+                            <DeveloperAPI />
+                        </main>
+                    )}
+
                     {currentPage === 'eval' && (
                         <main>
                             <UIEval />
@@ -1326,6 +1333,7 @@ export default function App() {
                 <Route path="/usage-guide" element={<AppContent />} />
                 <Route path="/search-index" element={<AppContent />} />
                 <Route path="/eval" element={<AppContent />} />
+                <Route path="/developer" element={<AppContent />} />
             </Routes>
         </Router>
     );
