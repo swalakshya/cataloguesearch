@@ -16,6 +16,7 @@ from backend.utils import json_dumps, JSONResponse, log_memory_usage
 from utils.logger import setup_logging, VERBOSE_LEVEL_NUM, METRICS_LEVEL_NUM
 from backend.api.feedback_api import router as feedback_router
 from backend.api.agent.router import router as agent_router
+from backend.api.agent.app import agent_app
 
 log_handle = logging.getLogger(__name__)
 
@@ -38,6 +39,9 @@ app.add_middleware(
 # --- Include Routers ---
 app.include_router(feedback_router, prefix="/api")
 app.include_router(agent_router, prefix="/api/agent")
+
+# --- Mount Agent sub-app (public OpenAPI surface) ---
+app.mount("/agent", agent_app)
 
 @app.on_event("startup")
 async def initialize():
@@ -70,6 +74,11 @@ async def initialize():
     # Initialize IndexSearcher (which may load the reranker)
     app.state.index_searcher = IndexSearcher(config)
     log_handle.info("IndexSearcher initialized.")
+
+    # Propagate shared state to the agent sub-app so request.app.state works there too
+    agent_app.state.config = config
+    agent_app.state.index_searcher = app.state.index_searcher
+    agent_app.state.embedding_model = app.state.embedding_model
 
     # Initialize and populate metadata cache
     app.state.metadata_cache = {
