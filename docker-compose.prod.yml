@@ -42,7 +42,7 @@ services:
     environment:
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_LEVEL=INFO
     ports:
       - "8500:8500"
     networks:
@@ -125,8 +125,6 @@ services:
       - SHORT_CODE_LEN=7
       - LOG_LEVEL=INFO
       - ENVIRONMENT=production
-    volumes:
-      - ./configs/config.yaml:/app/configs/config.yaml:ro
     networks:
       - app-net
     depends_on:
