@@ -1,9 +1,11 @@
 import logging
-from typing import Any, Dict, List, Literal, Optional
+import os
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from opensearchpy.exceptions import NotFoundError, TransportError
 from pydantic import BaseModel, Field
+import requests
 
 from backend.common.opensearch import get_metadata, get_opensearch_client
 from backend.utils import JSONResponse
@@ -50,6 +52,19 @@ class AgentGetPravachanRequest(BaseModel):
     granth: str = Field(..., description="Granth name")
     pravachan_number: str = Field(..., description="Pravachan number")
     language: Literal["hi", "gu"] = Field(..., description="Language")
+
+
+class AgentMetadataOptionsRequest(BaseModel):
+    language: Literal["hi", "gu"] = Field(..., description="Language context")
+    content_type: Literal["Pravachan", "Granth", "Books"] = Field(..., description="Category")
+
+
+class AgentShortenUrlRequest(BaseModel):
+    long_url: str = Field(..., description="Original scan URL")
+
+
+class AgentShortenUrlResponse(BaseModel):
+    short_url: str
 
 
 def _get_text_field(language: str) -> str:
@@ -129,7 +144,110 @@ def _build_date_range_filter(year_from: Optional[int], year_to: Optional[int]) -
     return {"bool": {"should": should_conditions, "minimum_should_match": 1}}
 
 
+def _collect_file_urls(items: List[Dict[str, Any]]) -> List[str]:
+    urls = []
+    for item in items:
+        url = item.get("file_url")
+        if url:
+            urls.append(url)
+    return list(dict.fromkeys(urls))
+
+
+def _apply_short_urls(items: List[Dict[str, Any]], short_map: Dict[str, str]) -> List[Dict[str, Any]]:
+    for item in items:
+        url = item.get("file_url")
+        if not url:
+            item["file_url"] = ""
+        else:
+            item["file_url"] = short_map.get(url, "")
+    return items
+
+
+def _bulk_shorten_file_urls(urls: List[str]) -> Dict[str, str]:
+    if not urls:
+        return {}
+    shortener_base = os.getenv("SHORTENER_API_URL", "http://url-shortener:8100")
+    try:
+        resp = requests.post(
+            f"{shortener_base.rstrip('/')}/shorten",
+            json={"long_urls": urls},
+            timeout=5,
+        )
+    except requests.exceptions.RequestException:
+        return {}
+
+    if resp.status_code != 200:
+        return {}
+    data = resp.json()
+    return data.get("short_urls", {})
+
+
+def _extract_file_url_from_bucket(bucket: Dict[str, Any]) -> Optional[str]:
+    hit = (
+        bucket.get("file_url_hit", {})
+        .get("hits", {})
+        .get("hits", [])
+    )
+    if not hit:
+        return None
+    source = hit[0].get("_source", {})
+    metadata = source.get("metadata", {})
+    return metadata.get("file_url")
+
+
 _ALL_CONTENT_TYPES = {"Pravachan", "Granth", "Books"}
+
+_METADATA_OPTIONS_CACHE: Dict[Tuple[str, str], List[Dict[str, Optional[str]]]] = {}
+
+
+def _build_metadata_options_query(language: str, content_type: str, size: int = 1000) -> Dict[str, Any]:
+    author_script = (
+        "if (doc.containsKey('metadata.Author.keyword') && !doc['metadata.Author.keyword'].empty) { emit(doc['metadata.Author.keyword'].value); return; }"
+        "if (doc.containsKey('metadata.Tikakaar.keyword') && !doc['metadata.Tikakaar.keyword'].empty) { emit(doc['metadata.Tikakaar.keyword'].value); return; }"
+        "if (doc.containsKey('metadata.Teekakar.keyword') && !doc['metadata.Teekakar.keyword'].empty) { emit(doc['metadata.Teekakar.keyword'].value); return; }"
+        "if (doc.containsKey('metadata.Bhasha Vachanika.keyword') && !doc['metadata.Bhasha Vachanika.keyword'].empty) { emit(doc['metadata.Bhasha Vachanika.keyword'].value); return; }"
+    )
+
+    return {
+        "size": 0,
+        "derived": {
+            "author_coalesced": {
+                "type": "keyword",
+                "script": {"source": author_script},
+            }
+        },
+        "query": {
+            "bool": {
+                "filter": [
+                    {"term": {"language": language}},
+                    {"term": {"metadata.category.keyword": content_type}},
+                ]
+            }
+        },
+        "aggs": {
+            "granths": {
+                "terms": {"field": "metadata.Granth.keyword", "size": size},
+                "aggs": {
+                    "anuyogs": {
+                        "terms": {"field": "metadata.Anuyog.keyword", "size": size, "missing": "__missing__"},
+                        "aggs": {
+                            "authors": {
+                                "terms": {"field": "author_coalesced", "size": size, "missing": "__missing__"},
+                                "aggs": {
+                                    "file_url_hit": {
+                                        "top_hits": {
+                                            "size": 1,
+                                            "_source": {"includes": ["metadata.file_url"]},
+                                        }
+                                    }
+                                },
+                            }
+                        },
+                    }
+                },
+            }
+        },
+    }
 
 
 def _build_filters(payload: AgentSearchRequest) -> List[Dict[str, Any]]:
@@ -227,6 +345,9 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
             hits = response.get("hits", {}).get("hits", [])
             log_handle.info("agent_search lexical hits=%s", len(hits))
             results = [_chunk_from_hit(hit, payload.language) for hit in hits]
+            urls = _collect_file_urls(results)
+            short_map = _bulk_shorten_file_urls(urls)
+            results = _apply_short_urls(results, short_map)
             return JSONResponse(content=results, status_code=200)
 
         query_embedding = embedding_model.get_embedding(payload.query)
@@ -258,6 +379,9 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
                 log_handle.warning("agent_search rerank requested but reranker not available; returning unreranked results")
             paginated = hits[from_:from_ + payload.page_size]
             results = [_chunk_from_hit(hit, payload.language) for hit in paginated]
+            urls = _collect_file_urls(results)
+            short_map = _bulk_shorten_file_urls(urls)
+            results = _apply_short_urls(results, short_map)
             return JSONResponse(content=results, status_code=200)
 
         sentence_pairs = []
@@ -272,6 +396,9 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
             log_handle.exception("agent_search reranking failed; returning unreranked results: %s", rerank_exc)
             paginated = hits[from_:from_ + payload.page_size]
             results = [_chunk_from_hit(hit, payload.language) for hit in paginated]
+            urls = _collect_file_urls(results)
+            short_map = _bulk_shorten_file_urls(urls)
+            results = _apply_short_urls(results, short_map)
             return JSONResponse(content=results, status_code=200)
         for hit, score in zip(hits, rerank_scores):
             hit["rerank_score"] = score
@@ -279,6 +406,9 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
         reranked_hits = sorted(hits, key=lambda x: x["rerank_score"], reverse=True)
         paginated_hits = reranked_hits[from_:from_ + payload.page_size]
         results = [_chunk_from_hit(hit, payload.language) for hit in paginated_hits]
+        urls = _collect_file_urls(results)
+        short_map = _bulk_shorten_file_urls(urls)
+        results = _apply_short_urls(results, short_map)
         return JSONResponse(content=results, status_code=200)
 
     except Exception as exc:
@@ -349,6 +479,9 @@ async def agent_navigate(request: Request, payload: AgentNavigateRequest = Body(
         language = source.get("language", "hi")
         log_handle.info("agent_navigate hits=%s language=%s", len(hits), language)
         results = [_chunk_from_hit(hit, language) for hit in hits]
+        urls = _collect_file_urls(results)
+        short_map = _bulk_shorten_file_urls(urls)
+        results = _apply_short_urls(results, short_map)
         return JSONResponse(content=results, status_code=200)
 
     except HTTPException:
@@ -404,6 +537,9 @@ async def agent_find_similar(request: Request, payload: AgentFindSimilarRequest 
         language = source_doc.get("_source", {}).get("language", "hi")
         log_handle.info("agent_find_similar hits=%s language=%s", len(hits), language)
         results = [_chunk_from_hit(hit, language) for hit in hits]
+        urls = _collect_file_urls(results)
+        short_map = _bulk_shorten_file_urls(urls)
+        results = _apply_short_urls(results, short_map)
         return JSONResponse(content=results, status_code=200)
 
     except HTTPException:
@@ -474,6 +610,73 @@ async def agent_get_filter_options(
         raise HTTPException(status_code=500, detail=f"Internal server error: {exc}")
 
 
+@router.post("/get_metadata_options", summary="Get metadata tuples (granth, author, anuyog)")
+async def agent_get_metadata_options(
+    request: Request, payload: AgentMetadataOptionsRequest = Body(...)
+):
+    """
+    Return unique metadata tuples (granth, author, anuyog) for the given language and content type.
+
+    Responses are cached in-process per (language, content_type) until app restart.
+    """
+    try:
+        cache_key = (payload.language, payload.content_type)
+        cached = _METADATA_OPTIONS_CACHE.get(cache_key)
+        if cached is not None:
+            log_handle.info("agent_get_metadata_options cache hit", extra={"key": cache_key})
+            return JSONResponse(content=cached, status_code=200)
+
+        log_handle.info(
+            "agent_get_metadata_options request",
+            extra={"language": payload.language, "content_type": payload.content_type},
+        )
+        config = request.app.state.config
+        client = get_opensearch_client(config)
+
+        query_body = _build_metadata_options_query(payload.language, payload.content_type, size=1000)
+        response = client.search(index=config.OPENSEARCH_INDEX_NAME, body=query_body)
+        granth_buckets = (
+            response.get("aggregations", {})
+            .get("granths", {})
+            .get("buckets", [])
+        )
+
+        results: List[Dict[str, Optional[str]]] = []
+        raw_urls: List[str] = []
+        for granth_bucket in granth_buckets:
+            granth = granth_bucket.get("key")
+            if not granth:
+                continue
+            for anuyog_bucket in granth_bucket.get("anuyogs", {}).get("buckets", []):
+                anuyog_key = anuyog_bucket.get("key")
+                anuyog = None if anuyog_key == "__missing__" else anuyog_key
+                for author_bucket in anuyog_bucket.get("authors", {}).get("buckets", []):
+                    author_key = author_bucket.get("key")
+                    author = None if author_key == "__missing__" else author_key
+                    file_url = _extract_file_url_from_bucket(author_bucket)
+                    if file_url:
+                        raw_urls.append(file_url)
+                    results.append({
+                        "granth": granth,
+                        "author": author,
+                        "anuyog": anuyog,
+                        "url": file_url or "",
+                    })
+
+        short_map = _bulk_shorten_file_urls(list(dict.fromkeys(raw_urls)))
+        for item in results:
+            if item.get("url"):
+                item["url"] = short_map.get(item["url"], "")
+
+        _METADATA_OPTIONS_CACHE[cache_key] = results
+        log_handle.info("agent_get_metadata_options response size=%s", len(results))
+        return JSONResponse(content=results, status_code=200)
+
+    except Exception as exc:
+        log_handle.exception(f"Agent get_metadata_options failed: {exc}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {exc}")
+
+
 @router.post("/get_pravachan", summary="Fetch all chunks of a Pravachan in order")
 async def agent_get_pravachan(
     request: Request, payload: AgentGetPravachanRequest = Body(...)
@@ -530,8 +733,32 @@ async def agent_get_pravachan(
 
         log_handle.info("agent_get_pravachan total_hits=%s", len(all_hits))
         results = [_chunk_from_hit(hit, payload.language) for hit in all_hits]
+        urls = _collect_file_urls(results)
+        short_map = _bulk_shorten_file_urls(urls)
+        results = _apply_short_urls(results, short_map)
         return JSONResponse(content=results, status_code=200)
 
     except Exception as exc:
         log_handle.exception(f"Agent get_pravachan failed: {exc}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {exc}")
+
+
+@router.post("/shorten_url", response_model=AgentShortenUrlResponse)
+async def agent_shorten_url(payload: AgentShortenUrlRequest = Body(...)):
+    shortener_base = os.getenv("SHORTENER_API_URL", "http://url-shortener:8100")
+    try:
+        resp = requests.post(
+            f"{shortener_base.rstrip('/')}/shorten",
+            json={"long_url": payload.long_url},
+            timeout=5,
+        )
+    except requests.exceptions.RequestException:
+        raise HTTPException(status_code=503, detail="Shortener service unavailable")
+
+    if resp.status_code == 404:
+        raise HTTPException(status_code=404, detail="URL not found")
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Shortener error")
+
+    data = resp.json()
+    return {"short_url": data.get("short_url")}
