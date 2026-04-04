@@ -56,33 +56,35 @@ export const SearchBar = ({ query, setQuery, onSearch, language }) => {
     );
 };
 
-export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemoveFilter, contentTypes, setContentTypes, language, startYear, setStartYear, endYear, setEndYear }) => {
+export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemoveFilter, contentTypes, setContentTypes, language, startYear, setStartYear, endYear, setEndYear, activeCategories = ['Pravachan', 'Granth'] }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [granthMode, setGranthMode] = useState('all'); // 'all' or 'specific'
     const [selectedGranths, setSelectedGranths] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
 
-    // Extract available Granths from metadata structure
+    // Extract available items (Name values) from metadata structure
     const getAvailableGranths = () => {
-        const granths = new Set();
+        const items = new Set();
 
-        // Get Granths from Pravachan metadata if enabled
-        if (contentTypes.pravachans && metadata['Pravachan']?.[language]?.['Granth']) {
-            const list = metadata['Pravachan'][language]['Granth'];
-            if (Array.isArray(list)) {
-                list.forEach(g => granths.add(g));
-            }
+        // Get Names from Pravachan metadata if enabled
+        if (contentTypes.pravachans && metadata['Pravachan']?.[language]?.['Name']) {
+            const list = metadata['Pravachan'][language]['Name'];
+            if (Array.isArray(list)) list.forEach(g => items.add(g));
         }
 
-        // Get Granths from Granth metadata if enabled
-        if (contentTypes.granths && metadata['Granth']?.[language]?.['Granth']) {
-            const list = metadata['Granth'][language]['Granth'];
-            if (Array.isArray(list)) {
-                list.forEach(g => granths.add(g));
-            }
+        // Get Names from Granth metadata if enabled
+        if (contentTypes.granths && metadata['Granth']?.[language]?.['Name']) {
+            const list = metadata['Granth'][language]['Name'];
+            if (Array.isArray(list)) list.forEach(g => items.add(g));
         }
 
-        return Array.from(granths).sort();
+        // Get Book Names from Books metadata if enabled
+        if (contentTypes.books && metadata['Books']?.[language]?.['Name']) {
+            const list = metadata['Books'][language]['Name'];
+            if (Array.isArray(list)) list.forEach(n => items.add(n));
+        }
+
+        return Array.from(items).sort();
     };
 
     const availableGranths = getAvailableGranths();
@@ -96,10 +98,10 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
 
     // Sync selectedGranths with activeFilters on mount and when filters change
     useEffect(() => {
-        const granthFilters = activeFilters.filter(f => f.key === 'Granth');
-        if (granthFilters.length > 0) {
+        const itemFilters = activeFilters.filter(f => f.key === 'Name');
+        if (itemFilters.length > 0) {
             setGranthMode('specific');
-            setSelectedGranths(granthFilters.map(f => f.value));
+            setSelectedGranths(itemFilters.map(f => f.value));
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -126,22 +128,19 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
     };
 
     const handleApply = () => {
-        // Remove all existing Granth filters first
-        const granthFilterIndices = [];
+        // Remove all existing Name filters first
+        const filterIndicesToRemove = [];
         activeFilters.forEach((filter, index) => {
-            if (filter.key === 'Granth') {
-                granthFilterIndices.push(index);
+            if (filter.key === 'Name') {
+                filterIndicesToRemove.push(index);
             }
         });
-        // Remove in reverse order to maintain correct indices
-        granthFilterIndices.reverse().forEach(index => {
-            onRemoveFilter(index);
-        });
+        filterIndicesToRemove.reverse().forEach(index => onRemoveFilter(index));
 
-        // Add back the Granth filters based on mode
+        // Add back filters
         if (granthMode === 'specific' && selectedGranths.length > 0) {
-            selectedGranths.forEach(granth => {
-                onAddFilter({ key: 'Granth', value: granth });
+            selectedGranths.forEach(item => {
+                onAddFilter({ key: 'Name', value: item });
             });
         }
 
@@ -151,24 +150,22 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
     const handleClearAll = () => {
         setGranthMode('all');
         setSelectedGranths([]);
-        setContentTypes({ pravachans: true, granths: true });
+        const hasBooks = activeCategories.includes('Books');
+        setContentTypes({ pravachans: true, granths: true, books: hasBooks });
         setSearchTerm('');
         setStartYear(null);
         setEndYear(null);
-        // Remove all Granth filters
-        const granthFilterIndices = [];
+        // Remove all Name filters
+        const filterIndicesToRemove = [];
         activeFilters.forEach((filter, index) => {
-            if (filter.key === 'Granth') {
-                granthFilterIndices.push(index);
+            if (filter.key === 'Name') {
+                filterIndicesToRemove.push(index);
             }
         });
-        // Remove in reverse order to maintain correct indices
-        granthFilterIndices.reverse().forEach(index => {
-            onRemoveFilter(index);
-        });
+        filterIndicesToRemove.reverse().forEach(index => onRemoveFilter(index));
     };
 
-    const granthFilterCount = activeFilters.filter(f => f.key === 'Granth').length;
+    const granthFilterCount = activeFilters.filter(f => f.key === 'Name').length;
 
     const getContentTypeText = () => {
         if (contentTypes.pravachans && contentTypes.granths) {
@@ -230,7 +227,7 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
                     {/* Granth Filters - Show summary if more than 3, otherwise show individual chips */}
                     {granthFilterCount > 3 ? (
                         <div className="bg-sky-100 text-sky-800 px-2 py-1 rounded-full flex items-center gap-2 text-sm font-medium">
-                            <span>{granthFilterCount} Granths selected</span>
+                            <span>{granthFilterCount} items selected</span>
                             <button
                                 onClick={() => setIsOpen(true)}
                                 className="text-sky-600 hover:text-sky-800 font-bold text-xs"
@@ -240,15 +237,15 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
                             </button>
                         </div>
                     ) : (
-                        activeFilters.filter(f => f.key === 'Granth').map((filter, index) => (
+                        activeFilters.filter(f => f.key === 'Name').map((filter, index) => (
                             <div key={index} className="bg-sky-100 text-sky-800 px-2 py-1 rounded-full flex items-center gap-2 text-sm font-medium">
                                 <span>{filter.value}</span>
                                 <button
                                     onClick={() => {
-                                        const actualIndex = activeFilters.findIndex(f => f.key === 'Granth' && f.value === filter.value);
+                                        const actualIndex = activeFilters.findIndex(f => f.key === 'Name' && f.value === filter.value);
                                         onRemoveFilter(actualIndex);
                                         setSelectedGranths(prev => prev.filter(g => g !== filter.value));
-                                        if (activeFilters.filter(f => f.key === 'Granth').length === 1) {
+                                        if (activeFilters.filter(f => f.key === 'Name').length === 1) {
                                             setGranthMode('all');
                                         }
                                     }}
@@ -339,6 +336,23 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
                                             )}
                                             📜 Mool Shastra
                                         </button>
+                                        {activeCategories.includes('Books') && (
+                                            <button
+                                                onClick={() => setContentTypes(prev => ({ ...prev, books: !prev.books }))}
+                                                className={`p-2 rounded border-2 font-medium transition-all text-sm flex items-center justify-center gap-1.5 ${
+                                                    contentTypes.books
+                                                        ? 'border-orange-500 bg-orange-50 text-orange-700'
+                                                        : 'border-slate-300 bg-white text-slate-600'
+                                                }`}
+                                            >
+                                                {contentTypes.books && (
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                )}
+                                                📚 Books
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
 
@@ -361,7 +375,7 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
                                                 }}
                                                 className="form-radio h-4 w-4 text-sky-600 focus:ring-sky-500"
                                             />
-                                            <span className="text-base font-medium">All Granths</span>
+                                            <span className="text-base font-medium">{contentTypes.books && !contentTypes.pravachans && !contentTypes.granths ? 'All Books' : 'All Granths'}</span>
                                         </label>
                                         <label className="flex items-center gap-2 text-slate-700 cursor-pointer">
                                             <input
@@ -371,15 +385,15 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
                                                 onChange={() => setGranthMode('specific')}
                                                 className="form-radio h-4 w-4 text-sky-600 focus:ring-sky-500"
                                             />
-                                            <span className="text-base font-medium">Specific Granths</span>
+                                            <span className="text-base font-medium">{contentTypes.books && !contentTypes.pravachans && !contentTypes.granths ? 'Specific Books' : 'Specific Granths'}</span>
                                         </label>
                                     </div>
 
-                                    {/* Granth Selection */}
+                                    {/* Granth/Book Selection */}
                                     {granthMode === 'specific' && (
                                         <div className="space-y-3">
                                             <div className="text-sm text-slate-600 mb-2">
-                                                Select specific Granths:
+                                                {contentTypes.books && !contentTypes.pravachans && !contentTypes.granths ? 'Select specific Books:' : 'Select specific Granths:'}
                                             </div>
 
                                             {/* Search Box */}
@@ -387,7 +401,7 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
                                                 type="text"
                                                 value={searchTerm}
                                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                                placeholder="🔍 Search Granths..."
+                                                placeholder={contentTypes.books && !contentTypes.pravachans && !contentTypes.granths ? '🔍 Search Books...' : '🔍 Search Granths...'}
                                                 className="w-full p-2 bg-white border border-slate-300 rounded text-slate-800 text-base focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
                                             />
 

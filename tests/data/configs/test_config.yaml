@@ -16,7 +16,7 @@ index:
   chunk_strategy: "advanced"
 
 search:
-  filtered_metadata_fields: ["type", "category", "language", "Author", "Anuyog", "Granth"]
+  filtered_metadata_fields: ["type", "category", "language", "Author", "Anuyog", "Name"]
   active_categories: ["Pravachan", "Granth"]
 
 opensearch:

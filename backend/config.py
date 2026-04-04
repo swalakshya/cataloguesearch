@@ -123,7 +123,11 @@ class Config:
             return self._settings.get("vector_embeddings", {}).get("reranker_onnx_path", None)
         elif name == "FILTERED_METADATA_FIELDS":
             return self._settings.get("search", {}).get("filtered_metadata_fields", {})
+        elif name == "DEBUG_MODE":
+            return os.environ.get("DEBUG", "").lower() == "true"
         elif name == "ACTIVE_CATEGORIES":
+            if os.environ.get("DEBUG", "").lower() == "true":
+                return ["Pravachan", "Granth", "Books"]
             return self._settings.get("search", {}).get("active_categories", ["Pravachan", "Granth"])
         elif name == "TRANSLITERATION_API_URL":
             return self._settings.get("transliteration", {}).get("api_url", "http://localhost:8001")

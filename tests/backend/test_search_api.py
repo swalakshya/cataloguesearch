@@ -279,7 +279,7 @@ def test_api_metadata_endpoint(api_server):
         # Extract field names and languages from composite keys
         fields_by_language = {}
         for composite_key, values in content_metadata.items():
-            # composite_key is like "Granth_hi", "Anuyog_gu", etc.
+            # composite_key is like "Name_hi", "Anuyog_gu", etc.
             parts = composite_key.rsplit('_', 1)
             if len(parts) == 2:
                 field_name, lang_code = parts
@@ -295,7 +295,7 @@ def test_api_metadata_endpoint(api_server):
 
         # Verify metadata fields for each language
         for lang_code, lang_metadata in fields_by_language.items():
-            # Pravachan has Anuyog, Granth, Year; Granth content type has Author, Granth, Anuyog
+            # Pravachan has Anuyog, Name, Year; Granth content type has Author, Name, Anuyog
             if content_type == "Pravachan":
                 expected_metadata_keys = {"Anuyog"}  # Granth and Year are optional
             else:

@@ -221,7 +221,7 @@ def get_metadata(config: Config) -> dict[str, dict[str, list[str]]]:
     Returns:
         dict[str, dict[str, list[str]]]: Dictionary with content_type as top-level keys,
         each containing composite keys (key_language) and their unique, sorted values.
-        Format: {"Pravachan": {"Granth_hi": [...], "Granth_gu": [...]}, "Granth": {"Granth_hi": [...]}}
+        Format: {"Pravachan": {"Name_hi": [...], "Name_gu": [...]}, "Granth": {"Name_hi": [...]}}
     """
     client = get_opensearch_client(config)
     metadata_index = config.OPENSEARCH_METADATA_INDEX_NAME
@@ -374,7 +374,7 @@ def update_metadata_index(config: Config, opensearch_client: OpenSearch, metadat
     actions = []
 
     # Handle Granth_date_ranges correlation (Option 1)
-    granth_values = metadata.get("Granth")
+    granth_values = metadata.get("Name")
     series_start = metadata.get("series_start_date")
     series_end = metadata.get("series_end_date")
 
@@ -457,7 +457,7 @@ def update_metadata_index(config: Config, opensearch_client: OpenSearch, metadat
             continue
 
         # Skip file_url, category, and date fields (dates are now in Granth_date_ranges)
-        if key not in ["Anuyog", "Granth", "Author", "Name"]:
+        if key not in ["Anuyog", "Author", "Name"]:
             continue
 
         # Ensure new_values is a list of strings

@@ -228,7 +228,9 @@ const AppContent = () => {
     };
     const [query, setQuery] = useState('');
     const [activeFilters, setActiveFilters] = useState([]);
-    const [contentTypes, setContentTypes] = useState({ pravachans: true, granths: true });
+    const [contentTypes, setContentTypes] = useState({ pravachans: true, granths: true, books: false });
+    const [debugMode, setDebugMode] = useState(false);
+    const [activeCategories, setActiveCategories] = useState(['Pravachan', 'Granth']);
     const [language, setLanguage] = useState('hindi');
     const [exactMatch, setExactMatch] = useState(false);
     const [excludeWords, setExcludeWords] = useState('');
@@ -246,6 +248,7 @@ const AppContent = () => {
     const [activeTab, setActiveTab] = useState('pravachan');
     const [pravachanPage, setPravachanPage] = useState(1);
     const [granthPage, setGranthPage] = useState(1);
+    const [booksPage, setBooksPage] = useState(1);
     const [similarDocsPage, setSimilarDocsPage] = useState(1);
     const [similarDocumentsData, setSimilarDocumentsData] = useState(null);
     const [sourceDocForSimilarity, setSourceDocForSimilarity] = useState(null);
@@ -275,6 +278,16 @@ const AppContent = () => {
 
     useEffect(() => {
         api.checkLlmHealth().then(setLlmAvailable);
+    }, []);
+
+    useEffect(() => {
+        api.getAppConfig().then(cfg => {
+            setDebugMode(cfg.debug_mode);
+            setActiveCategories(cfg.active_categories);
+            if (cfg.active_categories.includes('Books')) {
+                setContentTypes(prev => ({ ...prev, books: true }));
+            }
+        });
     }, []);
 
     useEffect(() => {
@@ -396,13 +409,18 @@ const AppContent = () => {
                     "enabled": contentTypes.granths,
                     "page_size": PAGE_SIZE,
                     "page_number": granthPage
+                },
+                "Books": {
+                    "enabled": contentTypes.books,
+                    "page_size": PAGE_SIZE,
+                    "page_number": booksPage
                 }
             },
             enable_reranking: searchType === 'relevance',
             ...(startYear && { start_year: startYear }),
             ...(endYear && { end_year: endYear })
         };
-    }, [query, activeFilters, contentTypes, language, exactMatch, excludeWords, searchType, startYear, endYear]);
+    }, [query, activeFilters, contentTypes, language, exactMatch, excludeWords, searchType, startYear, endYear, booksPage]);
 
     function buildLlmFilters() {
         const filters = {};
@@ -453,6 +471,7 @@ const AppContent = () => {
             setChatSessionId(null);
         }
         setPravachanPage(page);
+        setBooksPage(1);
         setSimilarDocumentsData(null);
         setSourceDocForSimilarity(null);
 
@@ -464,6 +483,8 @@ const AppContent = () => {
             setActiveTab('pravachan');
         } else if (data.granth_results?.total_hits > 0) {
             setActiveTab('granth');
+        } else if (data.books_results?.total_hits > 0) {
+            setActiveTab('books');
         }
         setIsLoading(false);
     }, [query, buildSearchPayload]);
@@ -605,6 +626,19 @@ const AppContent = () => {
         setIsLoading(false);
     }, [query, buildSearchPayload]);
 
+    const handleBooksSearch = useCallback(async (page = 1) => {
+        if (!query.trim()) {
+            return;
+        }
+        setIsLoading(true);
+        setBooksPage(page);
+
+        const requestPayload = buildSearchPayload(1, 1);
+        const data = await api.search(requestPayload);
+        setSearchData(data);
+        setIsLoading(false);
+    }, [query, buildSearchPayload]);
+
     const handleFindSimilar = async (sourceDoc) => {
         setIsLoading(true); 
         setSourceDocForSimilarity(sourceDoc); 
@@ -661,6 +695,8 @@ const AppContent = () => {
             setActiveTab('pravachan');
         } else if (searchData?.granth_results?.total_hits > 0) {
             setActiveTab('granth');
+        } else if (searchData?.books_results?.total_hits > 0) {
+            setActiveTab('books');
         }
     };
 
@@ -683,6 +719,8 @@ const AppContent = () => {
                 setActiveTab('pravachan');
             } else if (data.granth_results?.total_hits > 0) {
                 setActiveTab('granth');
+            } else if (data.books_results?.total_hits > 0) {
+                setActiveTab('books');
             }
             setIsLoading(false);
         });
@@ -698,6 +736,9 @@ const AppContent = () => {
                 break;
             case 'granth':
                 handleGranthSearch(page);
+                break;
+            case 'books':
+                handleBooksSearch(page);
                 break;
             case 'similar':
                 setSimilarDocsPage(page);
@@ -848,6 +889,11 @@ const AppContent = () => {
 
             {showTipsModal && <TipsModal onClose={() => setShowTipsModal(false)} />}
             
+            {debugMode && (
+                <div className="fixed bottom-4 left-4 z-50 bg-orange-500 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg select-none" title="Debug mode is on — all categories visible. Never enabled in production.">
+                    DEBUG
+                </div>
+            )}
             <Navigation currentPage={currentPage} setCurrentPage={setCurrentPage} />
             
             <div className="container mx-auto p-4 md:p-5">
@@ -951,6 +997,7 @@ const AppContent = () => {
                                                         setStartYear={setStartYear}
                                                         endYear={endYear}
                                                         setEndYear={setEndYear}
+                                                        activeCategories={activeCategories}
                                                     />
                                                     <SearchOptions
                                                         language={language}
@@ -1127,14 +1174,14 @@ const AppContent = () => {
                                         suggestions={searchData?.suggestions}
                                         originalQuery={query}
                                         onSuggestionClick={handleSuggestionClick}
-                                        hasResults={(searchData?.pravachan_results?.total_hits || 0) > 0 || (searchData?.granth_results?.total_hits || 0) > 0}
+                                        hasResults={(searchData?.pravachan_results?.total_hits || 0) > 0 || (searchData?.granth_results?.total_hits || 0) > 0 || (searchData?.books_results?.total_hits || 0) > 0}
                                     />
                                     {/* Query echo + density toggle */}
                                     {searchData && query && (
                                         <div className="flex items-center justify-between mb-2">
                                             <p className="text-sm text-slate-900">
                                                 <span className="font-semibold text-slate-900">
-                                                    {((searchData.pravachan_results?.total_hits || 0) + (searchData.granth_results?.total_hits || 0)).toLocaleString()}
+                                                    {((searchData.pravachan_results?.total_hits || 0) + (searchData.granth_results?.total_hits || 0) + (searchData.books_results?.total_hits || 0)).toLocaleString()}
                                                 </span> results for <span className="font-semibold text-slate-800">"{query}"</span>
                                             </p>
                                             <button
@@ -1187,6 +1234,23 @@ const AppContent = () => {
                                                 onFindSimilar={handleFindSimilar}
                                                 onExpand={handleExpand}
                                                 onExpandGranth={handleExpandGranth}
+                                                searchType={searchType}
+                                                query={query}
+                                                currentFilters={activeFilters}
+                                                language={language}
+                                                compact={compact}
+                                            />
+                                        )}
+                                        {activeTab === 'books' && searchData?.books_results?.results.length > 0 && (
+                                            <ResultsList
+                                                results={searchData.books_results.results}
+                                                totalResults={searchData.books_results.total_hits}
+                                                pageSize={PAGE_SIZE}
+                                                currentPage={booksPage}
+                                                onPageChange={handlePageChange}
+                                                resultType="books"
+                                                onFindSimilar={handleFindSimilar}
+                                                onExpand={handleExpand}
                                                 searchType={searchType}
                                                 query={query}
                                                 currentFilters={activeFilters}

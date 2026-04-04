@@ -3,14 +3,25 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
 const LLM_API_BASE_URL = process.env.REACT_APP_LLM_API_BASE_URL || 'http://localhost:8012';
 
 export const api = {
+    getAppConfig: async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/config`);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            console.error("API Error: Could not fetch app config", error);
+            return { debug_mode: false, active_categories: ['Pravachan', 'Granth'] };
+        }
+    },
+
     getMetadata: async () => {
         try {
             const response = await fetch(`${API_BASE_URL}/metadata`);
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             const data = await response.json();
 
-            // data structure: {"Pravachan": {"Granth_hi": [...], "Granth_gu": [...]}, "Granth": {...}}
-            // Transform to: {"Pravachan": {"hindi": {"Granth": [...], ...}, "gujarati": {...}}, "Granth": {...}}
+            // data structure: {"Pravachan": {"Name_hi": [...], "Name_gu": [...]}, "Granth": {...}}
+            // Transform to: {"Pravachan": {"hindi": {"Name": [...], ...}, "gujarati": {...}}, "Granth": {...}}
 
             const langKeyMap = {
                 'hi': 'hindi',
@@ -23,7 +34,7 @@ export const api = {
                 transformedData[contentType] = { hindi: {}, gujarati: {} };
 
                 for (const [compositeKey, values] of Object.entries(typeMetadata)) {
-                    // compositeKey is like "Granth_hi", "Year_gu", etc.
+                    // compositeKey is like "Name_hi", "Anuyog_gu", etc.
                     const lastUnderscoreIndex = compositeKey.lastIndexOf('_');
                     if (lastUnderscoreIndex !== -1) {
                         const fieldName = compositeKey.substring(0, lastUnderscoreIndex);
@@ -54,10 +65,11 @@ export const api = {
             });
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             const data = await response.json();
-            // Return new SearchResponse format with pravachan_results and granth_results
+            // Return new SearchResponse format with pravachan_results, granth_results, books_results
             return {
                 pravachan_results: data.pravachan_results || { results: [], total_hits: 0, page_size: 20, page_number: 1 },
                 granth_results: data.granth_results || { results: [], total_hits: 0, page_size: 20, page_number: 1 },
+                books_results: data.books_results || { results: [], total_hits: 0, page_size: 20, page_number: 1 },
                 suggestions: data.suggestions || []
             };
         } catch (error) {
@@ -65,6 +77,7 @@ export const api = {
             return {
                 pravachan_results: { results: [], total_hits: 0, page_size: 20, page_number: 1 },
                 granth_results: { results: [], total_hits: 0, page_size: 20, page_number: 1 },
+                books_results: { results: [], total_hits: 0, page_size: 20, page_number: 1 },
                 suggestions: []
             };
         }

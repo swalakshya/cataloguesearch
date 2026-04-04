@@ -20,6 +20,19 @@ from backend.api.agent.app import agent_app
 
 log_handle = logging.getLogger(__name__)
 
+# Metadata filter fields that are valid per category.
+# Prevents cross-category filters (e.g. a Granth filter) from zeroing out Books results.
+_CATEGORY_FILTER_FIELDS: Dict[str, set] = {
+    "Pravachan": {"Name", "Anuyog"},
+    "Granth":    {"Name", "Anuyog", "Author"},
+    "Books":     {"Name", "Author"},
+}
+
+def _filter_categories_for(cat: str, categories: Dict[str, List[str]]) -> Dict[str, List[str]]:
+    """Return only the category-filter entries that are valid for the given category."""
+    allowed = _CATEGORY_FILTER_FIELDS.get(cat, set(categories.keys()))
+    return {k: v for k, v in categories.items() if k in allowed}
+
 # --- FastAPI Application Setup ---
 app = FastAPI(
     title="Catalogue Search API",
@@ -90,14 +103,14 @@ async def initialize():
         log_handle.info("Populating metadata cache at startup...")
         metadata = get_metadata(config)
         # Filter metadata for each content_type
-        # metadata structure: {"Pravachan": {"Granth_hi": [...], ...}, "Granth": {...}}
+        # metadata structure: {"Pravachan": {"Name_hi": [...], ...}, "Granth": {...}}
         filtered_metadata = {}
         for content_type, type_metadata in metadata.items():
             if content_type not in config.ACTIVE_CATEGORIES:
                 continue
             filtered_metadata[content_type] = {}
             for composite_key, values in type_metadata.items():
-                # composite_key is like "Granth_hi", "Year_gu", etc.
+                # composite_key is like "Name_hi", "Anuyog_gu", etc.
                 # Extract the field name (before the last underscore)
                 parts = composite_key.rsplit('_', 1)
                 if len(parts) == 2:
@@ -136,15 +149,15 @@ async def get_metadata_api(request: Request):
         metadata = get_metadata(request.app.state.config)
         log_handle.info(f"Raw metadata from get_metadata: {json_dumps(metadata)}")
 
-        # Filter to only return Granth, Anuyog, Year, Author fields for each content_type
-        # metadata structure: {"Pravachan": {"Granth_hi": [...], ...}, "Granth": {...}}
+        # Filter to only return Name, Anuyog, Author fields for each content_type
+        # metadata structure: {"Pravachan": {"Name_hi": [...], ...}, "Granth": {...}}
         filtered_metadata = {}
         for content_type, type_metadata in metadata.items():
             if content_type not in request.app.state.config.ACTIVE_CATEGORIES:
                 continue
             filtered_metadata[content_type] = {}
             for composite_key, values in type_metadata.items():
-                # composite_key is like "Granth_hi", "Year_gu", etc.
+                # composite_key is like "Name_hi", "Anuyog_gu", etc.
                 # Extract the field name (before the last underscore)
                 parts = composite_key.rsplit('_', 1)
                 if len(parts) == 2:
@@ -182,6 +195,18 @@ async def invalidate_cache(request: Request):
     except Exception as e:
         log_handle.exception(f"Error invalidating cache: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
+
+@app.get("/api/config")
+async def get_app_config(request: Request):
+    """
+    Returns runtime configuration for the frontend, including debug mode flag
+    and the list of active search categories.
+    """
+    config = request.app.state.config
+    return JSONResponse(content={
+        "debug_mode": config.DEBUG_MODE,
+        "active_categories": config.ACTIVE_CATEGORIES
+    }, status_code=200)
 
 class SearchRequest(BaseModel):
     """
@@ -231,6 +256,7 @@ class SearchResponse(BaseModel):
     """
     pravachan_results: SearchTypeResults = Field(default_factory=SearchTypeResults)
     granth_results: SearchTypeResults = Field(default_factory=SearchTypeResults)
+    books_results: SearchTypeResults = Field(default_factory=SearchTypeResults)
     suggestions: List[str] = Field(default_factory=list, description="Spelling suggestions when no results found")
 
 @app.post("/api/search", response_model=SearchResponse)
@@ -286,7 +312,7 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
                     keywords=keywords,
                     exact_match=exact_match,
                     exclude_words=exclude_words,
-                    categories=categories,
+                    categories=_filter_categories_for(cat, categories),
                     detected_language=language,
                     page_size=cat_config.get("page_size", 20),
                     page_number=cat_config.get("page_number", 1),
@@ -310,7 +336,7 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
                     results, hits = index_searcher.perform_vector_search(
                         keywords=keywords,
                         embedding=query_embedding,
-                        categories={**categories, 'category': [cat]},
+                        categories={**_filter_categories_for(cat, categories), 'category': [cat]},
                         page_size=cat_config.get("page_size", 20),
                         page_number=cat_config.get("page_number", 1),
                         language=language,
@@ -347,6 +373,7 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
         response = SearchResponse(
             pravachan_results=_make_type_results("Pravachan"),
             granth_results=_make_type_results("Granth"),
+            books_results=_make_type_results("Books"),
             suggestions=suggestions
         )
 

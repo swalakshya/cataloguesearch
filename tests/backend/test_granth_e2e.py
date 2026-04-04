@@ -38,7 +38,7 @@ _ALPHA_DIR = os.path.join(_DATA_DIR, "alpha")
 _BETA_DIR  = os.path.join(_DATA_DIR, "beta")
 
 # ── sub-section names (must match scan_config.json written by `indexed`) ──────
-_BETA_SEC_FIELD  = "Granth"
+_BETA_SEC_FIELD  = "Name"
 _BETA_SEC_A_NAME = "Beta Sec A"
 _BETA_SEC_B_NAME = "Beta Sec B"
 
@@ -199,9 +199,9 @@ def indexed(config, opensearch_client):
     write_config_file(os.path.join(pdf_dir, "config.json"),
                       {"language": "hi", "category": "Granth"})
     write_config_file(os.path.join(pdf_dir, "alpha_config.json"),
-                      {"Granth": "Alpha Granth"})
+                      {"Name": "Alpha Granth"})
     write_config_file(os.path.join(pdf_dir, "beta_config.json"),
-                      {"Granth": "Beta Granth"})
+                      {"Name": "Beta Granth"})
 
     # ── point config to the temp dirs (same as common.setup()) ───────────────
     crawler = config.settings()["crawler"]
@@ -233,7 +233,7 @@ def indexed(config, opensearch_client):
             meta = hit["_source"].get("metadata", {})
             doc_id = hit["_source"]["document_id"]
             sub = meta.get("sub_section") or {}
-            if meta.get("Granth") == "Alpha Granth":
+            if meta.get("Name") == "Alpha Granth":
                 _ALPHA_DOC_ID = doc_id
             elif sub.get("name") == _BETA_SEC_A_NAME:
                 _BETA_A_DOC_ID = doc_id

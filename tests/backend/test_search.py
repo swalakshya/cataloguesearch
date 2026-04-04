@@ -528,7 +528,7 @@ def test_reindex_metadata_only():
     )
 
 def test_filter_by_granth_songadh():
-    """Filter lexical search by Granth=Songadh — should return only songadh docs."""
+    """Filter lexical search by Name=Songadh — should return only songadh docs."""
     config = Config()
     index_searcher = IndexSearcher(config)
 
@@ -536,21 +536,21 @@ def test_filter_by_granth_songadh():
         keywords="सोनगढ़",
         exact_match=False,
         exclude_words=[],
-        categories={"Granth": ["Songadh"]},
+        categories={"Name": ["Songadh"]},
         detected_language="hi",
         page_size=10,
         page_number=1
     )
 
-    assert total_hits > 0, "Expected results for Granth=Songadh filter"
+    assert total_hits > 0, "Expected results for Name=Songadh filter"
     for result in results:
-        assert result.get("metadata", {}).get("Granth") == "Songadh", \
-            f"Result has wrong Granth: {result.get('metadata', {}).get('Granth')}"
-    log_handle.info(f"✓ Granth=Songadh filter returned {total_hits} hits, all matching")
+        assert result.get("metadata", {}).get("Name") == "Songadh", \
+            f"Result has wrong Name: {result.get('metadata', {}).get('Name')}"
+    log_handle.info(f"✓ Name=Songadh filter returned {total_hits} hits, all matching")
 
 
 def test_filter_by_granth_thanjavur():
-    """Filter lexical search by Granth=Thanjavur — should return only thanjavur docs."""
+    """Filter lexical search by Name=Thanjavur — should return only thanjavur docs."""
     config = Config()
     index_searcher = IndexSearcher(config)
 
@@ -558,17 +558,17 @@ def test_filter_by_granth_thanjavur():
         keywords="तंजावुर",
         exact_match=False,
         exclude_words=[],
-        categories={"Granth": ["Thanjavur"]},
+        categories={"Name": ["Thanjavur"]},
         detected_language="hi",
         page_size=10,
         page_number=1
     )
 
-    assert total_hits > 0, "Expected results for Granth=Thanjavur filter"
+    assert total_hits > 0, "Expected results for Name=Thanjavur filter"
     for result in results:
-        assert result.get("metadata", {}).get("Granth") == "Thanjavur", \
-            f"Result has wrong Granth: {result.get('metadata', {}).get('Granth')}"
-    log_handle.info(f"✓ Granth=Thanjavur filter returned {total_hits} hits, all matching")
+        assert result.get("metadata", {}).get("Name") == "Thanjavur", \
+            f"Result has wrong Name: {result.get('metadata', {}).get('Name')}"
+    log_handle.info(f"✓ Name=Thanjavur filter returned {total_hits} hits, all matching")
 
 
 def test_granth_date_ranges_in_metadata_index():

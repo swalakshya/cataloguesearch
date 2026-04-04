@@ -11,7 +11,7 @@ export const formatGranthShareContent = (query, result, shareUrl) => {
         ? result.content_snippet.replace(/<[^>]*>/g, '').trim()
         : 'Search result from Aagam-Khoj';
 
-    const granthName = result?.metadata?.Granth || result?.filename?.replace('.pdf', '') || 'Unknown Granth';
+    const granthName = result?.metadata?.Name || result?.filename?.replace('.pdf', '') || 'Unknown Granth';
     const author = result?.metadata?.Author || '';
     const tikakaar = result?.metadata?.Tikakaar || '';
     const subSection = result?.metadata?.sub_section || null;
@@ -42,7 +42,7 @@ export const formatPravachanShareContent = (query, result, shareUrl, language = 
         ? result.content_snippet.replace(/<[^>]*>/g, '').trim()
         : 'Search result from Aagam-Khoj';
 
-    const granth = result?.metadata?.Granth || 'Unknown Source';
+    const granth = result?.metadata?.Name || 'Unknown Source';
     const series = result?.metadata?.Series || '';
     const pageNumber = result?.page_number || '';
     const filename = result?.original_filename ? result.original_filename.split('/').pop() : '';

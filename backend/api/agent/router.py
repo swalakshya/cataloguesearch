@@ -79,7 +79,7 @@ def _chunk_from_hit(hit: Dict[str, Any], language: str) -> Dict[str, Any]:
         "chunk_id": hit.get("_id") or source.get("chunk_id"),
         "text_content": source.get(text_field, ""),
         "category": metadata.get("category"),
-        "granth": _first_value(metadata, ["Granth", "granth", "Name"]),
+        "granth": _first_value(metadata, ["Name"]),
         "author": _first_value(metadata, ["Author", "Tikakaar", "Teekakar", "Bhasha Vachanika"]),
         "anuyog": _first_value(metadata, ["Anuyog", "anuyog"]),
         "language": source.get("language", language),
@@ -144,7 +144,7 @@ def _build_filters(payload: AgentSearchRequest) -> List[Dict[str, Any]]:
         filters.append({"term": {"metadata.Anuyog.keyword": payload.anuyog}})
 
     if payload.granth:
-        filters.append({"term": {"metadata.Granth.keyword": payload.granth}})
+        filters.append({"term": {"metadata.Name.keyword": payload.granth}})
 
     if payload.contributor:
         contributor_should = []
@@ -439,7 +439,7 @@ async def agent_get_filter_options(
         def values_for(key: str) -> List[str]:
             return type_metadata.get(f"{key}_{lang_key}", [])
 
-        granths = values_for("Granth")
+        granths = values_for("Name")
         anuyogs = values_for("Anuyog")
         contributors = values_for("Author")
 
@@ -501,7 +501,7 @@ async def agent_get_pravachan(
                 "bool": {
                     "filter": [
                         {"term": {"metadata.category.keyword": "Pravachan"}},
-                        {"term": {"metadata.Granth.keyword": payload.granth}},
+                        {"term": {"metadata.Name.keyword": payload.granth}},
                         {"term": {"pravachan_number": payload.pravachan_number}},
                         {"term": {"language": payload.language}}
                     ]

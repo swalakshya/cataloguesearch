@@ -20,7 +20,7 @@ index:
   chunk_strategy: "advanced"
 
 search:
-  filtered_metadata_fields: ["Granth_date_ranges", "Pravachan", "Granth", "Anuyog", "Author"]
+  filtered_metadata_fields: ["Granth_date_ranges", "Pravachan", "Name", "Anuyog", "Author"]
   active_categories: ["Pravachan", "Granth"]
 
 opensearch:

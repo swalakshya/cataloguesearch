@@ -147,7 +147,7 @@ export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, re
             <div className="flex items-center gap-2 pb-2 mb-2 border-b border-slate-100">
                 {/* Metadata */}
                 <div className="flex flex-wrap gap-x-2 gap-y-0.5 items-baseline flex-1 min-w-0">
-                    {result.metadata?.Granth && <span style={{ color: '#111827', fontWeight: 600, fontSize: '0.8rem' }}>{result.metadata.Granth}</span>}
+                    {result.metadata?.Name && <span style={{ color: '#111827', fontWeight: 600, fontSize: '0.8rem' }}>{result.metadata.Name}</span>}
                     {result.metadata?.sub_section && (
                         <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>({result.metadata.sub_section.name})</span>
                     )}
@@ -321,10 +321,11 @@ export const Pagination = ({ currentPage, totalPages, onPageChange }) => {
 export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData, onClearSimilar }) => {
     const pravachanCount = searchData?.pravachan_results?.total_hits || 0;
     const granthCount = searchData?.granth_results?.total_hits || 0;
+    const booksCount = searchData?.books_results?.total_hits || 0;
     const similarCount = similarDocumentsData?.total_results || 0;
     const hasSuggestions = searchData?.suggestions && searchData.suggestions.length > 0;
     // Don't render tabs if there are no results and no similar documents
-    const hasAnyResults = (!hasSuggestions && (pravachanCount > 0 || granthCount > 0)) || similarDocumentsData;
+    const hasAnyResults = (!hasSuggestions && (pravachanCount > 0 || granthCount > 0 || booksCount > 0)) || similarDocumentsData;
     if (!hasAnyResults) return null;
 
     return (
@@ -353,6 +354,19 @@ export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData
                 >
                     📜 Granth
                     <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeTab === 'granth' ? 'bg-amber-100 text-amber-600' : 'bg-neutral-200 text-slate-900'}`}>{granthCount}</span>
+                </button>
+            )}
+            {!hasSuggestions && booksCount > 0 && (
+                <button
+                    onClick={() => setActiveTab('books')}
+                    className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                        activeTab === 'books'
+                            ? 'border-orange-500 text-orange-700'
+                            : 'border-transparent text-slate-900 hover:text-slate-900'
+                    }`}
+                >
+                    📚 Books
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeTab === 'books' ? 'bg-orange-100 text-orange-600' : 'bg-neutral-200 text-slate-900'}`}>{booksCount}</span>
                 </button>
             )}
             {similarDocumentsData && (
