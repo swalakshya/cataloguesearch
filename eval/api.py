@@ -832,7 +832,7 @@ async def process_scripture_llm(
     crop_bottom: float = Form(0, description="Percentage to crop from bottom (0-50)"),
     crop_left: float = Form(0, description="Percentage to crop from left (0-50)"),
     crop_right: float = Form(0, description="Percentage to crop from right (0-50)"),
-    use_default_scan_config: bool = Form(False, description="Load scan_config from Granth/llm_extract/<language>/"),
+    use_default_scan_config: bool = Form(False, description="Load scan_config from Granth/<language>/"),
 ):
     """
     Process a scripture page using Gemini LLM for text extraction and categorisation.
@@ -858,7 +858,7 @@ async def process_scripture_llm(
             temp_path = temp_file.name
 
         # Build scan_config
-        scan_config = _load_default_scan_config(language, "Granth/llm_extract") if use_default_scan_config else {}
+        scan_config = _load_default_scan_config(language, "Granth") if use_default_scan_config else {}
         if crop_top > 0 or crop_bottom > 0 or crop_left > 0 or crop_right > 0:
             scan_config.setdefault("crop", {})
             scan_config["crop"]["top"] = crop_top

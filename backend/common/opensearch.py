@@ -457,7 +457,7 @@ def update_metadata_index(config: Config, opensearch_client: OpenSearch, metadat
             continue
 
         # Skip file_url, category, and date fields (dates are now in Granth_date_ranges)
-        if key not in ["Anuyog", "Granth", "Author"]:
+        if key not in ["Anuyog", "Granth", "Author", "Name"]:
             continue
 
         # Ensure new_values is a list of strings

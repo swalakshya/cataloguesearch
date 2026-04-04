@@ -26,14 +26,15 @@ const WhatsNew = () => {
 
     const updates = [
         {
-            date: "March 31, 2026",
+            date: "April 3, 2026",
             newFeatures: [
                 "Developer API! Build your own AI chatbots, RAG pipelines etc. using Swalakshya's data.",
                 "UI refresh! More modern, compact, sharper fonts."
             ],
             newContent: [
                 "Pravachan Series: Niyamsar 1975 series in Gujarati",
-                "Granths: Aaradhansaar, Gyan Goshthi, Jambu Swami Charitra and Satta Swaroop"
+                "Pravachan Books: Dhanya Munidasha, Panchkalyanak Pravachan",
+                "Granths: Aaradhansaar, Gyan Goshthi, Jambu Swami Charitra and Satta Swaroop",
             ]
         },
         {

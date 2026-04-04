@@ -603,14 +603,14 @@ export const SearchOptions = ({ language, setLanguage }) => {
         <div className="space-y-2">
             <p className="text-xs text-slate-900 font-semibold uppercase tracking-wide">Language</p>
             <div style={{ backgroundColor: 'var(--bg-surface, #f5f5f5)' }} className="flex items-center p-0.5 bg-neutral-100 rounded w-fit">
-                {[{ value: 'hindi', label: 'Hindi' }, { value: 'gujarati', label: 'Gujarati' }].map(lang => (
+                {[{ value: 'hindi', label: 'हिन्दी' }, { value: 'gujarati', label: 'ગુજરાતી' }].map(lang => (
                     <button
                         key={lang.value}
                         onClick={() => setLanguage(lang.value)}
                         className={`px-3 py-0.5 text-sm font-medium rounded transition-all duration-150 ${
                             language === lang.value
-                                ? 'bg-white text-slate-800 shadow-sm'
-                                : 'text-slate-800 hover:text-slate-900'
+                                ? 'bg-sky-600 text-white shadow-sm'
+                                : 'text-slate-400 hover:text-slate-600'
                         }`}
                     >
                         {lang.label}

@@ -171,6 +171,18 @@ export const searchableContent = [
     count: null,
     hindi: "searchable",
     gujarati: null
+  },
+  {
+    granth: "Dhanya Munidasha",
+    count: null,
+    hindi: "searchable",
+    gujarati: null
+  },
+  {
+    granth: "Panchkalyanak Pravachan",
+    count: null,
+    hindi: "searchable",
+    gujarati: null
   }
 ];
 
