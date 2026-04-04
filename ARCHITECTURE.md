@@ -127,6 +127,12 @@ A separate eval UI is available at the `/eval` route, served by a second FastAPI
 
 ---
 
+### URL Shortener Service
+
+A standalone FastAPI service that loads all `metadata.file_url` values from OpenSearch at startup, generates deterministic short codes, and serves redirects under `/su/{code}` (and `/su/{code}/{page}` with `#page=N`). The API uses it via `/api/agent/shorten_url`.
+
+---
+
 ## Configuration
 
 All runtime configuration lives in `configs/config.yaml`. This file is volume-mounted into the API container (not baked into the image), so it can be changed without a rebuild.

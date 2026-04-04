@@ -17,7 +17,7 @@ if [[ "$ENV" != "local" && "$ENV" != "prod" ]]; then
 fi
 
 # Validate action
-VALID_ACTIONS=("up" "down" "build" "logs" "restart" "build-api" "restart-api" "build-frontend" "restart-frontend" "restart-svc" "push" "push-api" "push-frontend")
+VALID_ACTIONS=("up" "down" "build" "logs" "restart" "build-api" "restart-api" "build-frontend" "restart-frontend" "build-shortener" "restart-shortener" "restart-svc" "push" "push-api" "push-frontend")
 if ! [[ " ${VALID_ACTIONS[*]} " =~ " ${ACTION} " ]]; then
     echo "Error: Action must be one of: ${VALID_ACTIONS[*]}"
     echo "Usage: $0 [local|prod] [action]"
@@ -75,12 +75,23 @@ case $ACTION in
         echo "Building only the frontend service..."
         docker-compose --env-file "$ENV_FILE" build cataloguesearch-frontend
         ;;
+    "build-shortener")
+        echo "Building only the shortener service..."
+        docker-compose --env-file "$ENV_FILE" build url-shortener
+        ;;
     "restart-frontend")
         echo "Rebuilding and restarting only the frontend service..."
         docker-compose --env-file "$ENV_FILE" build cataloguesearch-frontend
         docker-compose --env-file "$ENV_FILE" down cataloguesearch-frontend
         docker-compose --env-file "$ENV_FILE" up -d --no-deps cataloguesearch-frontend
         echo "Frontend service restarted. Available at: http://localhost:3000"
+        ;;
+    "restart-shortener")
+        echo "Rebuilding and restarting only the shortener service..."
+        docker-compose --env-file "$ENV_FILE" build url-shortener
+        docker-compose --env-file "$ENV_FILE" down url-shortener
+        docker-compose --env-file "$ENV_FILE" up -d --no-deps url-shortener
+        echo "Shortener service restarted. Available at: http://localhost:8100"
         ;;
     "restart-svc")
         echo "Rebuilding and restarting frontend and backend services..."

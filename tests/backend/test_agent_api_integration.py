@@ -88,6 +88,7 @@ class TestAgentAPI:
             "score",
         ):
             assert field in results[0]
+        assert isinstance(results[0]["file_url"], str)
 
     def test_agent_navigate_includes_current(self, api_base_url):
         results = _agent_search(api_base_url, "भगवान आत्मा")
@@ -135,6 +136,25 @@ class TestAgentAPI:
             assert key in data
         assert isinstance(data["granths"], list)
 
+    def test_agent_get_metadata_options(self, api_base_url):
+        payload = {"language": "hi", "content_type": "Granth"}
+        r = requests.post(
+            f"{api_base_url}/api/agent/get_metadata_options",
+            json=payload,
+            verify=_should_verify_tls(api_base_url),
+        )
+        assert r.status_code == 200
+        data = r.json()
+        print("agent_get_metadata_options response:", data)
+        assert isinstance(data, list)
+        if data:
+            for item in data:
+                assert "granth" in item
+                assert "author" in item
+                assert "anuyog" in item
+                assert "url" in item
+                assert isinstance(item["url"], str)
+
     def test_agent_get_pravachan_returns_list(self, api_base_url):
         payload = {"granth": "Samaysaar", "pravachan_number": "1", "language": "hi"}
         r = requests.post(
@@ -145,3 +165,23 @@ class TestAgentAPI:
         assert r.status_code == 200
         data = r.json()
         assert isinstance(data, list)
+
+    def test_agent_shorten_url_from_search(self, api_base_url):
+        results = _agent_search(api_base_url, "भगवान आत्मा")
+        if not results:
+            pytest.skip("No results returned; OpenSearch may be empty")
+        file_url = results[0].get("file_url")
+        if not file_url:
+            pytest.skip("Search result missing file_url")
+
+        payload = {"long_url": file_url}
+        r = requests.post(
+            f"{api_base_url}/api/agent/shorten_url",
+            json=payload,
+            verify=_should_verify_tls(api_base_url),
+        )
+        if r.status_code == 503:
+            pytest.skip("Shortener service not reachable")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["short_url"].startswith("https://")
