@@ -166,22 +166,11 @@ class TestAgentAPI:
         data = r.json()
         assert isinstance(data, list)
 
-    def test_agent_shorten_url_from_search(self, api_base_url):
+    def test_agent_search_file_url_is_short(self, api_base_url):
         results = _agent_search(api_base_url, "भगवान आत्मा")
         if not results:
             pytest.skip("No results returned; OpenSearch may be empty")
         file_url = results[0].get("file_url")
         if not file_url:
-            pytest.skip("Search result missing file_url")
-
-        payload = {"long_url": file_url}
-        r = requests.post(
-            f"{api_base_url}/api/agent/shorten_url",
-            json=payload,
-            verify=_should_verify_tls(api_base_url),
-        )
-        if r.status_code == 503:
-            pytest.skip("Shortener service not reachable")
-        assert r.status_code == 200
-        data = r.json()
-        assert data["short_url"].startswith("https://")
+            pytest.skip("Search result missing file_url; shortener store may be empty")
+        assert "/url/" in file_url, f"Expected a short URL containing /url/, got: {file_url}"

@@ -73,6 +73,8 @@ services:
       - FEEDBACK_TO_EMAIL=${FEEDBACK_TO_EMAIL}
       - HOME=/app/data
       - BASE_DIR=/app
+      - SHORTENER_BASE_URL=https://swalakshya.me
+      - SHORT_CODE_LEN=7
     volumes:
       - api-data:/app/data
       - api-logs:/app/logs
@@ -112,30 +114,6 @@ services:
     restart: unless-stopped
     volumes:
       - /etc/letsencrypt:/etc/letsencrypt:ro
-
-  url-shortener:
-    image: swalakshya/cataloguesearch:url-shortener
-    platform: linux/amd64
-    container_name: url-shortener
-    environment:
-      - OPENSEARCH_HOST=opensearch
-      - OPENSEARCH_PORT=9200
-      - CONFIG_PATH=configs/config.yaml
-      - SHORTENER_BASE_URL=https://swalakshya.me
-      - SHORT_CODE_LEN=7
-      - LOG_LEVEL=INFO
-      - ENVIRONMENT=production
-    networks:
-      - app-net
-    depends_on:
-      opensearch:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8100/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-    restart: unless-stopped
 
 volumes:
   opensearch-data:

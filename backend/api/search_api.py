@@ -17,6 +17,9 @@ from utils.logger import setup_logging, VERBOSE_LEVEL_NUM, METRICS_LEVEL_NUM
 from backend.api.feedback_api import router as feedback_router
 from backend.api.agent.router import router as agent_router
 from backend.api.agent.app import agent_app
+from backend.api.url.router import router as url_router
+from backend.url_shortener.core import ShortenerStore
+from backend.url_shortener.opensearch_loader import fetch_file_urls
 
 log_handle = logging.getLogger(__name__)
 
@@ -52,6 +55,7 @@ app.add_middleware(
 # --- Include Routers ---
 app.include_router(feedback_router, prefix="/api")
 app.include_router(agent_router, prefix="/api/agent")
+app.include_router(url_router)
 
 # --- Mount Agent sub-app (public OpenAPI surface) ---
 app.mount("/agent", agent_app)
@@ -77,7 +81,7 @@ async def initialize():
     log_handle.info("Configuration loaded.")
 
     # Initialize OpenSearch client (the client itself is managed by opensearch.py module)
-    get_opensearch_client(config)
+    client = get_opensearch_client(config)
     log_handle.info("OpenSearch client initialized.")
 
     # Load embedding model
@@ -88,10 +92,24 @@ async def initialize():
     app.state.index_searcher = IndexSearcher(config)
     log_handle.info("IndexSearcher initialized.")
 
+    # Load URL shortener store
+    shortener_base_url = os.environ.get("SHORTENER_BASE_URL", "https://swalakshya.me")
+    shortener_store = ShortenerStore(base_len=int(os.environ.get("SHORT_CODE_LEN", "7")))
+    try:
+        urls = fetch_file_urls(client, index_name=config.OPENSEARCH_INDEX_NAME)
+        shortener_store.load(urls)
+        log_handle.info("ShortenerStore loaded with %s URLs.", len(urls))
+    except Exception as exc:
+        log_handle.exception("Failed to load ShortenerStore, using empty store: %s", exc)
+    app.state.shortener_store = shortener_store
+    app.state.shortener_base_url = shortener_base_url
+
     # Propagate shared state to the agent sub-app so request.app.state works there too
     agent_app.state.config = config
     agent_app.state.index_searcher = app.state.index_searcher
     agent_app.state.embedding_model = app.state.embedding_model
+    agent_app.state.shortener_store = shortener_store
+    agent_app.state.shortener_base_url = shortener_base_url
 
     # Initialize and populate metadata cache
     app.state.metadata_cache = {

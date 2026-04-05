@@ -1,11 +1,9 @@
 import logging
-import os
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from opensearchpy.exceptions import NotFoundError, TransportError
 from pydantic import BaseModel, Field
-import requests
 
 from backend.common.opensearch import get_metadata, get_opensearch_client
 from backend.utils import JSONResponse
@@ -163,23 +161,13 @@ def _apply_short_urls(items: List[Dict[str, Any]], short_map: Dict[str, str]) ->
     return items
 
 
-def _bulk_shorten_file_urls(urls: List[str]) -> Dict[str, str]:
-    if not urls:
-        return {}
-    shortener_base = os.getenv("SHORTENER_API_URL", "http://url-shortener:8100")
-    try:
-        resp = requests.post(
-            f"{shortener_base.rstrip('/')}/shorten",
-            json={"long_urls": urls},
-            timeout=5,
-        )
-    except requests.exceptions.RequestException:
-        return {}
-
-    if resp.status_code != 200:
-        return {}
-    data = resp.json()
-    return data.get("short_urls", {})
+def _shorten_urls_with_store(store, base_url: str, urls: List[str]) -> Dict[str, str]:
+    result: Dict[str, str] = {}
+    for url in urls:
+        code = store.get_code(url)
+        if code:
+            result[url] = f"{base_url.rstrip('/')}/url/{code}"
+    return result
 
 
 def _extract_file_url_from_bucket(bucket: Dict[str, Any]) -> Optional[str]:
@@ -226,7 +214,7 @@ def _build_metadata_options_query(language: str, content_type: str, size: int = 
         },
         "aggs": {
             "granths": {
-                "terms": {"field": "metadata.Granth.keyword", "size": size},
+                "terms": {"field": "metadata.Name.keyword", "size": size},
                 "aggs": {
                     "anuyogs": {
                         "terms": {"field": "metadata.Anuyog.keyword", "size": size, "missing": "__missing__"},
@@ -346,7 +334,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
             log_handle.info("agent_search lexical hits=%s", len(hits))
             results = [_chunk_from_hit(hit, payload.language) for hit in hits]
             urls = _collect_file_urls(results)
-            short_map = _bulk_shorten_file_urls(urls)
+            short_map = _shorten_urls_with_store(request.app.state.shortener_store, request.app.state.shortener_base_url, urls)
             results = _apply_short_urls(results, short_map)
             return JSONResponse(content=results, status_code=200)
 
@@ -380,7 +368,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
             paginated = hits[from_:from_ + payload.page_size]
             results = [_chunk_from_hit(hit, payload.language) for hit in paginated]
             urls = _collect_file_urls(results)
-            short_map = _bulk_shorten_file_urls(urls)
+            short_map = _shorten_urls_with_store(request.app.state.shortener_store, request.app.state.shortener_base_url, urls)
             results = _apply_short_urls(results, short_map)
             return JSONResponse(content=results, status_code=200)
 
@@ -397,7 +385,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
             paginated = hits[from_:from_ + payload.page_size]
             results = [_chunk_from_hit(hit, payload.language) for hit in paginated]
             urls = _collect_file_urls(results)
-            short_map = _bulk_shorten_file_urls(urls)
+            short_map = _shorten_urls_with_store(request.app.state.shortener_store, request.app.state.shortener_base_url, urls)
             results = _apply_short_urls(results, short_map)
             return JSONResponse(content=results, status_code=200)
         for hit, score in zip(hits, rerank_scores):
@@ -407,7 +395,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
         paginated_hits = reranked_hits[from_:from_ + payload.page_size]
         results = [_chunk_from_hit(hit, payload.language) for hit in paginated_hits]
         urls = _collect_file_urls(results)
-        short_map = _bulk_shorten_file_urls(urls)
+        short_map = _shorten_urls_with_store(request.app.state.shortener_store, request.app.state.shortener_base_url, urls)
         results = _apply_short_urls(results, short_map)
         return JSONResponse(content=results, status_code=200)
 
@@ -480,7 +468,7 @@ async def agent_navigate(request: Request, payload: AgentNavigateRequest = Body(
         log_handle.info("agent_navigate hits=%s language=%s", len(hits), language)
         results = [_chunk_from_hit(hit, language) for hit in hits]
         urls = _collect_file_urls(results)
-        short_map = _bulk_shorten_file_urls(urls)
+        short_map = _shorten_urls_with_store(request.app.state.shortener_store, request.app.state.shortener_base_url, urls)
         results = _apply_short_urls(results, short_map)
         return JSONResponse(content=results, status_code=200)
 
@@ -538,7 +526,7 @@ async def agent_find_similar(request: Request, payload: AgentFindSimilarRequest 
         log_handle.info("agent_find_similar hits=%s language=%s", len(hits), language)
         results = [_chunk_from_hit(hit, language) for hit in hits]
         urls = _collect_file_urls(results)
-        short_map = _bulk_shorten_file_urls(urls)
+        short_map = _shorten_urls_with_store(request.app.state.shortener_store, request.app.state.shortener_base_url, urls)
         results = _apply_short_urls(results, short_map)
         return JSONResponse(content=results, status_code=200)
 
@@ -663,7 +651,7 @@ async def agent_get_metadata_options(
                         "url": file_url or "",
                     })
 
-        short_map = _bulk_shorten_file_urls(list(dict.fromkeys(raw_urls)))
+        short_map = _shorten_urls_with_store(request.app.state.shortener_store, request.app.state.shortener_base_url, list(dict.fromkeys(raw_urls)))
         for item in results:
             if item.get("url"):
                 item["url"] = short_map.get(item["url"], "")
@@ -734,7 +722,7 @@ async def agent_get_pravachan(
         log_handle.info("agent_get_pravachan total_hits=%s", len(all_hits))
         results = [_chunk_from_hit(hit, payload.language) for hit in all_hits]
         urls = _collect_file_urls(results)
-        short_map = _bulk_shorten_file_urls(urls)
+        short_map = _shorten_urls_with_store(request.app.state.shortener_store, request.app.state.shortener_base_url, urls)
         results = _apply_short_urls(results, short_map)
         return JSONResponse(content=results, status_code=200)
 
@@ -744,21 +732,10 @@ async def agent_get_pravachan(
 
 
 @router.post("/shorten_url", response_model=AgentShortenUrlResponse)
-async def agent_shorten_url(payload: AgentShortenUrlRequest = Body(...)):
-    shortener_base = os.getenv("SHORTENER_API_URL", "http://url-shortener:8100")
-    try:
-        resp = requests.post(
-            f"{shortener_base.rstrip('/')}/shorten",
-            json={"long_url": payload.long_url},
-            timeout=5,
-        )
-    except requests.exceptions.RequestException:
-        raise HTTPException(status_code=503, detail="Shortener service unavailable")
-
-    if resp.status_code == 404:
+async def agent_shorten_url(request: Request, payload: AgentShortenUrlRequest = Body(...)):
+    store = request.app.state.shortener_store
+    base_url = request.app.state.shortener_base_url
+    code = store.get_code(payload.long_url)
+    if not code:
         raise HTTPException(status_code=404, detail="URL not found")
-    if resp.status_code != 200:
-        raise HTTPException(status_code=502, detail="Shortener error")
-
-    data = resp.json()
-    return {"short_url": data.get("short_url")}
+    return {"short_url": f"{base_url.rstrip('/')}/url/{code}"}

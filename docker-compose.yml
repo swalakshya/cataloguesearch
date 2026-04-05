@@ -59,6 +59,8 @@ services:
       - FEEDBACK_TO_EMAIL=${FEEDBACK_TO_EMAIL}
       - HOME=/app/data
       - BASE_DIR=/app
+      - SHORTENER_BASE_URL=${SHORTENER_BASE_URL:-https://swalakshya.me}
+      - SHORT_CODE_LEN=${SHORT_CODE_LEN:-7}
     volumes:
       - cataloguesearch-data:/app/data
       - cataloguesearch-logs:/app/logs
@@ -102,37 +104,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    restart: ${RESTART_POLICY:-no}
-
-  url-shortener:
-    image: swalakshya/cataloguesearch:url-shortener
-    build:
-      context: .
-      dockerfile: docker/shortener/Dockerfile
-    platform: ${DOCKER_PLATFORM}
-    container_name: url-shortener
-    environment:
-      - OPENSEARCH_HOST=opensearch
-      - OPENSEARCH_PORT=9200
-      - CONFIG_PATH=configs/config.yaml
-      - SHORTENER_BASE_URL=${SHORTENER_BASE_URL:-https://swalakshya.me}
-      - SHORT_CODE_LEN=${SHORT_CODE_LEN:-7}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - ENVIRONMENT=${ENVIRONMENT:-local}
-    volumes:
-      - ./configs/config.yaml:/app/configs/config.yaml:ro
-    ports:
-      - "8100:8100"
-    networks:
-      - opensearch-net
-    depends_on:
-      opensearch:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8100/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
     restart: ${RESTART_POLICY:-no}
 
 volumes:
