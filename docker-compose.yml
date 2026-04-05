@@ -59,6 +59,8 @@ services:
       - FEEDBACK_TO_EMAIL=${FEEDBACK_TO_EMAIL}
       - HOME=/app/data
       - BASE_DIR=/app
+      - SHORTENER_BASE_URL=${SHORTENER_BASE_URL:-https://swalakshya.me}
+      - SHORT_CODE_LEN=${SHORT_CODE_LEN:-7}
     volumes:
       - cataloguesearch-data:/app/data
       - cataloguesearch-logs:/app/logs

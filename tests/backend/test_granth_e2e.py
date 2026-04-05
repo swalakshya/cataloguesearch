@@ -605,6 +605,8 @@ def _run_api_server(host, port):
     _os.environ["CONFIG_PATH"] = f"{test_base_dir}/data/configs/test_config.yaml"
     _Config.reset()
 
+    import sys as _sys
+    _sys.modules.pop("backend.api.search_api", None)
     from backend.api.search_api import app
     from uvicorn import Config as UvicornConfig
     import uvicorn

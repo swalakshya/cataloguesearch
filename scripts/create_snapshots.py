@@ -6,18 +6,30 @@ Docker operations use the Docker Unix socket API directly (no subprocess).
 OpenSearch operations use urllib (no curl).
 
 Usage:
+    # Create a local tarball (parallel compression via zstd/pigz if available):
     python scripts/create_snapshots.py <local_directory_path>
 
-Example:
-    python scripts/create_snapshots.py /home/user/opensearch_snapshots
+    # Stream directly to a remote server — no local tarball, no scp, no remote untar:
+    python scripts/create_snapshots.py <local_directory_path> \\
+        -s root@192.168.1.1 -k ~/.ssh/id_rsa -l /tmp
+
+Options:
+    -s / --server    Full server string, e.g. root@192.168.1.1
+    -k / --ssh-key   Path to SSH private key
+    -l / --location  Remote parent directory (default: .)
+                     Snapshots land at <location>/<dir_name>/ on the remote.
 """
 
+import argparse
+import hashlib
 import http.client
 import json
 import logging
 import os
+import shlex
 import shutil
 import socket
+import subprocess
 import sys
 import tarfile
 import time
@@ -138,12 +150,44 @@ def _os_request(method: str, path: str, body: dict | None = None) -> tuple[int, 
 # Pre-flight checks
 # ---------------------------------------------------------------------------
 
-def _parse_args() -> Path:
-    if len(sys.argv) != 2:
-        print(f"Usage: python {sys.argv[0]} <local_directory_path>")
-        print(f"Example: python {sys.argv[0]} /home/user/opensearch_snapshots")
-        sys.exit(1)
-    return Path(sys.argv[1]).resolve()
+def _parse_args():
+    parser = argparse.ArgumentParser(
+        description="Create OpenSearch snapshots, with optional streaming to a remote server.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "local_dir",
+        metavar="LOCAL_DIR",
+        help="Local directory to store snapshot files",
+    )
+    parser.add_argument(
+        "-s", "--server",
+        metavar="USER@HOST",
+        default=None,
+        help="Stream snapshots to this server instead of creating a local tarball. "
+             "Example: root@192.168.1.1",
+    )
+    parser.add_argument(
+        "-k", "--ssh-key",
+        metavar="PATH",
+        default=None,
+        help="Path to SSH private key. Example: ~/.ssh/id_rsa",
+    )
+    parser.add_argument(
+        "-l", "--location",
+        metavar="REMOTE_DIR",
+        default=".",
+        help="Remote parent directory where snapshots folder will be created "
+             "(default: . i.e. home directory). Example: /tmp",
+    )
+    args = parser.parse_args()
+
+    if args.ssh_key and not args.server:
+        parser.error("--ssh-key / -k requires --server / -s")
+    if args.location != "." and not args.server:
+        parser.error("--location / -l requires --server / -s")
+
+    return Path(args.local_dir).resolve(), args.server, args.ssh_key, args.location
 
 
 def _validate_docker_socket():
@@ -164,10 +208,28 @@ def _validate_local_dir(local_dir: Path):
 
 
 # ---------------------------------------------------------------------------
+# Compressor detection
+# ---------------------------------------------------------------------------
+
+def _detect_compressor() -> tuple[str, list[str]]:
+    """Return (tool, extra_args) for the fastest available compressor.
+
+    Priority: zstd (multi-threaded) → pigz (multi-threaded gzip) → gzip (stdlib fallback).
+    """
+    for tool, args in [("zstd", ["-1", "--threads=0"]), ("pigz", [])]:
+        if shutil.which(tool):
+            log_handle.info("✅ Compressor: %s (parallel)", tool)
+            return tool, args
+    log_handle.warning("🟠 zstd/pigz not found — falling back to single-threaded gzip")
+    return "gzip", []
+
+
+# ---------------------------------------------------------------------------
 # Confirmation prompt
 # ---------------------------------------------------------------------------
 
-def _confirm(local_dir: Path):
+def _confirm(local_dir: Path, server: str | None, ssh_key: str | None, location: str):
+    display_loc = "~" if location == "." else location
     print()
     print("=" * 62)
     print("  OpenSearch Snapshot Creation")
@@ -185,12 +247,22 @@ def _confirm(local_dir: Path):
     print("  5. Create snapshot: cataloguesearch_prod_metadata")
     print("  6. Verify both snapshots have state=SUCCESS")
     print("  7. Verify snapshot files exist on disk")
-    print("  8. Create tarball: snapshots.tar.gz alongside the snapshots folder")
+    if server:
+        remote_path = f"{display_loc}/{local_dir.name}"
+        print(f"  8. Stream snapshots → {server}:{remote_path}")
+        print(f"     (wipes {remote_path} on remote first, then extracts)")
+        print("  9. Verify checksums of all transferred files")
+    else:
+        print("  8. Create tarball alongside the snapshots folder")
+        print("     (parallel compression via zstd/pigz if available)")
     print()
     print(f"⚠️  WARNING: Step 2 will CLEAR all existing files in:")
     print(f"           {local_dir}")
     print("         Make sure you do not need any files currently there.")
     print("⚠️  WARNING: OpenSearch will be briefly stopped and restarted.")
+    if server:
+        remote_path = f"{display_loc}/{local_dir.name}"
+        print(f"⚠️  WARNING: Step 8 will DELETE {remote_path} on {server} before extracting.")
     print()
 
     answer = input("Do you want to proceed? (yes/no): ").strip().lower()
@@ -455,19 +527,186 @@ def step7_verify_files_on_disk(local_dir: Path):
 
 
 # ---------------------------------------------------------------------------
-# Step 8: Create tarball of the snapshots directory
+# Step 8a: Create tarball of the snapshots directory (local mode)
 # ---------------------------------------------------------------------------
 
-def step8_create_tarball(local_dir: Path):
-    tarball_path = local_dir.parent / (local_dir.name + ".tar.gz")
-    log_handle.info("🔄 Step 8: Creating tarball at %s...", tarball_path)
+def step8_create_tarball(local_dir: Path) -> Path:
+    compressor, comp_args = _detect_compressor()
+    ext = ".tar.zst" if compressor == "zstd" else ".tar.gz"
+    tarball_path = local_dir.parent / (local_dir.name + ext)
+    log_handle.info("🔄 Step 8: Creating %s (compressor=%s)...", tarball_path.name, compressor)
 
-    with tarfile.open(tarball_path, "w:gz") as tar:
-        tar.add(local_dir, arcname=local_dir.name)
+    if compressor != "gzip":
+        # Pipe: tar -cf - | compressor > tarball
+        # Using explicit pipe avoids GNU-tar-only flags — works on macOS BSD tar too.
+        # COPYFILE_DISABLE=1 suppresses macOS resource-fork sidecar files (._*).
+        tar_env = {**os.environ, "COPYFILE_DISABLE": "1"}
+        tar_proc = subprocess.Popen(
+            ["tar", "-cf", "-", "-C", str(local_dir.parent), local_dir.name],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=tar_env,
+        )
+        with open(tarball_path, "wb") as out_f:
+            comp_proc = subprocess.Popen(
+                [compressor] + comp_args,
+                stdin=tar_proc.stdout,
+                stdout=out_f,
+                stderr=subprocess.PIPE,
+            )
+            tar_proc.stdout.close()
+            _, comp_err = comp_proc.communicate()
+            _, tar_err = tar_proc.communicate()
+
+        if tar_proc.returncode != 0:
+            raise RuntimeError(f"❌ tar failed (exit {tar_proc.returncode}): {tar_err.decode().strip()}")
+        if comp_proc.returncode != 0:
+            raise RuntimeError(f"❌ {compressor} failed (exit {comp_proc.returncode}): {comp_err.decode().strip()}")
+    else:
+        with tarfile.open(tarball_path, "w:gz") as tar:
+            tar.add(local_dir, arcname=local_dir.name)
 
     size_mb = tarball_path.stat().st_size / (1024 * 1024)
     log_handle.info("✅ Step 8 done. Tarball created: %s (%.1f MB)", tarball_path, size_mb)
     return tarball_path
+
+
+# ---------------------------------------------------------------------------
+# Step 8b: Stream snapshots directly to remote server (no local tarball)
+# ---------------------------------------------------------------------------
+
+def step8_stream_to_remote(local_dir: Path, server: str, ssh_key: str | None, location: str) -> None:
+    """Pipe tar | compress | ssh (decompress | tar -x) — no intermediate file."""
+    compressor, comp_args = _detect_compressor()
+    remote_path = f"{location}/{local_dir.name}"
+
+    log_handle.info(
+        "🔄 Step 8: Streaming %s → %s:%s (compressor=%s)...",
+        local_dir.name, server, remote_path, compressor,
+    )
+
+    ssh_base = ["ssh"]
+    if ssh_key:
+        ssh_base += ["-i", str(Path(ssh_key).expanduser())]
+
+    # Remote: wipe existing dir, then decompress and untar into parent location.
+    remote_cmd = (
+        f"rm -rf {shlex.quote(remote_path)} && "
+        f"mkdir -p {shlex.quote(location)} && "
+        f"{compressor} -d | tar -xf - -C {shlex.quote(location)}"
+    )
+
+    # Stage 1: tar (uncompressed stream)
+    # COPYFILE_DISABLE=1 suppresses macOS resource-fork sidecar files (._*)
+    # that BSD tar would otherwise include automatically.
+    tar_env = {**os.environ, "COPYFILE_DISABLE": "1"}
+    tar_proc = subprocess.Popen(
+        ["tar", "-cf", "-", "-C", str(local_dir.parent), local_dir.name],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=tar_env,
+    )
+    # Stage 2: compress
+    comp_proc = subprocess.Popen(
+        [compressor] + comp_args,
+        stdin=tar_proc.stdout,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    tar_proc.stdout.close()
+
+    # Stage 3: ssh (decompress + untar on remote)
+    ssh_proc = subprocess.Popen(
+        ssh_base + [server, remote_cmd],
+        stdin=comp_proc.stdout,
+        stderr=subprocess.PIPE,
+    )
+    comp_proc.stdout.close()
+
+    _, ssh_err  = ssh_proc.communicate()
+    _, comp_err = comp_proc.communicate()
+    _, tar_err  = tar_proc.communicate()
+
+    if tar_proc.returncode != 0:
+        raise RuntimeError(f"❌ tar failed (exit {tar_proc.returncode}): {tar_err.decode().strip()}")
+    if comp_proc.returncode != 0:
+        raise RuntimeError(f"❌ {compressor} failed (exit {comp_proc.returncode}): {comp_err.decode().strip()}")
+    if ssh_proc.returncode != 0:
+        raise RuntimeError(f"❌ SSH transfer failed (exit {ssh_proc.returncode}): {ssh_err.decode().strip()}")
+
+    display_loc = "~" if location == "." else location
+    display_path = f"{display_loc}/{local_dir.name}"
+    log_handle.info("✅ Step 8 done. Snapshots landed at %s:%s", server, display_path)
+    log_handle.info(
+        "💡 On the remote, run:\n"
+        "   python restore_snapshots.py --snapshots-dir %s", display_path,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Checksum manifest + Step 9: remote verification
+# ---------------------------------------------------------------------------
+
+def _generate_manifest(local_dir: Path) -> dict[str, str]:
+    """SHA256 checksum every file under local_dir. Returns {relative_path: hex_digest}."""
+    log_handle.info("🔄 Generating checksum manifest for %d files...", sum(1 for f in local_dir.rglob("*") if f.is_file()))
+    manifest = {}
+    for f in sorted(local_dir.rglob("*")):
+        if not f.is_file():
+            continue
+        h = hashlib.sha256()
+        with open(f, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        manifest[str(f.relative_to(local_dir))] = h.hexdigest()
+    log_handle.info("✅ Manifest ready: %d files.", len(manifest))
+    return manifest
+
+
+def step9_verify_checksums(
+    manifest: dict[str, str],
+    server: str,
+    ssh_key: str | None,
+    remote_path: str,
+) -> None:
+    log_handle.info("🔄 Step 9: Verifying checksums on remote (%d files)...", len(manifest))
+
+    ssh_base = ["ssh"]
+    if ssh_key:
+        ssh_base += ["-i", str(Path(ssh_key).expanduser())]
+
+    # sha256sum on every file under remote_path, sorted for consistency
+    remote_cmd = f"find {shlex.quote(remote_path)} -type f | sort | xargs sha256sum"
+    result = subprocess.run(ssh_base + [server, remote_cmd], capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"❌ Remote checksum command failed: {result.stderr.strip()}")
+
+    # Parse "hash  /absolute/path" lines
+    remote_checksums: dict[str, str] = {}
+    for line in result.stdout.strip().splitlines():
+        parts = line.split(None, 1)
+        if len(parts) == 2:
+            hexdigest, abs_path = parts
+            rel = abs_path.removeprefix(remote_path).lstrip("/")
+            remote_checksums[rel] = hexdigest
+
+    errors = []
+    for rel, local_hash in manifest.items():
+        remote_hash = remote_checksums.get(rel)
+        if remote_hash is None:
+            errors.append(f"Missing on remote: {rel}")
+        elif remote_hash != local_hash:
+            errors.append(f"Checksum mismatch: {rel}")
+    for rel in set(remote_checksums) - set(manifest):
+        errors.append(f"Unexpected file on remote: {rel}")
+
+    if errors:
+        raise RuntimeError(
+            f"❌ Checksum verification failed ({len(errors)} error(s)):\n"
+            + "\n".join(f"   {e}" for e in errors)
+        )
+
+    log_handle.info("✅ Step 9 done. All %d files verified OK.", len(manifest))
 
 
 # ---------------------------------------------------------------------------
@@ -477,12 +716,13 @@ def step8_create_tarball(local_dir: Path):
 def main():
     _setup_logging()
 
-    local_dir = _parse_args()
+    local_dir, server, ssh_key, location = _parse_args()
 
     try:
         _validate_docker_socket()
         _validate_local_dir(local_dir)
-        _confirm(local_dir)
+        _confirm(local_dir, server, ssh_key, location)
+        start_time = time.time()
 
         step1_delete_repository()
         step2_cycle_container(local_dir)
@@ -491,18 +731,33 @@ def main():
         step5_create_snapshot_metadata()
         step6_verify_snapshots()
         step7_verify_files_on_disk(local_dir)
-        tarball_path = step8_create_tarball(local_dir)
+
+        if server:
+            manifest = _generate_manifest(local_dir)
+            step8_stream_to_remote(local_dir, server, ssh_key, location)
+            remote_path = f"{location}/{local_dir.name}"
+            step9_verify_checksums(manifest, server, ssh_key, remote_path)
+        else:
+            tarball_path = step8_create_tarball(local_dir)
+
+        elapsed = time.time() - start_time
+        mins, secs = divmod(int(elapsed), 60)
 
         print()
         print("=" * 62)
         print("✅ All snapshots created successfully!")
         print(f"   Snapshots folder : {local_dir}")
-        print(f"   Tarball          : {tarball_path}")
+        if server:
+            display_loc = "~" if location == "." else location
+            print(f"   Streamed to      : {server}:{display_loc}/{local_dir.name}")
+        else:
+            print(f"   Tarball          : {tarball_path}")
+        print(f"   Total time       : {mins}m {secs}s")
         print("=" * 62)
         print()
-        log_handle.info("✅ Script completed successfully.")
+        log_handle.info("✅ Script completed in %dm %ds.", mins, secs)
 
-    except (FileNotFoundError, PermissionError, RuntimeError) as exc:
+    except (FileNotFoundError, PermissionError, RuntimeError, ValueError) as exc:
         log_handle.error("❌ FATAL: %s", exc)
         sys.exit(1)
     except KeyboardInterrupt:

@@ -42,7 +42,7 @@ services:
     environment:
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_LEVEL=INFO
     ports:
       - "8500:8500"
     networks:
@@ -73,6 +73,8 @@ services:
       - FEEDBACK_TO_EMAIL=${FEEDBACK_TO_EMAIL}
       - HOME=/app/data
       - BASE_DIR=/app
+      - SHORTENER_BASE_URL=https://swalakshya.me
+      - SHORT_CODE_LEN=7
     volumes:
       - api-data:/app/data
       - api-logs:/app/logs
