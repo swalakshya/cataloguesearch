@@ -29,7 +29,7 @@ def fetch_file_urls(opensearch_client, index_name: str, page_size: int = 1000) -
                 urls.append(url)
 
         after_key = agg.get("after_key")
-        if not after_key:
+        if after_key is None:
             break
 
     return urls

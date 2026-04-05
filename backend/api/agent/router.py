@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
@@ -152,12 +153,13 @@ def _collect_file_urls(items: List[Dict[str, Any]]) -> List[str]:
 
 
 def _apply_short_urls(items: List[Dict[str, Any]], short_map: Dict[str, str]) -> List[Dict[str, Any]]:
+    """Apply short URL mapping to file_url in-place. Falls back to the original URL if not in map."""
     for item in items:
         url = item.get("file_url")
         if not url:
             item["file_url"] = ""
         else:
-            item["file_url"] = short_map.get(url, "")
+            item["file_url"] = short_map.get(url, url)
     return items
 
 
@@ -168,6 +170,13 @@ def _shorten_urls_with_store(store, base_url: str, urls: List[str]) -> Dict[str,
         if code:
             result[url] = f"{base_url.rstrip('/')}/url/{code}"
     return result
+
+
+def _shorten_results(results: List[Dict[str, Any]], store, base_url: str) -> None:
+    """Collect file_urls, build short_map, and apply to results in-place."""
+    urls = _collect_file_urls(results)
+    short_map = _shorten_urls_with_store(store, base_url, urls)
+    _apply_short_urls(results, short_map)
 
 
 def _extract_file_url_from_bucket(bucket: Dict[str, Any]) -> Optional[str]:
@@ -185,7 +194,9 @@ def _extract_file_url_from_bucket(bucket: Dict[str, Any]) -> Optional[str]:
 
 _ALL_CONTENT_TYPES = {"Pravachan", "Granth", "Books"}
 
-_METADATA_OPTIONS_CACHE: Dict[Tuple[str, str], List[Dict[str, Optional[str]]]] = {}
+_METADATA_OPTIONS_CACHE_TTL = 30 * 60  # 30 minutes, same as metadata_cache
+# Maps (language, content_type) -> (results, expiry_timestamp)
+_METADATA_OPTIONS_CACHE: Dict[Tuple[str, str], Tuple[List[Dict[str, Optional[str]]], float]] = {}
 
 
 def _build_metadata_options_query(language: str, content_type: str, size: int = 1000) -> Dict[str, Any]:
@@ -333,9 +344,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
             hits = response.get("hits", {}).get("hits", [])
             log_handle.info("agent_search lexical hits=%s", len(hits))
             results = [_chunk_from_hit(hit, payload.language) for hit in hits]
-            urls = _collect_file_urls(results)
-            short_map = _shorten_urls_with_store(request.app.state.shortener_store, request.app.state.shortener_base_url, urls)
-            results = _apply_short_urls(results, short_map)
+            _shorten_results(results, request.app.state.shortener_store, request.app.state.shortener_base_url)
             return JSONResponse(content=results, status_code=200)
 
         query_embedding = embedding_model.get_embedding(payload.query)
@@ -367,9 +376,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
                 log_handle.warning("agent_search rerank requested but reranker not available; returning unreranked results")
             paginated = hits[from_:from_ + payload.page_size]
             results = [_chunk_from_hit(hit, payload.language) for hit in paginated]
-            urls = _collect_file_urls(results)
-            short_map = _shorten_urls_with_store(request.app.state.shortener_store, request.app.state.shortener_base_url, urls)
-            results = _apply_short_urls(results, short_map)
+            _shorten_results(results, request.app.state.shortener_store, request.app.state.shortener_base_url)
             return JSONResponse(content=results, status_code=200)
 
         sentence_pairs = []
@@ -384,9 +391,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
             log_handle.exception("agent_search reranking failed; returning unreranked results: %s", rerank_exc)
             paginated = hits[from_:from_ + payload.page_size]
             results = [_chunk_from_hit(hit, payload.language) for hit in paginated]
-            urls = _collect_file_urls(results)
-            short_map = _shorten_urls_with_store(request.app.state.shortener_store, request.app.state.shortener_base_url, urls)
-            results = _apply_short_urls(results, short_map)
+            _shorten_results(results, request.app.state.shortener_store, request.app.state.shortener_base_url)
             return JSONResponse(content=results, status_code=200)
         for hit, score in zip(hits, rerank_scores):
             hit["rerank_score"] = score
@@ -394,9 +399,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
         reranked_hits = sorted(hits, key=lambda x: x["rerank_score"], reverse=True)
         paginated_hits = reranked_hits[from_:from_ + payload.page_size]
         results = [_chunk_from_hit(hit, payload.language) for hit in paginated_hits]
-        urls = _collect_file_urls(results)
-        short_map = _shorten_urls_with_store(request.app.state.shortener_store, request.app.state.shortener_base_url, urls)
-        results = _apply_short_urls(results, short_map)
+        _shorten_results(results, request.app.state.shortener_store, request.app.state.shortener_base_url)
         return JSONResponse(content=results, status_code=200)
 
     except Exception as exc:
@@ -467,9 +470,7 @@ async def agent_navigate(request: Request, payload: AgentNavigateRequest = Body(
         language = source.get("language", "hi")
         log_handle.info("agent_navigate hits=%s language=%s", len(hits), language)
         results = [_chunk_from_hit(hit, language) for hit in hits]
-        urls = _collect_file_urls(results)
-        short_map = _shorten_urls_with_store(request.app.state.shortener_store, request.app.state.shortener_base_url, urls)
-        results = _apply_short_urls(results, short_map)
+        _shorten_results(results, request.app.state.shortener_store, request.app.state.shortener_base_url)
         return JSONResponse(content=results, status_code=200)
 
     except HTTPException:
@@ -525,9 +526,7 @@ async def agent_find_similar(request: Request, payload: AgentFindSimilarRequest 
         language = source_doc.get("_source", {}).get("language", "hi")
         log_handle.info("agent_find_similar hits=%s language=%s", len(hits), language)
         results = [_chunk_from_hit(hit, language) for hit in hits]
-        urls = _collect_file_urls(results)
-        short_map = _shorten_urls_with_store(request.app.state.shortener_store, request.app.state.shortener_base_url, urls)
-        results = _apply_short_urls(results, short_map)
+        _shorten_results(results, request.app.state.shortener_store, request.app.state.shortener_base_url)
         return JSONResponse(content=results, status_code=200)
 
     except HTTPException:
@@ -611,8 +610,11 @@ async def agent_get_metadata_options(
         cache_key = (payload.language, payload.content_type)
         cached = _METADATA_OPTIONS_CACHE.get(cache_key)
         if cached is not None:
-            log_handle.info("agent_get_metadata_options cache hit", extra={"key": cache_key})
-            return JSONResponse(content=cached, status_code=200)
+            cached_results, expiry = cached
+            if time.time() < expiry:
+                log_handle.info("agent_get_metadata_options cache hit", extra={"key": cache_key})
+                return JSONResponse(content=cached_results, status_code=200)
+            log_handle.info("agent_get_metadata_options cache expired", extra={"key": cache_key})
 
         log_handle.info(
             "agent_get_metadata_options request",
@@ -654,9 +656,9 @@ async def agent_get_metadata_options(
         short_map = _shorten_urls_with_store(request.app.state.shortener_store, request.app.state.shortener_base_url, list(dict.fromkeys(raw_urls)))
         for item in results:
             if item.get("url"):
-                item["url"] = short_map.get(item["url"], "")
+                item["url"] = short_map.get(item["url"], item["url"])
 
-        _METADATA_OPTIONS_CACHE[cache_key] = results
+        _METADATA_OPTIONS_CACHE[cache_key] = (results, time.time() + _METADATA_OPTIONS_CACHE_TTL)
         log_handle.info("agent_get_metadata_options response size=%s", len(results))
         return JSONResponse(content=results, status_code=200)
 
@@ -721,9 +723,7 @@ async def agent_get_pravachan(
 
         log_handle.info("agent_get_pravachan total_hits=%s", len(all_hits))
         results = [_chunk_from_hit(hit, payload.language) for hit in all_hits]
-        urls = _collect_file_urls(results)
-        short_map = _shorten_urls_with_store(request.app.state.shortener_store, request.app.state.shortener_base_url, urls)
-        results = _apply_short_urls(results, short_map)
+        _shorten_results(results, request.app.state.shortener_store, request.app.state.shortener_base_url)
         return JSONResponse(content=results, status_code=200)
 
     except Exception as exc:

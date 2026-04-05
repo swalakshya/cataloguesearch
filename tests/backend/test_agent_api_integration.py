@@ -89,11 +89,10 @@ class TestAgentAPI:
         assert isinstance(data["granths"], list)
 
     def test_agent_get_metadata_options(self, api_base_url):
-        payload = {"language": "hi", "content_type": "Granth"}
+        payload = {"language": "hi", "content_type": "Pravachan"}
         r = requests.post(f"{api_base_url}/api/agent/get_metadata_options", json=payload)
         assert r.status_code == 200
         data = r.json()
-        print("agent_get_metadata_options response:", data)
         assert isinstance(data, list)
         if data:
             for item in data:

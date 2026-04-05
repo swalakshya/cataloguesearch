@@ -116,6 +116,8 @@ def _run_parallel(tasks):
     Run tasks in parallel. Each task is a tuple of (fn, *args).
     Re-raises the first exception encountered.
     """
+    if not tasks:
+        return
     with ThreadPoolExecutor(max_workers=len(tasks)) as executor:
         futures = [executor.submit(task[0], *task[1:]) for task in tasks]
         for future in as_completed(futures):
