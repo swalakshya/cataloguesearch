@@ -1,10 +1,15 @@
+import asyncio
 import logging
 import os
 import shutil
 import tempfile
+import threading
+import time
 import uuid
 
 import fitz
+import requests
+import uvicorn
 from dotenv import load_dotenv
 
 from backend.common import opensearch
@@ -14,6 +19,87 @@ from backend.crawler.index_state import IndexState
 from backend.utils import json_dump, json_dumps
 
 log_handle = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# API server infrastructure (shared across test modules)
+# ---------------------------------------------------------------------------
+
+def run_api_server_in_thread(host, port, stop_event):
+    """Run the FastAPI server in a thread using the test config."""
+    import os
+    from dotenv import load_dotenv
+    from backend.config import Config
+
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    load_dotenv(dotenv_path=f"{project_root}/.env", verbose=True)
+
+    test_base_dir = os.getenv("TEST_BASE_DIR")
+    if not test_base_dir:
+        raise ValueError("TEST_BASE_DIR not set in .env file")
+
+    os.environ["LOGS_DIR"] = "logs"
+    os.environ["CONFIG_PATH"] = f"{test_base_dir}/data/configs/test_config.yaml"
+
+    import sys
+    sys.modules.pop("backend.api.search_api", None)
+    from backend.api.search_api import app
+    from uvicorn import Config as UvicornConfig
+
+    config = UvicornConfig(app=app, host=host, port=port, log_level="error", access_log=False)
+    server = uvicorn.Server(config)
+
+    async def serve():
+        await server.serve()
+
+    try:
+        asyncio.run(serve())
+    except Exception as e:
+        log_handle.error(f"API server error: {e}")
+
+
+class APIServerManager:
+    """Manages API server startup and shutdown for tests."""
+
+    def __init__(self, host="127.0.0.1", port=19876):
+        self.host = host
+        self.port = port
+        self.server_thread = None
+        self.stop_event = None
+
+    def start_server_in_thread(self):
+        self.stop_event = threading.Event()
+        self.server_thread = threading.Thread(
+            target=run_api_server_in_thread,
+            args=(self.host, self.port, self.stop_event),
+            daemon=True,
+        )
+        self.server_thread.start()
+        self._wait_for_server_startup()
+
+    def _wait_for_server_startup(self, timeout=30):
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                response = requests.get(f"http://{self.host}:{self.port}/api/metadata", timeout=1)
+                if response.status_code in [200, 404, 500]:
+                    log_handle.info(f"API server started at http://{self.host}:{self.port}")
+                    return True
+            except requests.exceptions.RequestException:
+                pass
+            time.sleep(0.5)
+        raise TimeoutError(f"API server failed to start within {timeout} seconds")
+
+    def stop_server(self):
+        if self.stop_event:
+            self.stop_event.set()
+        if self.server_thread and self.server_thread.is_alive():
+            log_handle.info("Stopping API server thread...")
+            self.server_thread.join(timeout=5)
+            if self.server_thread.is_alive():
+                log_handle.warning("API server thread did not stop gracefully")
+        self.server_thread = None
+        self.stop_event = None
 
 def write_config_file(file_name, config_data):
     """

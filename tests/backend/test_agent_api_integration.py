@@ -1,49 +1,15 @@
-import os
-import time
-from urllib.parse import urlparse
-
 import pytest
 import requests
 
 
-def _api_base_url() -> str:
-    # The API typically runs locally over plain HTTP.
-    # Users can override this with EXTERNAL_API_BASE_URL (e.g. https://... in prod).
-    return os.getenv("EXTERNAL_API_BASE_URL", "http://localhost:8000")
-
-
-def _should_verify_tls(base_url: str) -> bool:
-    """
-    Whether `requests` should verify TLS certificates.
-
-    - If EXTERNAL_API_VERIFY_TLS is set, it takes precedence.
-    - Otherwise, verify TLS only for https URLs.
-    """
-    verify_env = os.getenv("EXTERNAL_API_VERIFY_TLS")
-    if verify_env is not None:
-        return verify_env.lower() in ("1", "true", "yes")
-    return urlparse(base_url).scheme == "https"
+@pytest.fixture(scope="module", autouse=True)
+def _require_index(build_index):
+    """Pull the session-scoped build_index into this module."""
 
 
 @pytest.fixture(scope="module")
-def api_base_url():
-    base_url = _api_base_url().rstrip("/")
-    verify_tls = _should_verify_tls(base_url)
-    deadline = time.time() + 10
-    last_exc = None
-    while time.time() < deadline:
-        try:
-            r = requests.get(
-                f"{base_url}/api/metadata",
-                timeout=1,
-                verify=verify_tls,
-            )
-            if r.status_code in (200, 404, 500):
-                return base_url
-        except requests.exceptions.RequestException as exc:
-            last_exc = exc
-        time.sleep(0.5)
-    pytest.skip(f"API server not reachable at {base_url}: {last_exc}")
+def api_base_url(api_server):
+    return f"http://{api_server.host}:{api_server.port}"
 
 
 def _agent_search(base_url, query, content_type=None):
@@ -55,12 +21,7 @@ def _agent_search(base_url, query, content_type=None):
         "page": 1,
         "rerank": False,
     }
-    verify_tls = _should_verify_tls(base_url)
-    r = requests.post(
-        f"{base_url}/api/agent/search",
-        json=payload,
-        verify=verify_tls,
-    )
+    r = requests.post(f"{base_url}/api/agent/search", json=payload)
     assert r.status_code == 200
     return r.json()
 
@@ -97,11 +58,7 @@ class TestAgentAPI:
         chunk_id = results[0]["chunk_id"]
 
         payload = {"chunk_id": chunk_id, "direction": "both", "steps": 1}
-        r = requests.post(
-            f"{api_base_url}/api/agent/navigate",
-            json=payload,
-            verify=_should_verify_tls(api_base_url),
-        )
+        r = requests.post(f"{api_base_url}/api/agent/navigate", json=payload)
         assert r.status_code == 200
         data = r.json()
         assert isinstance(data, list)
@@ -117,19 +74,14 @@ class TestAgentAPI:
     #     r = requests.post(
     #         f"{api_base_url}/api/agent/find_similar",
     #         json=payload,
-    #         verify=_should_verify_tls(api_base_url),
-    #     )
+    #             #     )
     #     assert r.status_code == 200
     #     data = r.json()
     #     assert isinstance(data, list)
 
     def test_agent_get_filter_options(self, api_base_url):
         payload = {"language": "hi", "content_type": "Granth"}
-        r = requests.post(
-            f"{api_base_url}/api/agent/get_filter_options",
-            json=payload,
-            verify=_should_verify_tls(api_base_url),
-        )
+        r = requests.post(f"{api_base_url}/api/agent/get_filter_options", json=payload)
         assert r.status_code == 200
         data = r.json()
         for key in ("granths", "anuyogs", "contributors", "date_ranges"):
@@ -138,11 +90,7 @@ class TestAgentAPI:
 
     def test_agent_get_metadata_options(self, api_base_url):
         payload = {"language": "hi", "content_type": "Granth"}
-        r = requests.post(
-            f"{api_base_url}/api/agent/get_metadata_options",
-            json=payload,
-            verify=_should_verify_tls(api_base_url),
-        )
+        r = requests.post(f"{api_base_url}/api/agent/get_metadata_options", json=payload)
         assert r.status_code == 200
         data = r.json()
         print("agent_get_metadata_options response:", data)
@@ -157,11 +105,7 @@ class TestAgentAPI:
 
     def test_agent_get_pravachan_returns_list(self, api_base_url):
         payload = {"granth": "Samaysaar", "pravachan_number": "1", "language": "hi"}
-        r = requests.post(
-            f"{api_base_url}/api/agent/get_pravachan",
-            json=payload,
-            verify=_should_verify_tls(api_base_url),
-        )
+        r = requests.post(f"{api_base_url}/api/agent/get_pravachan", json=payload)
         assert r.status_code == 200
         data = r.json()
         assert isinstance(data, list)

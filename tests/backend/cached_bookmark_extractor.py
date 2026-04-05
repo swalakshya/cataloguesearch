@@ -161,17 +161,15 @@ class CachedBookmarkExtractor(BookmarkExtractor):
 
         result = self.real_extractor.call_llm(indexed_titles)
 
-        # Cache the result (even if None, to avoid repeated failures)
-        self.cache[cache_key] = result
-
         if result is not None:
+            self.cache[cache_key] = result
             log_handle.info(
                 f"✅ Cached LLM result for key {cache_key} "
                 f"(cache size: {len(self.cache)} entries)"
             )
         else:
             log_handle.warning(
-                f"⚠️  LLM call returned None for key {cache_key}, cached anyway to avoid retries"
+                f"⚠️  LLM call returned None for key {cache_key}, not caching to allow retry when LLM is available"
             )
 
         return result

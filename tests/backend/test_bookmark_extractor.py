@@ -12,12 +12,7 @@ log_handle = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="module")
-def ollama_extractor():
-    import requests as _requests
-    try:
-        _requests.get("http://localhost:11434/api/tags", timeout=2)
-    except Exception:
-        pytest.skip("Ollama not available")
+def ollama_extractor(ensure_ollama):
     return create_bookmark_extractor_by_name("ollama")
 
 
