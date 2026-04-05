@@ -4,6 +4,8 @@ Automated OpenSearch snapshot restore script.
 Replaces restore_snapshots.sh with fully automated Python using only stdlib.
 Docker operations use the Docker Unix socket API directly (no subprocess).
 OpenSearch operations use urllib (no curl).
+Step 9 uses subprocess to run docker-compose (down + up) so that containers
+are fully recreated with the latest .env.prod values.
 """
 
 import argparse
@@ -12,6 +14,7 @@ import json
 import logging
 import os
 import socket
+import subprocess
 import sys
 import time
 import urllib.error
@@ -286,6 +289,7 @@ def _confirm():
     print("  7. Restore both snapshots")
     print("  8. Poll until all indices are fully restored, then print")
     print("     document counts")
+    print("  9. Restart cataloguesearch-api and cataloguesearch-frontend")
     print()
     print("⚠️  WARNING: Step 6 will PERMANENTLY DELETE all data in:")
     print("           • cataloguesearch_prod")
@@ -599,6 +603,51 @@ def step8_wait_for_restore():
 
 
 # ---------------------------------------------------------------------------
+# Step 9: Restart application containers
+# ---------------------------------------------------------------------------
+
+COMPOSE_FILE = "docker-compose.prod.yml"
+COMPOSE_ENV  = ".env.prod"
+SERVICES     = ["cataloguesearch-api", "cataloguesearch-frontend"]
+
+def step9_restart_services():
+    log_handle.info("🔄 Step 9: Restarting services: %s", ", ".join(SERVICES))
+
+    base_cmd = [
+        "docker-compose",
+        "--env-file", COMPOSE_ENV,
+        "-f", COMPOSE_FILE,
+    ]
+    project_dir = Path(__file__).parent
+
+    log_handle.info("🔄 Stopping services...")
+    result = subprocess.run(
+        base_cmd + ["down"] + SERVICES,
+        cwd=project_dir,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"❌ docker-compose down failed (exit {result.returncode}):\n{result.stderr.strip()}"
+        )
+    log_handle.info("✅ Services stopped.")
+
+    log_handle.info("🔄 Starting services...")
+    result = subprocess.run(
+        base_cmd + ["up", "-d"] + SERVICES,
+        cwd=project_dir,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"❌ docker-compose up failed (exit {result.returncode}):\n{result.stderr.strip()}"
+        )
+    log_handle.info("✅ Step 9 done. Services restarted:\n%s", result.stdout.strip())
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -641,6 +690,7 @@ def main():
         step6_delete_indices()
         step7_restore_snapshots()
         step8_wait_for_restore()
+        step9_restart_services()
 
         log_handle.info("✅ Script completed successfully.")
 
