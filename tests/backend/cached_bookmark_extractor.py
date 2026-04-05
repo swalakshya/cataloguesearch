@@ -176,9 +176,10 @@ class CachedBookmarkExtractor(BookmarkExtractor):
 
     def _get_cache_key(self, indexed_titles: List[Dict[str, Any]]) -> str:
         """
-        Generate cache key from indexed_titles input.
+        Generate cache key from extractor type + indexed_titles input.
 
-        Uses SHA256 hash of JSON-serialized input for deterministic, collision-resistant keys.
+        Includes the real extractor's class name so Ollama and Gemini results
+        are stored in separate cache entries and never cross-contaminate.
 
         Args:
             indexed_titles: List of {"index": i, "title": "..."} dicts
@@ -187,9 +188,12 @@ class CachedBookmarkExtractor(BookmarkExtractor):
             16-character hex string (truncated SHA256 hash)
 
         Examples:
-            [{"index": 0, "title": "Prav 244"}] → "a3f2b1c4d5e6f7a8"
-            [{"index": 0, "title": "Prav 245"}] → "b9e2f3a1c8d7e4f5" (different!)
+            OllamaBookmarkExtractor + [{"index": 0, "title": "Prav 244"}] → "a3f2b1c4d5e6f7a8"
+            GeminiBookmarkExtractor + [{"index": 0, "title": "Prav 244"}] → "d1e2f3a4b5c6d7e8" (different!)
         """
+        # Include extractor type so Ollama and Gemini use separate cache entries
+        extractor_type = type(self.real_extractor).__name__
+
         # Serialize to stable JSON
         # - sort_keys=True ensures consistent ordering
         # - ensure_ascii=False handles Unicode properly
@@ -199,8 +203,9 @@ class CachedBookmarkExtractor(BookmarkExtractor):
             ensure_ascii=False
         )
 
-        # Hash it with SHA256
-        hash_obj = hashlib.sha256(titles_json.encode('utf-8'))
+        # Hash extractor type + titles together
+        content = f"{extractor_type}:{titles_json}"
+        hash_obj = hashlib.sha256(content.encode('utf-8'))
         cache_key = hash_obj.hexdigest()[:16]  # First 16 chars for readability
 
         return cache_key
