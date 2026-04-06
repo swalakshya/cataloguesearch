@@ -162,6 +162,10 @@ search_index:
         type: keyword
       shlok:
         type: keyword
+      sutra:
+        type: keyword
+      doha:
+        type: keyword
       verse_type:
         type: keyword
       verse_id:

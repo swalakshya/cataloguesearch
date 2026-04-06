@@ -155,22 +155,27 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
         result: List[ParaInfo] = []
         buffer: List[str] = []
         buffer_page: int | None = None
+        buffer_page_spans: list = []
+        buffer_word_count: int = 0
         chapter_break: bool = False  # signals next flush output is chapter_start
 
         def _flush():
-            nonlocal buffer, buffer_page, chapter_break
+            nonlocal buffer, buffer_page, chapter_break, buffer_page_spans, buffer_word_count
             if buffer:
                 text = '\n'.join(buffer)
                 is_verse_end = bool(_VERSE_END_RE.search(buffer[-1]))
                 result.append(ParaInfo(
                     page_num=buffer_page,
                     text=text,
+                    page_spans=buffer_page_spans[:],
                     is_chapter_start=chapter_break,
                     is_verse_end=is_verse_end,
                 ))
                 chapter_break = False
             buffer.clear()
             buffer_page = None
+            buffer_page_spans = []
+            buffer_word_count = 0
 
         for page_num, blocks in pages_data:
             for block in blocks:
@@ -204,8 +209,13 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
 
                 if not buffer:
                     buffer_page = page_num
+                    buffer_page_spans = [(page_num, 0)]
 
                 buffer.append(text)
+
+                if buffer_page_spans and page_num != buffer_page_spans[-1][0]:
+                    buffer_page_spans.append((page_num, buffer_word_count))
+                buffer_word_count += len(text.split())
 
                 if text.endswith(self.punctuation_suffixes) or _VERSE_END_RE.search(text):
                     _flush()
@@ -324,14 +334,21 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
             if not buffer:
                 buffer_page = para.page_num
                 buffer_is_qa = para.is_qa
-                buffer_page_spans = [(para.page_num, 0)]
+                buffer_page_spans = para.page_spans[:] if para.page_spans else [(para.page_num, 0)]
                 buffer_is_chapter_start = para.is_chapter_start
                 buffer_is_question = para.is_question
                 buffer_is_answer = para.is_answer
             else:
-                # Track page transitions
-                if para.page_num != buffer_page_spans[-1][0]:
-                    buffer_page_spans.append((para.page_num, buffer_wc))
+                if para.page_spans:
+                    # Merge intra-paragraph spans, adjusting offsets relative to buffer start
+                    for pn, offset in para.page_spans:
+                        adjusted = buffer_wc + offset
+                        if pn != buffer_page_spans[-1][0]:
+                            buffer_page_spans.append((pn, adjusted))
+                else:
+                    # Fallback: track inter-paragraph page transition only
+                    if para.page_num != buffer_page_spans[-1][0]:
+                        buffer_page_spans.append((para.page_num, buffer_wc))
 
             buffer.append(para.text)
             buffer_wc += wc
