@@ -1,4 +1,55 @@
+import subprocess
+import time
+from pathlib import Path
+
+import docker
+import docker.errors
 import pytest
+
+_PROJECT_ROOT = Path(__file__).parent.parent
+_CONTAINER_NAME = "opensearch-test"
+_DOCKER_COMPOSE_FILE = _PROJECT_ROOT / "docker-compose.test.yml"
+
+
+def _wait_until_healthy(client: docker.DockerClient, timeout: int = 90) -> None:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            container = client.containers.get(_CONTAINER_NAME)
+            container.reload()
+            status = container.attrs.get("State", {}).get("Health", {}).get("Status")
+            if status == "healthy":
+                return
+        except docker.errors.NotFound:
+            pass
+        time.sleep(2)
+    raise RuntimeError(f"OpenSearch did not become healthy within {timeout}s.")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def ensure_opensearch_running():
+    client = docker.from_env()
+    try:
+        container = client.containers.get(_CONTAINER_NAME)
+        if container.status != "running":
+            container.start()
+            _wait_until_healthy(client)
+    except docker.errors.NotFound:
+        # Container doesn't exist yet — use compose to create and start it.
+        # Falls back to subprocess only for this first-time case; all subsequent
+        # runs use the Docker SDK path above.
+        subprocess.run(
+            ["docker-compose", "-f", str(_DOCKER_COMPOSE_FILE), "up", "-d"],
+            check=True,
+            cwd=_PROJECT_ROOT,
+        )
+        _wait_until_healthy(client)
+
+    yield
+
+    # Intentionally NOT stopping the container after tests.
+    # Keeping it running saves startup time on the next run.
+    # Stop it manually when done: docker-compose -f docker-compose.test.yml down
 
 @pytest.fixture(scope="session")
 def bookmark_cache():

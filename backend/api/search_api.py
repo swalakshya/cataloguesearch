@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 import time
+from contextlib import asynccontextmanager
 from typing import Any, Dict, List
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request
@@ -18,8 +19,8 @@ from backend.api.feedback_api import router as feedback_router
 from backend.api.agent.router import router as agent_router
 from backend.api.agent.app import agent_app
 from backend.api.url.router import router as url_router
-from backend.url_shortener.core import ShortenerStore
-from backend.url_shortener.opensearch_loader import fetch_file_urls
+from backend.shortener.core import ShortenerStore
+from backend.shortener.opensearch_loader import fetch_file_urls
 
 log_handle = logging.getLogger(__name__)
 
@@ -36,11 +37,81 @@ def _filter_categories_for(cat: str, categories: Dict[str, List[str]]) -> Dict[s
     allowed = _CATEGORY_FILTER_FIELDS.get(cat, set(categories.keys()))
     return {k: v for k, v in categories.items() if k in allowed}
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logs_dir = os.environ.get("LOGS_DIR", "logs")
+    setup_logging(
+        logs_dir=logs_dir, console_level=VERBOSE_LEVEL_NUM,
+        file_level=VERBOSE_LEVEL_NUM,
+        console_only=False)
+    log_handle.info("Logging setup complete.")
+
+    config_path = os.environ.get("CONFIG_PATH", "configs/config.yaml")
+    config = Config(config_path)
+    app.state.config = config
+    log_handle.info("Configuration loaded.")
+
+    client = get_opensearch_client(config)
+    log_handle.info("OpenSearch client initialized.")
+
+    app.state.embedding_model = get_embedding_model_factory(config)
+    log_handle.info(f"Embedding model {config.EMBEDDING_MODEL_NAME} with type {config.EMBEDDING_MODEL_TYPE} loaded.")
+
+    app.state.index_searcher = IndexSearcher(config)
+    log_handle.info("IndexSearcher initialized.")
+
+    shortener_base_url = os.environ.get("SHORTENER_BASE_URL", "https://swalakshya.me")
+    shortener_store = ShortenerStore(base_len=int(os.environ.get("SHORT_CODE_LEN", "7")))
+    try:
+        urls = fetch_file_urls(client, index_name=config.OPENSEARCH_INDEX_NAME)
+        shortener_store.load(urls)
+        log_handle.info("ShortenerStore loaded with %s URLs.", len(urls))
+    except Exception as exc:
+        log_handle.exception("Failed to load ShortenerStore, using empty store: %s", exc)
+    app.state.shortener_store = shortener_store
+    app.state.shortener_base_url = shortener_base_url
+
+    agent_app.state.config = config
+    agent_app.state.index_searcher = app.state.index_searcher
+    agent_app.state.embedding_model = app.state.embedding_model
+    agent_app.state.shortener_store = shortener_store
+    agent_app.state.shortener_base_url = shortener_base_url
+
+    app.state.metadata_cache = {
+        "data": None,
+        "timestamp": 0,
+        "ttl": 1800
+    }
+    try:
+        log_handle.info("Populating metadata cache at startup...")
+        metadata = get_metadata(config)
+        filtered_metadata = {}
+        for content_type, type_metadata in metadata.items():
+            if content_type not in config.ACTIVE_CATEGORIES:
+                continue
+            filtered_metadata[content_type] = {}
+            for composite_key, values in type_metadata.items():
+                parts = composite_key.rsplit('_', 1)
+                if len(parts) == 2:
+                    field_name = parts[0]
+                    if field_name in config.FILTERED_METADATA_FIELDS:
+                        filtered_metadata[content_type][composite_key] = values
+        app.state.metadata_cache["data"] = filtered_metadata
+        app.state.metadata_cache["timestamp"] = time.time()
+        log_handle.info(f"Metadata cache populated with {json_dumps(metadata)}")
+    except Exception as e:
+        log_handle.exception(f"Failed to populate metadata cache at startup: {e}")
+
+    log_memory_usage()
+    yield
+
+
 # --- FastAPI Application Setup ---
 app = FastAPI(
     title="Catalogue Search API",
     description="API for searching through catalogue documents and serving the frontend.",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # --- CORS Middleware ---
@@ -60,90 +131,6 @@ app.include_router(url_router)
 # --- Mount Agent sub-app (public OpenAPI surface) ---
 app.mount("/agent", agent_app)
 
-@app.on_event("startup")
-async def initialize():
-    """
-    Initializes the config and other expensive objects once at startup.
-    Stores them in the application state.
-    """
-    # Setup logging
-    logs_dir = os.environ.get("LOGS_DIR", "logs")
-    setup_logging(
-        logs_dir=logs_dir, console_level=VERBOSE_LEVEL_NUM,
-        file_level=VERBOSE_LEVEL_NUM,
-        console_only=False)
-    log_handle.info("Logging setup complete.")
-
-    # Load configuration
-    config_path = os.environ.get("CONFIG_PATH", "configs/config.yaml")
-    config = Config(config_path)
-    app.state.config = config
-    log_handle.info("Configuration loaded.")
-
-    # Initialize OpenSearch client (the client itself is managed by opensearch.py module)
-    client = get_opensearch_client(config)
-    log_handle.info("OpenSearch client initialized.")
-
-    # Load embedding model
-    app.state.embedding_model = get_embedding_model_factory(config)
-    log_handle.info(f"Embedding model {config.EMBEDDING_MODEL_NAME} with type {config.EMBEDDING_MODEL_TYPE} loaded.")
-
-    # Initialize IndexSearcher (which may load the reranker)
-    app.state.index_searcher = IndexSearcher(config)
-    log_handle.info("IndexSearcher initialized.")
-
-    # Load URL shortener store
-    shortener_base_url = os.environ.get("SHORTENER_BASE_URL", "https://swalakshya.me")
-    shortener_store = ShortenerStore(base_len=int(os.environ.get("SHORT_CODE_LEN", "7")))
-    try:
-        urls = fetch_file_urls(client, index_name=config.OPENSEARCH_INDEX_NAME)
-        shortener_store.load(urls)
-        log_handle.info("ShortenerStore loaded with %s URLs.", len(urls))
-    except Exception as exc:
-        log_handle.exception("Failed to load ShortenerStore, using empty store: %s", exc)
-    app.state.shortener_store = shortener_store
-    app.state.shortener_base_url = shortener_base_url
-
-    # Propagate shared state to the agent sub-app so request.app.state works there too
-    agent_app.state.config = config
-    agent_app.state.index_searcher = app.state.index_searcher
-    agent_app.state.embedding_model = app.state.embedding_model
-    agent_app.state.shortener_store = shortener_store
-    agent_app.state.shortener_base_url = shortener_base_url
-
-    # Initialize and populate metadata cache
-    app.state.metadata_cache = {
-        "data": None,
-        "timestamp": 0,
-        "ttl": 1800  # 30 minutes cache TTL
-    }
-    try:
-        log_handle.info("Populating metadata cache at startup...")
-        metadata = get_metadata(config)
-        # Filter metadata for each content_type
-        # metadata structure: {"Pravachan": {"Name_hi": [...], ...}, "Granth": {...}}
-        filtered_metadata = {}
-        for content_type, type_metadata in metadata.items():
-            if content_type not in config.ACTIVE_CATEGORIES:
-                continue
-            filtered_metadata[content_type] = {}
-            for composite_key, values in type_metadata.items():
-                # composite_key is like "Name_hi", "Anuyog_gu", etc.
-                # Extract the field name (before the last underscore)
-                parts = composite_key.rsplit('_', 1)
-                if len(parts) == 2:
-                    field_name = parts[0]
-                    # Only include if field is in the filtered list
-                    if field_name in config.FILTERED_METADATA_FIELDS:
-                        filtered_metadata[content_type][composite_key] = values
-        app.state.metadata_cache["data"] = filtered_metadata
-        app.state.metadata_cache["timestamp"] = time.time()
-        log_handle.info(f"Metadata cache populated with {json_dumps(metadata)}")
-    except Exception as e:
-        log_handle.exception(f"Failed to populate metadata cache at startup: {e}")
-
-    # Log memory usage after initialization
-    log_memory_usage()
 
 @app.get("/api/metadata", response_model=Dict[str, List[str]])
 async def get_metadata_api(request: Request):

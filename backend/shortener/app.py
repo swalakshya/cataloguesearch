@@ -1,5 +1,6 @@
 import logging
 import os
+from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
@@ -27,24 +28,24 @@ def _short_url(base_url: str, code: str) -> str:
 
 
 def create_app(store: Optional[ShortenerStore] = None, base_url: Optional[str] = None) -> FastAPI:
-    app = FastAPI(title="CatalogueSearch URL Shortener", version="1.0.0")
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        if app.state.store is None:
+            config_path = os.getenv("CONFIG_PATH", "configs/config.yaml")
+            config = Config(config_path)
+            client = get_opensearch_client(config)
+            urls = fetch_file_urls(client, index_name=config.OPENSEARCH_INDEX_NAME)
+            base_len = int(os.getenv("SHORT_CODE_LEN", "7"))
+            store_local = ShortenerStore(base_len=base_len)
+            store_local.load(urls)
+            app.state.store = store_local
+            log_handle.info("shortener loaded %s urls", len(urls))
+        yield
+
+    app = FastAPI(title="CatalogueSearch URL Shortener", version="1.0.0", lifespan=lifespan)
 
     app.state.store = store
     app.state.base_url = base_url or os.getenv("SHORTENER_BASE_URL", "https://swalakshya.me")
-
-    @app.on_event("startup")
-    async def load_urls():
-        if app.state.store is not None:
-            return
-        config_path = os.getenv("CONFIG_PATH", "configs/config.yaml")
-        config = Config(config_path)
-        client = get_opensearch_client(config)
-        urls = fetch_file_urls(client, index_name=config.OPENSEARCH_INDEX_NAME)
-        base_len = int(os.getenv("SHORT_CODE_LEN", "7"))
-        store_local = ShortenerStore(base_len=base_len)
-        store_local.load(urls)
-        app.state.store = store_local
-        log_handle.info("shortener loaded %s urls", len(urls))
 
     @app.get("/health")
     async def health():

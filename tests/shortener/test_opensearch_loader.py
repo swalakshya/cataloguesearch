@@ -1,4 +1,4 @@
-from backend.url_shortener.opensearch_loader import fetch_file_urls
+from backend.shortener.opensearch_loader import fetch_file_urls
 
 
 class FakeClient:

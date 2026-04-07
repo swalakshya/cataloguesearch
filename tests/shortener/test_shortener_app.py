@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.api.url.router import router as url_router
-from backend.url_shortener.core import ShortenerStore
+from backend.shortener.core import ShortenerStore
 
 
 def _make_test_app():

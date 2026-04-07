@@ -1,4 +1,4 @@
-from backend.url_shortener.core import ShortenerStore
+from backend.shortener.core import ShortenerStore
 
 
 def test_store_returns_codes_for_known_urls():

@@ -1,6 +1,6 @@
 import hashlib
 
-from backend.url_shortener.core import base62_encode, build_maps, code_for_url
+from backend.shortener.core import base62_encode, build_maps, code_for_url
 
 
 def test_base62_encode_known_values():
