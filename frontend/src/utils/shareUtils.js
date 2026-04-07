@@ -21,6 +21,8 @@ export const formatGranthShareContent = (query, result, shareUrl) => {
     if (result?.gatha) locationParts.push(`Gatha ${result.gatha}`);
     if (result?.kalash) locationParts.push(`Kalash ${result.kalash}`);
     if (result?.shlok) locationParts.push(`Shlok ${result.shlok}`);
+    if (result?.sutra) locationParts.push(`Sutra ${result.sutra}`);
+    if (result?.doha) locationParts.push(`Doha ${result.doha}`);
     const locationInfo = locationParts.join(', ');
 
     return {
@@ -90,7 +92,7 @@ export const copyToClipboard = async (text) => {
             console.error('Failed to copy to clipboard:', error);
         }
     }
-    
+
     // Fallback for older browsers
     try {
         const textArea = document.createElement('textarea');
@@ -113,7 +115,7 @@ export const copyToClipboard = async (text) => {
 export const trackShareEvent = (method, query, resultId) => {
     // Track share usage (can be integrated with analytics)
     console.log('Share event:', { method, query, resultId });
-    
+
     // If you have Google Analytics or other analytics
     // gtag('event', 'share', {
     //     method: method,

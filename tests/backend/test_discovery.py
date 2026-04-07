@@ -86,6 +86,46 @@ class MockIndexState(IndexState):
             return ""
         return hashlib.sha256(relative_file_path.encode('utf-8')).hexdigest()
 
+def test_forward_fill_doha_sutra():
+    """
+    Unit test for _apply_forward_fill with doha and sutra fields.
+
+    Page layout:
+      page 1 — bookmark with doha="3-4"
+      pages 2-4 — no bookmarks → inherit doha="3-4"
+      page 5 — bookmark with sutra="7" (replaces entire current_data, so doha resets to None)
+      pages 6-8 — no bookmarks → inherit sutra="7"
+    """
+    setup()
+    config = Config()
+    pdf_path = f"{config.BASE_PDF_PATH}/hindi/history/hampi_hindi.pdf"
+
+    sfp = SingleFileProcessor(
+        config, pdf_path, None, None,
+        datetime.datetime.now().isoformat(),
+        pdf_processor_factory=MockPDFProcessor
+    )
+
+    parsed_bookmarks = [
+        {"page": 1, "pravachan_no": None, "date": None, "gatha": None, "kalash": None,
+         "shlok": None, "doha": "3-4", "sutra": None},
+        {"page": 5, "pravachan_no": None, "date": None, "gatha": None, "kalash": None,
+         "shlok": None, "doha": None, "sutra": "7"},
+    ]
+
+    result = sfp._apply_forward_fill(parsed_bookmarks, total_pages=8)
+
+    # Pages 1-4: doha="3-4", sutra=None
+    for page in range(1, 5):
+        assert result[page]["doha"] == "3-4", f"page {page}: expected doha='3-4', got {result[page]['doha']}"
+        assert result[page]["sutra"] is None, f"page {page}: expected sutra=None, got {result[page]['sutra']}"
+
+    # Pages 5-8: sutra="7", doha=None (new bookmark resets all fields)
+    for page in range(5, 9):
+        assert result[page]["sutra"] == "7", f"page {page}: expected sutra='7', got {result[page]['sutra']}"
+        assert result[page]["doha"] is None, f"page {page}: expected doha=None, got {result[page]['doha']}"
+
+
 def test_get_metadata():
     setup()
     config = Config()

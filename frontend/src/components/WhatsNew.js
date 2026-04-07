@@ -26,6 +26,15 @@ const WhatsNew = () => {
 
     const updates = [
         {
+            date: "April 7, 2026",
+            newFeatures: [
+                "None"
+            ],
+            newContent: [
+                "Granths: Sarvartha Siddhi, Jain Siddhant Darpan, Gyan Darpan and Moksh Marg Prakashak Parishisht",
+            ]
+        },
+        {
             date: "April 3, 2026",
             newFeatures: [
                 "Developer API! Build your own AI chatbots, RAG pipelines etc. using Swalakshya's data.",

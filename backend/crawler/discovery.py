@@ -196,7 +196,7 @@ class SingleFileProcessor:
         return sorted(logical)
 
     # All meaningful fields that the bookmark extractor can return
-    _BOOKMARK_FIELDS = ("pravachan_no", "date", "gatha", "kalash", "shlok")
+    _BOOKMARK_FIELDS = ("pravachan_no", "date", "gatha", "kalash", "shlok", "doha", "sutra")
 
     def _apply_forward_fill(self, parsed_bookmarks, total_pages):
         """
@@ -204,7 +204,7 @@ class SingleFileProcessor:
         Pages without bookmarks inherit data from the previous bookmark.
 
         Handles both Pravachan bookmarks (pravachan_no, date) and Granth bookmarks
-        (gatha, kalash, shlok) generically — any bookmark with at least one non-null
+        (gatha, kalash, shlok, doha, sutra) generically — any bookmark with at least one non-null
         meaningful field advances the forward-fill state.
 
         Args:
@@ -212,7 +212,7 @@ class SingleFileProcessor:
             total_pages: Total number of pages in PDF
 
         Returns:
-            dict[int, dict]: Mapping of page_num -> {pravachan_no, date, gatha, kalash, shlok}
+            dict[int, dict]: Mapping of page_num -> {pravachan_no, date, gatha, kalash, shlok, doha, sutra}
         """
         page_to_data = {}
         current_data = {f: None for f in self._BOOKMARK_FIELDS}

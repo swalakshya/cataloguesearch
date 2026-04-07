@@ -49,7 +49,7 @@ from backend.crawler.paragraph_generator.sizer import split_long_para
 log_handle = logging.getLogger(__name__)
 
 _MIN_PARA_LENGTH = 50   # minimum words per output paragraph
-_MAX_PARA_LENGTH = 250  # maximum words per output paragraph (override via scan_config max_words_per_para)
+_MAX_PARA_LENGTH = 170  # maximum words per output paragraph (override via scan_config max_words_per_para)
 
 # Strips optional leading number markers like '(२) ', '(3) ', '3. ' before
 # QA prefix matching. Handles ASCII and Devanagari digits.

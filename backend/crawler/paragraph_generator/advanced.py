@@ -60,7 +60,7 @@ HINDI_SENTENCE_TERMINATORS = ('।', '?', '!', '।।', ')', ']', '}')
 GUJARATI_SENTENCE_TERMINATORS = ('।', '.', '?', '!', '।।', ')', ']', '}')
 
 _MIN_PARA_LENGTH = 50   # default minimum words per output paragraph
-_MAX_PARA_LENGTH = 250  # default maximum words per output paragraph (override via scan_config max_words_per_para)
+_MAX_PARA_LENGTH = 170  # default maximum words per output paragraph (override via scan_config max_words_per_para)
 
 
 # --- LineClassifier (EXACT copy from para_gen.py) ---

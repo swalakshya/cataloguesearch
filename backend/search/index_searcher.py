@@ -346,6 +346,8 @@ class IndexSearcher:
                 "gatha": source.get('gatha'),
                 "kalash": source.get('kalash'),
                 "shlok": source.get('shlok'),
+                "doha": source.get('doha'),
+                "sutra": source.get('sutra'),
                 "series_start_date": metadata.get('series_start_date'),
                 "series_end_date": metadata.get('series_end_date')
             }

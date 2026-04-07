@@ -64,6 +64,33 @@ def _run_bookmark_extraction(extractor):
     log_handle.info("✓ [%s] jaipur batch extraction passed", extractor_name)
 
 
+def _run_granth_extraction(extractor):
+    """
+    Tests call_llm with granth-style bookmarks (gatha, kalash, shlok, doha, sutra).
+    Verifies the new fields are extracted and normalised correctly.
+    """
+    extractor_name = type(extractor.real_extractor).__name__ if hasattr(extractor, 'real_extractor') else type(extractor).__name__
+
+    batch = [
+        {"index": 0, "title": "Gatha 65 & 66"},
+        {"index": 1, "title": "Kalash 219"},
+        {"index": 2, "title": "sHLOK 2-14-15"},
+        {"index": 3, "title": "Doha 3,4"},
+        {"index": 4, "title": "Sutra 7"},
+    ]
+    result = extractor.call_llm(batch)
+    assert result is not None, f"[{extractor_name}] LLM call failed for granth batch"
+    assert len(result) == 5, f"[{extractor_name}] Expected 5 results, got {len(result)}"
+
+    by_index = {item["index"]: item for item in result}
+    assert by_index[0].get("gatha") == "65-66", f"[{extractor_name}] index 0 gatha: expected '65-66', got {by_index[0].get('gatha')}"
+    assert by_index[1].get("kalash") == "219", f"[{extractor_name}] index 1 kalash: expected '219', got {by_index[1].get('kalash')}"
+    assert by_index[2].get("shlok") == "2-14-15", f"[{extractor_name}] index 2 shlok: expected '2-14-15', got {by_index[2].get('shlok')}"
+    assert by_index[3].get("doha") == "3-4", f"[{extractor_name}] index 3 doha: expected '3-4', got {by_index[3].get('doha')}"
+    assert by_index[4].get("sutra") == "7", f"[{extractor_name}] index 4 sutra: expected '7', got {by_index[4].get('sutra')}"
+    log_handle.info("✓ [%s] granth batch extraction passed", extractor_name)
+
+
 def _run_pdf_bookmarks_test(extractor, doc_ids):
     """
     Tests parse_bookmarks on real PDFs. Ollama gets cache hits from build_index;
@@ -137,7 +164,11 @@ def test_bookmark_extraction(ollama_extractor, gemini_extractor):
     Both run in parallel to minimise wall time.
     """
     extractors = [e for e in [ollama_extractor, gemini_extractor] if e is not None]
-    _run_parallel([(_run_bookmark_extraction, ex) for ex in extractors])
+    tasks = []
+    for ex in extractors:
+        tasks.append((_run_bookmark_extraction, ex))
+        tasks.append((_run_granth_extraction, ex))
+    _run_parallel(tasks)
 
 
 def test_pdf_bookmarks(ollama_extractor, gemini_extractor):

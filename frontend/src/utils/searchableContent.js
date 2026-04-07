@@ -335,6 +335,26 @@ export const searchableGranths = [
     author: "Shri Kanji Swami",
     status: "searchable"
   },
+  {
+    name: "Sarvartha Siddhi",
+    author: "Pujyapaad Swami",
+    status: "searchable"
+  },
+  {
+    name: "Jain Siddhant Darpan",
+    author: "Pandit Gopaldas Baraiyya",
+    status: "searchable"
+  },
+  {
+    name: "Gyan Darpan",
+    author: "Pandit Deepchand Kasliwal",
+    status: "searchable"
+  },
+  {
+    name: "Moksh Marg Prakashak Parishisht",
+    author: "Pandit Banarasidas",
+    status: "searchable"
+  },
 ];
 
 /**

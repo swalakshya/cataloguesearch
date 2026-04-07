@@ -31,6 +31,8 @@ Each output object must have:
 Gatha variants (case-insensitive): gatha, GATHA, gATHA, Gāthā, etc.
 Kalash variants (case-insensitive): kalash, KALASH, Kalash, Kalaś, etc.
 Shlok variants (case-insensitive): shlok, SHLOK, sHLOK, shloka, Sloka, etc.
+Doha variants (case-insensitive): doha, DOHA, Doha etc.
+Sutra variants (case-insensitive): sutra, Sutra, SUTRA etc.
 
 Number normalization: replace commas with dashes ("2,3" → "2-3"), replace "&" with "-" ("65 & 66" → "65-66").
 
@@ -39,14 +41,16 @@ Input (3 items):
 [
   {"index": 0, "page": 5,  "title": "Prav. no. 244-A on Kalash 219, Date: 07-11-1965"},
   {"index": 1, "page": 18, "title": "Gatha 65 & 66"},
-  {"index": 2, "page": 32, "title": "sHLOK 2-14-15"}
+  {"index": 2, "page": 32, "title": "sHLOK 2-14-15"},
+  {"index": 3, "page": 48, "title": "Doha 3,4,5,6 and Sutra 4"}
 ]
 
 Output (3 items - MUST match input length):
 [
-  {"index": 0, "page": 5,  "pravachan_no": "244-A", "date": "07-11-1965", "gatha": null, "kalash": "219", "shlok": null},
-  {"index": 1, "page": 18, "pravachan_no": null, "date": null, "gatha": "65-66", "kalash": null, "shlok": null},
-  {"index": 2, "page": 32, "pravachan_no": null, "date": null, "gatha": null, "kalash": null, "shlok": "2-14-15"}
+  {"index": 0, "page": 5,  "pravachan_no": "244-A", "date": "07-11-1965", "gatha": null, "kalash": "219", "shlok": null, "doha": null, "sutra": null},
+  {"index": 1, "page": 18, "pravachan_no": null, "date": null, "gatha": "65-66", "kalash": null, "shlok": null, "doha": null, "sutra": null},
+  {"index": 2, "page": 32, "pravachan_no": null, "date": null, "gatha": null, "kalash": null, "shlok": "2-14-15", "doha": null, "sutra": null},
+  {"index": 3, "page": 48, "pravachan_no": null, "date": null, "gatha": null, "kalash": null, "shlok": null, "doha": "3-6", "sutra": 4}
 ]
 
 CRITICAL: Output array length MUST equal input array length. Process every item.
@@ -175,11 +179,13 @@ Return ONLY the JSON array, nothing else.
                     "gatha": extracted_item.get('gatha'),
                     "kalash": extracted_item.get('kalash'),
                     "shlok": extracted_item.get('shlok'),
+                    "doha": extracted_item.get('doha'),
+                    "sutra": extracted_item.get('sutra'),
                 })
-                log_handle.debug("index=%d page=%s → pravachan=%s date=%s gatha=%s kalash=%s shlok=%s",
+                log_handle.debug("index=%d page=%s → pravachan=%s date=%s gatha=%s kalash=%s shlok=%s doha=%s, sutra=%s",
                     i, original_item['page'],
                     extracted_item.get('pravachan_no'), extracted_item.get('date'),
-                    extracted_item.get('gatha'), extracted_item.get('kalash'), extracted_item.get('shlok')
+                    extracted_item.get('gatha'), extracted_item.get('kalash'), extracted_item.get('shlok'), extracted_item.get('doha'), extracted_item.get('sutra')
                 )
 
         return final_output

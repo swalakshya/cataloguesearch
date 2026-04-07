@@ -171,6 +171,8 @@ export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, re
                             {result.gatha && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Gatha: {result.gatha}</span>}
                             {result.kalash && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Kalash: {result.kalash}</span>}
                             {result.shlok && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Shlok: {result.shlok}</span>}
+                            {result.doha && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Doha: {result.doha}</span>}
+                            {result.sutra && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Sutra: {result.sutra}</span>}
                         </>
                     ) : (
                         <>
@@ -179,7 +181,9 @@ export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, re
                             {result.gatha && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Gatha: {result.gatha}</span>}
                             {result.kalash && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Kalash: {result.kalash}</span>}
                             {result.shlok && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Shlok: {result.shlok}</span>}
-                            {!result.date && !result.pravachan_number && !result.gatha && !result.kalash && !result.shlok && (
+                            {result.doha && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Doha: {result.doha}</span>}
+                            {result.sutra && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Sutra: {result.sutra}</span>}
+                            {!result.date && !result.pravachan_number && !result.gatha && !result.kalash && !result.shlok && !result.doha && !result.sutra && (
                                 <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· {result.filename}</span>
                             )}
                             <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Page No. {result.page_number}</span>
@@ -276,9 +280,9 @@ export const Pagination = ({ currentPage, totalPages, onPageChange }) => {
     return (
         <nav className="flex justify-center items-center gap-1 mt-4">
             {/* Previous Page Button */}
-            <button 
-                onClick={() => onPageChange(currentPage - 1)} 
-                disabled={currentPage === 1} 
+            <button
+                onClick={() => onPageChange(currentPage - 1)}
+                disabled={currentPage === 1}
                 className="px-2 py-1 text-sm bg-white border border-slate-300 rounded hover:bg-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 &laquo;
@@ -295,11 +299,10 @@ export const Pagination = ({ currentPage, totalPages, onPageChange }) => {
                     <button
                         key={page}
                         onClick={() => onPageChange(page)}
-                        className={`px-2.5 py-1 text-sm rounded border ${
-                            currentPage === page
-                                ? 'bg-sky-600 text-white border-sky-600 font-bold'
-                                : 'bg-white border-slate-300 hover:bg-neutral-50'
-                        }`}
+                        className={`px-2.5 py-1 text-sm rounded border ${currentPage === page
+                            ? 'bg-sky-600 text-white border-sky-600 font-bold'
+                            : 'bg-white border-slate-300 hover:bg-neutral-50'
+                            }`}
                     >
                         {page}
                     </button>
@@ -307,9 +310,9 @@ export const Pagination = ({ currentPage, totalPages, onPageChange }) => {
             })}
 
             {/* Next Page Button */}
-            <button 
-                onClick={() => onPageChange(currentPage + 1)} 
-                disabled={currentPage === totalPages} 
+            <button
+                onClick={() => onPageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
                 className="px-2 py-1 text-sm bg-white border border-slate-300 rounded hover:bg-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 &raquo;
@@ -333,11 +336,10 @@ export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData
             {!hasSuggestions && pravachanCount > 0 && (
                 <button
                     onClick={() => setActiveTab('pravachan')}
-                    className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                        activeTab === 'pravachan'
-                            ? 'border-sky-500 text-sky-700'
-                            : 'border-transparent text-slate-900 hover:text-slate-900'
-                    }`}
+                    className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${activeTab === 'pravachan'
+                        ? 'border-sky-500 text-sky-700'
+                        : 'border-transparent text-slate-900 hover:text-slate-900'
+                        }`}
                 >
                     🎙️ Pravachan
                     <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeTab === 'pravachan' ? 'bg-sky-100 text-sky-600' : 'bg-neutral-200 text-slate-900'}`}>{pravachanCount}</span>
@@ -346,11 +348,10 @@ export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData
             {!hasSuggestions && granthCount > 0 && (
                 <button
                     onClick={() => setActiveTab('granth')}
-                    className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                        activeTab === 'granth'
-                            ? 'border-amber-500 text-amber-700'
-                            : 'border-transparent text-slate-900 hover:text-slate-900'
-                    }`}
+                    className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${activeTab === 'granth'
+                        ? 'border-amber-500 text-amber-700'
+                        : 'border-transparent text-slate-900 hover:text-slate-900'
+                        }`}
                 >
                     📜 Granth
                     <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeTab === 'granth' ? 'bg-amber-100 text-amber-600' : 'bg-neutral-200 text-slate-900'}`}>{granthCount}</span>
@@ -359,11 +360,10 @@ export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData
             {!hasSuggestions && booksCount > 0 && (
                 <button
                     onClick={() => setActiveTab('books')}
-                    className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                        activeTab === 'books'
-                            ? 'border-orange-500 text-orange-700'
-                            : 'border-transparent text-slate-900 hover:text-slate-900'
-                    }`}
+                    className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${activeTab === 'books'
+                        ? 'border-orange-500 text-orange-700'
+                        : 'border-transparent text-slate-900 hover:text-slate-900'
+                        }`}
                 >
                     📚 Books
                     <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeTab === 'books' ? 'bg-orange-100 text-orange-600' : 'bg-neutral-200 text-slate-900'}`}>{booksCount}</span>
@@ -372,11 +372,10 @@ export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData
             {similarDocumentsData && (
                 <button
                     onClick={() => setActiveTab('similar')}
-                    className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                        activeTab === 'similar'
-                            ? 'border-slate-500 text-slate-900'
-                            : 'border-transparent text-slate-900 hover:text-slate-900'
-                    }`}
+                    className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${activeTab === 'similar'
+                        ? 'border-slate-500 text-slate-900'
+                        : 'border-transparent text-slate-900 hover:text-slate-900'
+                        }`}
                 >
                     More Like This
                     <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeTab === 'similar' ? 'bg-neutral-200 text-slate-800' : 'bg-neutral-200 text-slate-900'}`}>{similarCount}</span>
@@ -440,12 +439,12 @@ export const SuggestionsCard = ({ suggestions, originalQuery, onSuggestionClick,
 
 export const SimilarSourceInfoCard = ({ sourceDoc }) => {
     if (!sourceDoc) return null;
-    
+
     const getHighlightedHTML = () => {
         const content = sourceDoc.content_snippet || '';
         return { __html: content.replace(/<em>/g, '<mark class="bg-sky-100 text-sky-900 px-1 rounded">').replace(/<\/em>/g, '</mark>') };
     };
-    
+
     return (
         <div className="bg-sky-50 border border-sky-200 p-3 rounded-lg mb-3 text-sky-800">
             <h3 className="font-semibold text-sm mb-1.5">Showing results similar to:</h3>
