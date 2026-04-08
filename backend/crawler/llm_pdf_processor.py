@@ -94,7 +94,7 @@ Preserve the order in which the text appears on the page. Output ONLY the JSON a
 
 # Retry settings for Gemini API rate limiting
 _MAX_RETRIES = 5
-_INITIAL_BACKOFF = 10  # seconds
+_INITIAL_BACKOFF = 2  # seconds
 
 
 class LLMPDFProcessor(PDFProcessor):

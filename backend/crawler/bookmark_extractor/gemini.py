@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import time
 from google import genai
 from google.genai import types
 from typing import List, Dict, Any, Optional
@@ -42,25 +43,32 @@ class GeminiBookmarkExtractor(BookmarkExtractor):
             + json.dumps(indexed_titles, ensure_ascii=False)
         )
 
-        try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=user_message,
-                config=types.GenerateContentConfig(
-                    system_instruction=self.system_prompt,
-                    response_mime_type="application/json",
-                ),
-            )
+        backoff = 2
+        for attempt in range(5):
+            try:
+                response = self.client.models.generate_content(
+                    model=self.model_name,
+                    contents=user_message,
+                    config=types.GenerateContentConfig(
+                        system_instruction=self.system_prompt,
+                        response_mime_type="application/json",
+                    ),
+                )
 
-            result = json.loads(response.text)
-            log_handle.info("Gemini returned %d items", len(result))
-            log_handle.info("Response: %s", result)
-            return result
+                result = json.loads(response.text)
+                log_handle.info("Gemini returned %d items", len(result))
+                log_handle.info("Response: %s", result)
+                return result
 
-        except json.JSONDecodeError as e:
-            log_handle.error("Failed to parse Gemini JSON response: %s", e)
-            log_handle.error("Raw response: %s", response.text if 'response' in locals() else 'N/A')
-            return None
-        except Exception as e:
-            log_handle.error("Gemini API call failed: %s", e)
-            return None
+            except json.JSONDecodeError as e:
+                log_handle.error("Failed to parse Gemini JSON response: %s", e)
+                log_handle.error("Raw response: %s", response.text if 'response' in locals() else 'N/A')
+                return None
+            except Exception as e:
+                if attempt < 4:
+                    log_handle.warning("Gemini API call failed (attempt %d): %s. Retrying in %ds...", attempt + 1, e, backoff)
+                    time.sleep(backoff)
+                    backoff *= 2
+                else:
+                    log_handle.error("Gemini API call failed after 5 attempts: %s", e)
+                    return None
