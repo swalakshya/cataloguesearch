@@ -178,8 +178,12 @@ search_index:
           space_type: cosinesimil
           engine: faiss
           parameters:
-            ef_construction: 256
-            m: 48
+            ef_construction: 128
+            m: 24
+            encoder:
+              name: sq
+              parameters:
+                type: fp16
 
 metadata_index:
   settings:
