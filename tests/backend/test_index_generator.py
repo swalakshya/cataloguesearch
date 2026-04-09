@@ -426,7 +426,7 @@ def query_by_pravachan_number(config, pravachan_num: str, max_results: int = 100
             "size": max_results,
             "query": {
                 "term": {
-                    "pravachan_number": pravachan_num
+                    "chunk_labels.pravachan_number": pravachan_num
                 }
             }
         }
@@ -463,7 +463,7 @@ def query_by_date_range(config, start_date: str, end_date: str, max_results: int
             "size": max_results,
             "query": {
                 "range": {
-                    "date": {
+                    "chunk_labels.date": {
                         "gte": start_date,
                         "lte": end_date
                     }
@@ -602,17 +602,16 @@ def validate_query_by_pravachan_number(config, pravachan_num, expected_filename,
 
     assert len(results) > 0, f"Expected results for pravachan_number '{pravachan_num}', got 0"
 
-    # Validate all results have correct pravachan_number
+    # Validate all results have correct chunk_labels.pravachan_number
     for doc in results:
         source = doc['_source']
-        assert 'pravachan_number' in source, f"Missing pravachan_number in document {doc['_id']}"
-        assert source['pravachan_number'] == pravachan_num, \
-            f"Expected pravachan_number '{pravachan_num}', got '{source['pravachan_number']}' in document {doc['_id']}"
+        chunk_labels = source.get('chunk_labels', {})
+        assert chunk_labels.get('pravachan_number') == pravachan_num, \
+            f"Expected chunk_labels.pravachan_number '{pravachan_num}', got '{chunk_labels.get('pravachan_number')}' in document {doc['_id']}"
 
         # Validate date field
-        assert 'date' in source, f"Missing date field in document {doc['_id']}"
-        assert source['date'] == expected_date, \
-            f"Expected date '{expected_date}' for pravachan_number '{pravachan_num}', got '{source['date']}'"
+        assert chunk_labels.get('date') == expected_date, \
+            f"Expected date '{expected_date}' for pravachan_number '{pravachan_num}', got '{chunk_labels.get('date')}'"
 
         # Validate filename
         assert source['original_filename'] == expected_filename, \
@@ -624,8 +623,8 @@ def validate_query_by_pravachan_number(config, pravachan_num, expected_filename,
             f"Expected page_number in {expected_pages} for pravachan '{pravachan_num}', got {page_num}"
 
         log_handle.info(
-            f"✓ Document {doc['_id']}: pravachan={source['pravachan_number']}, "
-            f"date={source['date']}, page={page_num}, file={source['original_filename']}"
+            f"✓ Document {doc['_id']}: pravachan={chunk_labels.get('pravachan_number')}, "
+            f"date={chunk_labels.get('date')}, page={page_num}, file={source['original_filename']}"
         )
 
     log_handle.info(f"✅ Pravachan number query validation passed for '{pravachan_num}': {len(results)} documents")
@@ -707,8 +706,8 @@ def validate_query_by_date_range(config, start_date, end_date, expected_files_pa
         results_by_file[filename].append(page_num)
 
         # Validate date is within range
-        doc_date = source.get('date')
-        assert doc_date, f"Missing date in document {doc['_id']}"
+        doc_date = source.get('chunk_labels', {}).get('date')
+        assert doc_date, f"Missing chunk_labels.date in document {doc['_id']}"
         assert start_date <= doc_date <= end_date, \
             f"Date '{doc_date}' is outside range '{start_date}' to '{end_date}' in document {doc['_id']}"
 
@@ -847,14 +846,16 @@ def validate_query_by_pravachan_number_multiple_docs(
 
         # Validate all documents have the correct pravachan_number
         for doc in docs:
-            assert doc['_source']['pravachan_number'] == pravachan_num, \
-                f"Document {doc['_id']} has pravachan_number " \
-                f"{doc['_source']['pravachan_number']}, expected {pravachan_num}"
+            chunk_labels = doc['_source'].get('chunk_labels', {})
+            assert chunk_labels.get('pravachan_number') == pravachan_num, \
+                f"Document {doc['_id']} has chunk_labels.pravachan_number " \
+                f"{chunk_labels.get('pravachan_number')}, expected {pravachan_num}"
 
         # Validate all documents have the correct date
         for doc in docs:
-            assert doc['_source']['date'] == expected_date, \
-                f"Document {doc['_id']} has date {doc['_source']['date']}, " \
+            chunk_labels = doc['_source'].get('chunk_labels', {})
+            assert chunk_labels.get('date') == expected_date, \
+                f"Document {doc['_id']} has chunk_labels.date {chunk_labels.get('date')}, " \
                 f"expected {expected_date}"
 
         # Validate page numbers

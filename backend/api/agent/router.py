@@ -97,9 +97,9 @@ def _chunk_from_hit(hit: Dict[str, Any], language: str) -> Dict[str, Any]:
         "author": _first_value(metadata, ["Author", "Tikakaar", "Teekakar", "Bhasha Vachanika"]),
         "anuyog": _first_value(metadata, ["Anuyog", "anuyog"]),
         "language": source.get("language", language),
-        "date": source.get("date"),
-        "pravachan_number": source.get("pravachan_number"),
-        "gatha": source.get("gatha"),
+        "date": source.get("chunk_labels", {}).get("date"),
+        "pravachan_number": source.get("chunk_labels", {}).get("pravachan_number"),
+        "gatha": source.get("chunk_labels", {}).get("gatha"),
         "page_number": source.get("page_number"),
         "file_url": metadata.get("file_url", ""),
         "score": score,
@@ -695,7 +695,7 @@ async def agent_get_pravachan(
                     "filter": [
                         {"term": {"metadata.category.keyword": "Pravachan"}},
                         {"term": {"metadata.Name.keyword": payload.granth}},
-                        {"term": {"pravachan_number": payload.pravachan_number}},
+                        {"term": {"chunk_labels.pravachan_number": payload.pravachan_number}},
                         {"term": {"language": payload.language}}
                     ]
                 }

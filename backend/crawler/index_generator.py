@@ -205,13 +205,15 @@ class IndexGenerator:
                     "_id": doc_id,
                     "doc": {
                         "metadata": metadata,
-                        "pravachan_number": pravachan_number,
-                        "date": date_iso,
-                        "gatha": pravachan_data.get('gatha'),
-                        "kalash": pravachan_data.get('kalash'),
-                        "shlok": pravachan_data.get('shlok'),
-                        "sutra": pravachan_data.get('sutra'),
-                        "doha": pravachan_data.get('doha'),
+                        "chunk_labels": {
+                            "pravachan_number": pravachan_number,
+                            "date": date_iso,
+                            "gatha": pravachan_data.get('gatha'),
+                            "kalash": pravachan_data.get('kalash'),
+                            "shlok": pravachan_data.get('shlok'),
+                            "sutra": pravachan_data.get('sutra'),
+                            "doha": pravachan_data.get('doha'),
+                        },
                         "timestamp_indexed": timestamp
                     }
                 }
@@ -260,13 +262,15 @@ class IndexGenerator:
                 "paragraph_id": i,
                 "embedding_text": self._prepare_embedding_text(para_text),
                 "metadata": metadata,
-                "pravachan_number": pravachan_number,
-                "date": date_iso,
-                "gatha": pravachan_data.get('gatha'),
-                "kalash": pravachan_data.get('kalash'),
-                "shlok": pravachan_data.get('shlok'),
-                "doha": pravachan_data.get('doha'),
-                "sutra": pravachan_data.get('sutra'),
+                "chunk_labels": {
+                    "pravachan_number": pravachan_number,
+                    "date": date_iso,
+                    "gatha": pravachan_data.get('gatha'),
+                    "kalash": pravachan_data.get('kalash'),
+                    "shlok": pravachan_data.get('shlok'),
+                    "doha": pravachan_data.get('doha'),
+                    "sutra": pravachan_data.get('sutra'),
+                },
                 "timestamp_indexed": timestamp,
             }
 

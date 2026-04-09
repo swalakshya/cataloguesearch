@@ -1007,7 +1007,7 @@ def test_api_year_filter_single_year_lexical(api_server):
     if data_no_filter["pravachan_results"]["total_hits"] > 0:
         # Log what dates are actually in the results
         for result in data_no_filter["pravachan_results"]["results"]:
-            date = result.get("date") or result.get("metadata", {}).get("date")
+            date = result.get("chunk_labels", {}).get("date")
             log_handle.info(f"Result without filter: file={result['filename']}, page={result.get('page_number')}, date={date}")
     else:
         log_handle.warning("No results found even WITHOUT year filter - the word may not be indexed")
@@ -1053,10 +1053,9 @@ def test_api_year_filter_single_year_lexical(api_server):
 
     # Validate all results have dates in 1985
     for result in data["pravachan_results"]["results"]:
-        # The date field should be at the root level of the result or in metadata
-        # Based on the implementation, it should be in metadata
-        date = result.get("date") or result.get("metadata", {}).get("date")
-        assert date is not None, f"Expected date field in result {result.get('document_id')}"
+        chunk_labels = result.get("chunk_labels", {})
+        date = chunk_labels.get("date")
+        assert date is not None, f"Expected chunk_labels.date in result {result.get('document_id')}"
 
         # Extract year from date (format: YYYY-MM-DD)
         year = date.split("-")[0]
@@ -1066,9 +1065,13 @@ def test_api_year_filter_single_year_lexical(api_server):
         assert "hampi_hindi.pdf" in result["filename"], \
             f"Expected result from hampi_hindi.pdf, got {result['filename']}"
 
-        log_handle.info(f"✓ Result: file={result['filename']}, page={result.get('page_number')}, date={date}")
+        # hampi_hindi has volume=3 set in its scan_config entry
+        assert result.get("metadata", {}).get("volume") == 3, \
+            f"Expected metadata.volume=3 for hampi_hindi result, got {result.get('metadata', {}).get('volume')}"
 
-    log_handle.info(f"✓ Year filter test (1985) passed - found {data['pravachan_results']['total_hits']} results, all from 1985")
+        log_handle.info(f"✓ Result: file={result['filename']}, page={result.get('page_number')}, date={date}, volume={result.get('metadata', {}).get('volume')}")
+
+    log_handle.info(f"✓ Year filter test (1985) passed - found {data['pravachan_results']['total_hits']} results, all from 1985 with volume=3")
 
 
 def test_api_year_filter_range_lexical(api_server):
@@ -1122,8 +1125,8 @@ def test_api_year_filter_range_lexical(api_server):
 
     # Validate all results have dates in 1986-1987
     for result in data["pravachan_results"]["results"]:
-        date = result.get("date") or result.get("metadata", {}).get("date")
-        assert date is not None, f"Expected date field in result {result.get('document_id')}"
+        date = result.get("chunk_labels", {}).get("date")
+        assert date is not None, f"Expected chunk_labels.date in result {result.get('document_id')}"
 
         # Extract year from date (format: YYYY-MM-DD)
         year = int(date.split("-")[0])
@@ -1199,7 +1202,7 @@ def test_api_series_date_filter(api_server):
     for result in results:
         log_handle.info(
             f"Result: file={result['filename']}, page={result.get('page_number')}, "
-            f"date={result.get('date')}, series_start={result.get('series_start_date')}, "
+            f"date={result.get('chunk_labels', {}).get('date')}, series_start={result.get('series_start_date')}, "
             f"series_end={result.get('series_end_date')}, Anuyog={result.get('metadata', {}).get('Anuyog')}")
 
         # Should be from spiritual files (which have series dates but no bookmark dates)
@@ -1207,8 +1210,8 @@ def test_api_series_date_filter(api_server):
             f"Expected spiritual Anuyog, got {result.get('metadata', {}).get('Anuyog')}"
 
         # Document date should be None (no bookmarks)
-        assert result.get('date') is None, \
-            f"Expected no document date (no bookmarks), got {result.get('date')}"
+        assert result.get('chunk_labels', {}).get('date') is None, \
+            f"Expected no document date (no bookmarks), got {result.get('chunk_labels', {}).get('date')}"
 
         # Should have series dates from config
         assert result.get('series_start_date') == '1975-01-01', \
@@ -1277,7 +1280,7 @@ def test_api_series_date_filter_exclude_bookmark_dates(api_server):
     for result in results:
         log_handle.info(
             f"Result: file={result['filename']}, page={result.get('page_number')}, "
-            f"date={result.get('date')}, series_start={result.get('series_start_date')}, "
+            f"date={result.get('chunk_labels', {}).get('date')}, series_start={result.get('series_start_date')}, "
             f"series_end={result.get('series_end_date')}")
 
         # Should be from thanjavur_gujarati
@@ -1291,8 +1294,8 @@ def test_api_series_date_filter_exclude_bookmark_dates(api_server):
             f"Expected series_end_date=1983-12-31, got {result.get('series_end_date')}"
 
         page_num = result.get('page_number')
-        if result.get('date'):
-            pages_with_dates.append((page_num, result.get('date')))
+        if result.get('chunk_labels', {}).get('date'):
+            pages_with_dates.append((page_num, result.get('chunk_labels', {}).get('date')))
         else:
             pages_without_dates.append(page_num)
 
@@ -1371,7 +1374,7 @@ def test_api_series_date_filter_include_bookmark_dates(api_server):
     for result in results:
         log_handle.info(
             f"Result: file={result['filename']}, page={result.get('page_number')}, "
-            f"date={result.get('date')}, series_start={result.get('series_start_date')}, "
+            f"date={result.get('chunk_labels', {}).get('date')}, series_start={result.get('series_start_date')}, "
             f"series_end={result.get('series_end_date')}")
 
         # Should be from thanjavur_gujarati
@@ -1385,8 +1388,9 @@ def test_api_series_date_filter_include_bookmark_dates(api_server):
             f"Expected series_end_date=1983-12-31, got {result.get('series_end_date')}"
 
         page_num = result.get('page_number')
-        if result.get('date'):
-            pages_with_dates[page_num] = result.get('date')
+        chunk_date = result.get('chunk_labels', {}).get('date')
+        if chunk_date:
+            pages_with_dates[page_num] = chunk_date
         else:
             pages_without_dates.append(page_num)
 

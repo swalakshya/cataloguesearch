@@ -114,6 +114,12 @@ search_index:
           name: nfkc_cf
 
   mappings:
+    dynamic_templates:
+      - chunk_label_strings:
+          path_match: "chunk_labels.*"
+          match_mapping_type: "string"
+          mapping:
+            type: keyword
     properties:
       document_id:
         type: keyword
@@ -147,25 +153,19 @@ search_index:
                 type: keyword
               name:
                 type: keyword
+          volume:
+            type: integer
       timestamp_indexed:
         type: date
       paragraph_id:
         type: keyword
-      pravachan_number:
-        type: keyword
-      date:
-        type: date
-        format: "yyyy-MM-dd||strict_date_optional_time||epoch_millis"
-      gatha:
-        type: keyword
-      kalash:
-        type: keyword
-      shlok:
-        type: keyword
-      sutra:
-        type: keyword
-      doha:
-        type: keyword
+      chunk_labels:
+        type: object
+        dynamic: true
+        properties:
+          date:
+            type: date
+            format: "yyyy-MM-dd||strict_date_optional_time||epoch_millis"
       verse_type:
         type: keyword
       verse_id:

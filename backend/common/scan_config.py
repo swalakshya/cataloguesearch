@@ -152,6 +152,8 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
         scan_meta["stop_words"].extend(file_config.get("stop_words", []))
         scan_meta["verses"].extend(file_config.get("verses", []))
         scan_meta["file_url"] = file_config.get("file_url", "")
+        if "volume" in file_config:
+            scan_meta["volume"] = file_config["volume"]
         if file_config.get("start_page") and file_config.get("end_page"):
             # Page numbers are typically file-specific.
             scan_meta["start_page"] = file_config.get("start_page", 1)

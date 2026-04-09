@@ -93,15 +93,15 @@ class IndexSearcher:
         date_exists_and_in_range = {
             "bool": {
                 "must": [
-                    {"exists": {"field": "date"}}
+                    {"exists": {"field": "chunk_labels.date"}}
                 ]
             }
         }
-        date_range_condition = {"range": {"date": {}}}
+        date_range_condition = {"range": {"chunk_labels.date": {}}}
         if search_start_date:
-            date_range_condition["range"]["date"]["gte"] = search_start_date
+            date_range_condition["range"]["chunk_labels.date"]["gte"] = search_start_date
         if search_end_date:
-            date_range_condition["range"]["date"]["lte"] = search_end_date
+            date_range_condition["range"]["chunk_labels.date"]["lte"] = search_end_date
         date_exists_and_in_range["bool"]["must"].append(date_range_condition)
         should_conditions.append(date_exists_and_in_range)
         log_handle.debug(f"Added document date filter (must exist and be in range): {search_start_date} to {search_end_date}")
@@ -111,7 +111,7 @@ class IndexSearcher:
         no_date_and_series_overlap = {
             "bool": {
                 "must": [
-                    {"bool": {"must_not": [{"exists": {"field": "date"}}]}}
+                    {"bool": {"must_not": [{"exists": {"field": "chunk_labels.date"}}]}}
                 ]
             }
         }
@@ -341,13 +341,7 @@ class IndexSearcher:
                 "score": float(score) if score is not None else 0.0,
                 "metadata": source.get(self._metadata_prefix, {}),
                 "file_url": metadata.get("file_url", ""),
-                "date": source.get('date'),
-                "pravachan_number": source.get('pravachan_number'),
-                "gatha": source.get('gatha'),
-                "kalash": source.get('kalash'),
-                "shlok": source.get('shlok'),
-                "doha": source.get('doha'),
-                "sutra": source.get('sutra'),
+                "chunk_labels": source.get('chunk_labels') or {},
                 "series_start_date": metadata.get('series_start_date'),
                 "series_end_date": metadata.get('series_end_date')
             }

@@ -110,8 +110,10 @@ class SingleFileProcessor:
         # Use common utility to get merged config
         config = get_merged_config(self._file_path, self._base_pdf_folder)
 
-        # Add file_url from scan_config if provided
+        # Add file_url and volume from scan_config if provided
         config["file_url"] = self._scan_config.get("file_url", "")
+        if "volume" in self._scan_config:
+            config["volume"] = self._scan_config["volume"]
 
         return config
 

@@ -170,10 +170,10 @@ class AdvancedPDFProcessor(PDFProcessor):
             page_data = {
                 "page_num": page_num,
                 "metadata": {
-                    "avg_left_margin": avg_left_margin,
-                    "avg_right_margin": avg_right_margin,
-                    "prose_left_margin": prose_left_margin,
-                    "prose_right_margin": prose_right_margin
+                    "avg_left_margin": float(avg_left_margin),
+                    "avg_right_margin": float(avg_right_margin),
+                    "prose_left_margin": float(prose_left_margin),
+                    "prose_right_margin": float(prose_right_margin)
                 },
                 "lines": [
                     {

@@ -18,11 +18,11 @@ export const formatGranthShareContent = (query, result, shareUrl) => {
 
     // Build location string from whichever of gatha/kalash/shlok are present
     const locationParts = [];
-    if (result?.gatha) locationParts.push(`Gatha ${result.gatha}`);
-    if (result?.kalash) locationParts.push(`Kalash ${result.kalash}`);
-    if (result?.shlok) locationParts.push(`Shlok ${result.shlok}`);
-    if (result?.sutra) locationParts.push(`Sutra ${result.sutra}`);
-    if (result?.doha) locationParts.push(`Doha ${result.doha}`);
+    if (result?.chunk_labels?.gatha) locationParts.push(`Gatha ${result.chunk_labels.gatha}`);
+    if (result?.chunk_labels?.kalash) locationParts.push(`Kalash ${result.chunk_labels.kalash}`);
+    if (result?.chunk_labels?.shlok) locationParts.push(`Shlok ${result.chunk_labels.shlok}`);
+    if (result?.chunk_labels?.sutra) locationParts.push(`Sutra ${result.chunk_labels.sutra}`);
+    if (result?.chunk_labels?.doha) locationParts.push(`Doha ${result.chunk_labels.doha}`);
     const locationInfo = locationParts.join(', ');
 
     return {

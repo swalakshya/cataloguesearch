@@ -292,7 +292,7 @@ def setup(copy_ocr_files=False, add_scan_config=False, add_bookmarks=True):
                     doc.close()
 
                     # Add to scan_config
-                    scan_config[filename_without_ext] = {
+                    entry = {
                         "start_page": 1,
                         "end_page": total_pages,
                         "header_regex": [
@@ -301,7 +301,7 @@ def setup(copy_ocr_files=False, add_scan_config=False, add_bookmarks=True):
                             "^निबंध.{0,15}$",
                             "^નિબંધ.{0,15}$",
                             "^.{0,15}ઉપર.{0,15}નિબંધ$",
-                            "^.{0,20}ઇતિહાસ.{0,8}લેખ$"
+                            "^.{0,20}ઇતિहास.{0,8}લેખ$"
                         ],
                         "crop": {
                             "top": 8,
@@ -310,6 +310,10 @@ def setup(copy_ocr_files=False, add_scan_config=False, add_bookmarks=True):
                             "right": 1
                         }
                     }
+                    # hampi_hindi is used to test volume field propagation
+                    if filename_without_ext == "hampi_hindi":
+                        entry["volume"] = 3
+                    scan_config[filename_without_ext] = entry
                     log_handle.info(f"Added {filename_without_ext} to scan_config: pages 1-{total_pages}")
 
                 except Exception as e:

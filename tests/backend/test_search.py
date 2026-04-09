@@ -518,10 +518,11 @@ def test_reindex_metadata_only():
 
         page = src.get('page_number')
         if page in page_numbers:
-            assert src.get('pravachan_number') == f"REINDEX_P{page}", \
-                f"pravachan_number wrong on chunk {chunk_id}"
-            assert src.get('date') == "1990-06-15", \
-                f"date not converted correctly on chunk {chunk_id}"
+            chunk_labels = src.get('chunk_labels', {})
+            assert chunk_labels.get('pravachan_number') == f"REINDEX_P{page}", \
+                f"chunk_labels.pravachan_number wrong on chunk {chunk_id}"
+            assert chunk_labels.get('date') == "1990-06-15", \
+                f"chunk_labels.date not converted correctly on chunk {chunk_id}"
 
     log_handle.info(
         f"✓ index_document(reindex_metadata_only=True) correctly updated {len(hits_after)} chunks"
