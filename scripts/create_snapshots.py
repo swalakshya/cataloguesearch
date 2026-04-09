@@ -224,6 +224,15 @@ def _detect_compressor() -> tuple[str, list[str]]:
     return "gzip", []
 
 
+def _validate_pv():
+    """Ensure pv (pipe viewer) is installed — required for transfer progress."""
+    if not shutil.which("pv"):
+        raise RuntimeError(
+            "❌ 'pv' (pipe viewer) is not installed. "
+            "Install it first: brew install pv  (macOS) or  apt install pv  (Linux)"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Confirmation prompt
 # ---------------------------------------------------------------------------
@@ -537,7 +546,7 @@ def step8_create_tarball(local_dir: Path) -> Path:
     log_handle.info("🔄 Step 8: Creating %s (compressor=%s)...", tarball_path.name, compressor)
 
     if compressor != "gzip":
-        # Pipe: tar -cf - | compressor > tarball
+        # Pipe: tar -cf - | pv | compressor > tarball
         # Using explicit pipe avoids GNU-tar-only flags — works on macOS BSD tar too.
         # COPYFILE_DISABLE=1 suppresses macOS resource-fork sidecar files (._*).
         tar_env = {**os.environ, "COPYFILE_DISABLE": "1"}
@@ -547,15 +556,22 @@ def step8_create_tarball(local_dir: Path) -> Path:
             stderr=subprocess.PIPE,
             env=tar_env,
         )
+        pv_proc = subprocess.Popen(
+            ["pv", "-pterb"],
+            stdin=tar_proc.stdout,
+            stdout=subprocess.PIPE,
+        )
+        tar_proc.stdout.close()
         with open(tarball_path, "wb") as out_f:
             comp_proc = subprocess.Popen(
                 [compressor] + comp_args,
-                stdin=tar_proc.stdout,
+                stdin=pv_proc.stdout,
                 stdout=out_f,
                 stderr=subprocess.PIPE,
             )
-            tar_proc.stdout.close()
+            pv_proc.stdout.close()
             _, comp_err = comp_proc.communicate()
+            pv_proc.wait()
             _, tar_err = tar_proc.communicate()
 
         if tar_proc.returncode != 0:
@@ -606,16 +622,24 @@ def step8_stream_to_remote(local_dir: Path, server: str, ssh_key: str | None, lo
         stderr=subprocess.PIPE,
         env=tar_env,
     )
-    # Stage 2: compress
-    comp_proc = subprocess.Popen(
-        [compressor] + comp_args,
+    # Stage 2: pv (progress monitor)
+    pv_proc = subprocess.Popen(
+        ["pv", "-pterb"],
         stdin=tar_proc.stdout,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
     )
     tar_proc.stdout.close()
 
-    # Stage 3: ssh (decompress + untar on remote)
+    # Stage 3: compress
+    comp_proc = subprocess.Popen(
+        [compressor] + comp_args,
+        stdin=pv_proc.stdout,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    pv_proc.stdout.close()
+
+    # Stage 4: ssh (decompress + untar on remote)
     ssh_proc = subprocess.Popen(
         ssh_base + [server, remote_cmd],
         stdin=comp_proc.stdout,
@@ -625,6 +649,7 @@ def step8_stream_to_remote(local_dir: Path, server: str, ssh_key: str | None, lo
 
     _, ssh_err  = ssh_proc.communicate()
     _, comp_err = comp_proc.communicate()
+    pv_proc.wait()
     _, tar_err  = tar_proc.communicate()
 
     if tar_proc.returncode != 0:
@@ -719,6 +744,7 @@ def main():
     local_dir, server, ssh_key, location = _parse_args()
 
     try:
+        _validate_pv()
         _validate_docker_socket()
         _validate_local_dir(local_dir)
         _confirm(local_dir, server, ssh_key, location)
