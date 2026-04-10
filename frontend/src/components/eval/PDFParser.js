@@ -536,6 +536,11 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                                 <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
                                 <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
                                 <option value="gemini-3-flash-preview">Gemini 3 Flash (Preview)</option>
+                                <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                                <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
+                                <option value="claude-opus-4-6">Claude Opus 4.6</option>
+                                <option value="gpt-4o-mini">GPT-4o Mini</option>
+                                <option value="gpt-4o">GPT-4o</option>
                             </select>
                         )}
                         <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">

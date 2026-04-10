@@ -16,6 +16,9 @@ import {
 } from '../../utils/directoryHandlers';
 import { usePDFJsViewer } from '../../hooks/usePDFJsViewer';
 import useArrowNavigation from '../../hooks/useArrowNavigation';
+import BlockAnnotator from './BlockAnnotator';
+import { BLOCK_TYPES } from './classifierConstants';
+
 
 const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
 
@@ -51,6 +54,12 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
 
     // PDF page rendering
     const [pdfPageDataUrl, setPdfPageDataUrl] = useState(null);
+    const [leftView, setLeftView] = useState('pdf'); // 'pdf' | 'json'
+
+    // JSON view — editable blocks
+    const [editableBlocks, setEditableBlocks] = useState([]);
+    const [originalTypes, setOriginalTypes] = useState([]);
+    const [jsonSaveStatus, setJsonSaveStatus] = useState(null);
 
     // Multi-page PDF mapping (null = single-page PDF, no cropping needed)
     const [pageMapping, setPageMapping] = useState(null);
@@ -325,6 +334,18 @@ Please select the SOURCE directory (${selection.sourcePath})`;
             const targetText = await readFileContent(targetDir, targetFileName);
             setTargetContent(targetText.startsWith('--- File not found') ? '' : targetText);
 
+            // Always load OCR JSON for the JSON view
+            const ocrJsonText = await readFileContent(sourceDir, fileName);
+            try {
+                const parsed = JSON.parse(ocrJsonText);
+                setEditableBlocks(parsed);
+                setOriginalTypes(parsed.map(b => b.type));
+            } catch {
+                setEditableBlocks([]);
+                setOriginalTypes([]);
+            }
+            setJsonSaveStatus(null);
+
             // Render PDF page if multi-page mapping exists or PDF.js doc is loaded
             if (pageMappingRef.current || pdfDoc) {
                 setSourceContent(''); // Clear source content when showing PDF
@@ -332,8 +353,7 @@ Please select the SOURCE directory (${selection.sourcePath})`;
             } else {
                 // Fallback: still read source content if PDF is not loaded
                 setPdfPageDataUrl(null); // Clear PDF preview when showing source
-                const sourceText = await readFileContent(sourceDir, fileName);
-                setSourceContent(sourceText);
+                setSourceContent(ocrJsonText);
             }
 
             // Update jump page number input
@@ -710,6 +730,9 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                             setCurrentIndex(-1);
                             setSourceContent('');
                             setTargetContent('');
+                            setEditableBlocks([]);
+                            setOriginalTypes([]);
+                            setJsonSaveStatus(null);
                             setError(null);
                             setPageMapping(null);
                             pageMappingRef.current = null;
@@ -742,16 +765,87 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                     {/* PDF Page Column */}
                     <div className="flex-1 p-4 border-r border-slate-200">
                         <div className="flex justify-between items-center mb-3">
-                            <h3 className="text-lg font-semibold text-slate-800">PDF Page</h3>
+                            <div className="flex items-center gap-1 border border-slate-200 rounded-md p-0.5">
+                                <button
+                                    onClick={() => setLeftView('pdf')}
+                                    className={`px-3 py-1 text-sm rounded transition-colors ${leftView === 'pdf' ? 'bg-slate-700 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                                >PDF Page</button>
+                                <button
+                                    onClick={() => setLeftView('json')}
+                                    className={`px-3 py-1 text-sm rounded transition-colors ${leftView === 'json' ? 'bg-slate-700 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                                >View JSON</button>
+                            </div>
                             <CopyPathButtons
                                 pdfPath={getPdfPath()}
                                 jsonPath={getJsonPath()}
                                 disabled={!selectedFolder || !basePaths}
                             />
                         </div>
-                        <div className="border border-slate-300 rounded-lg overflow-hidden" style={{ backgroundColor: 'var(--bg-surface)' }}>
+                        {leftView === 'json' && jsonSaveStatus && (
+                            <div className={`mt-2 px-3 py-2 rounded text-sm ${jsonSaveStatus.ok
+                                ? 'bg-green-50 border border-green-200 text-green-800'
+                                : 'bg-red-50 border border-red-200 text-red-800'}`}>
+                                {jsonSaveStatus.message}
+                            </div>
+                        )}
+                        {leftView === 'json' && editableBlocks.length > 0 && (() => {
+                            const editedCount = editableBlocks.filter((b, i) => b.type !== originalTypes[i]).length;
+                            return (
+                                <div className="flex items-center gap-2 mt-2">
+                                    <button
+                                        disabled={editedCount === 0}
+                                        onClick={async () => {
+                                            if (!window.confirm(`Save corrections for this page?`)) return;
+                                            setJsonSaveStatus(null);
+                                            try {
+                                                const fileHandle = await sourceHandle.getFileHandle(fileList[currentIndex]);
+                                                const writable = await fileHandle.createWritable();
+                                                await writable.write(JSON.stringify(editableBlocks, null, 2));
+                                                await writable.close();
+                                                setOriginalTypes(editableBlocks.map(b => b.type));
+                                                setJsonSaveStatus({ ok: true, message: 'Saved successfully.' });
+                                            } catch (err) {
+                                                setJsonSaveStatus({ ok: false, message: err.message });
+                                            }
+                                        }}
+                                        className="px-4 py-1.5 bg-green-600 text-white text-sm font-semibold rounded hover:bg-green-700 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed"
+                                    >
+                                        Save{editedCount > 0 ? ` (${editedCount} edited)` : ''}
+                                    </button>
+                                    {editedCount > 0 && (
+                                        <button
+                                            onClick={() => {
+                                                setEditableBlocks(prev => prev.map((b, i) => ({ ...b, type: originalTypes[i] })));
+                                                setJsonSaveStatus(null);
+                                            }}
+                                            className="px-3 py-1.5 text-sm text-slate-600 border border-slate-300 rounded hover:bg-slate-100 transition-colors"
+                                        >
+                                            Reset
+                                        </button>
+                                    )}
+                                </div>
+                            );
+                        })()}
+                        <div className="border border-slate-300 rounded-lg overflow-hidden mt-2" style={{ backgroundColor: 'var(--bg-surface)' }}>
                             <div className="p-4 max-h-[700px] overflow-y-auto flex justify-center">
-                                {pdfPageDataUrl ? (
+                                {leftView === 'json' ? (
+                                    editableBlocks.length > 0 ? (
+                                        <div className="w-full">
+                                            <BlockAnnotator
+                                                blocks={editableBlocks}
+                                                originalTypes={originalTypes}
+                                                blockTypes={BLOCK_TYPES}
+                                                onReclassify={(idx, newType) =>
+                                                    setEditableBlocks(prev => prev.map((b, i) =>
+                                                        i === idx ? { ...b, type: newType } : b
+                                                    ))
+                                                }
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="text-slate-500 text-center py-8 italic text-sm">No JSON available</div>
+                                    )
+                                ) : pdfPageDataUrl ? (
                                     <img
                                         src={pdfPageDataUrl}
                                         alt={`PDF Page ${jumpPageNumber}`}

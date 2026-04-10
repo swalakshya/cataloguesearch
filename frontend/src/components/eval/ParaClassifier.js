@@ -13,32 +13,9 @@ import BookmarksModal from '../BookmarksModal';
 import ShowBookmarksButton from '../ShowBookmarksButton';
 import { Spinner } from '../SharedComponents';
 import useArrowNavigation from '../../hooks/useArrowNavigation';
+import BlockAnnotator from './BlockAnnotator';
 
 const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
-
-// Coloured pill styles per type
-const TYPE_COLOURS = {
-    hindi_text:      'bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200',
-    sanskrit_text:   'bg-purple-100 text-purple-800 border-purple-300 hover:bg-purple-200',
-    prakrit_text:    'bg-indigo-100 text-indigo-800 border-indigo-300 hover:bg-indigo-200',
-    hindi_verse:     'bg-green-100 text-green-800 border-green-300 hover:bg-green-200',
-    sanskrit_verse:  'bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200',
-    prakrit_verse:   'bg-teal-100 text-teal-800 border-teal-300 hover:bg-teal-200',
-    footnote:        'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200',
-    chapter_heading: 'bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-200',
-};
-
-// Two-letter abbreviations shown for non-selected types
-const TYPE_ABBR = {
-    hindi_text:      'HT',
-    sanskrit_text:   'ST',
-    prakrit_text:    'PT',
-    hindi_verse:     'HV',
-    sanskrit_verse:  'SV',
-    prakrit_verse:   'PV',
-    footnote:        'FN',
-    chapter_heading: 'CH',
-};
 
 // ─── tiny helpers ─────────────────────────────────────────────────────────────
 
@@ -397,72 +374,13 @@ const ParaClassifier = ({ selectedFile }) => {
                             </div>
                         )}
 
-                        {!blocksLoading && !blocksError && blocks.length === 0 && (
-                            <div className="text-slate-400 text-sm text-center py-12">
-                                No blocks found for this page.
-                            </div>
-                        )}
-
-                        {!blocksLoading && !blocksError && blocks.length > 0 && (
-                            <div className="space-y-3 overflow-y-auto max-h-[720px] pr-1">
-                                {blocks.map((block, idx) => {
-                                    const isEdited = block.type !== originalTypes[idx];
-                                    const originalType = originalTypes[idx];
-                                    return (
-                                        <div
-                                            key={idx}
-                                            className={`rounded-lg p-3 border ${
-                                                isEdited
-                                                    ? 'border-slate-200 border-l-4 border-l-amber-400'
-                                                    : 'border-slate-200'
-                                            }`}
-                                            style={{ backgroundColor: 'var(--bg-surface)' }}
-                                        >
-                                            <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap font-mono mb-2">
-                                                {block.text}
-                                            </p>
-                                            {/* Type selector row */}
-                                            <div className="flex flex-wrap items-center gap-1 pt-1 border-t border-slate-200">
-                                                {/* 1. Current type — always first, full text + colour */}
-                                                <button
-                                                    onClick={() => reclassify(idx, block.type)}
-                                                    title={block.type}
-                                                    className={`px-2 py-0.5 text-xs border rounded-full transition-colors font-semibold ring-1 ring-offset-1 ring-current ${
-                                                        TYPE_COLOURS[block.type] || 'bg-slate-100 text-slate-700 border-slate-300'
-                                                    }`}
-                                                >
-                                                    {block.type}
-                                                </button>
-
-                                                {/* 2. Original type — grey, full text, only when edited; click to restore */}
-                                                {isEdited && (
-                                                    <button
-                                                        onClick={() => reclassify(idx, originalType)}
-                                                        title={`Restore: ${originalType}`}
-                                                        className="px-2 py-0.5 text-xs border rounded-full bg-slate-100 text-slate-400 border-slate-300 hover:bg-slate-200 transition-colors"
-                                                    >
-                                                        {originalType}
-                                                    </button>
-                                                )}
-
-                                                {/* 3. Remaining types as initials, excluding current */}
-                                                {blockTypes.filter(t => t !== block.type).map(t => (
-                                                    <button
-                                                        key={t}
-                                                        onClick={() => reclassify(idx, t)}
-                                                        title={t}
-                                                        className={`px-2 py-0.5 text-xs border rounded-full transition-colors ${
-                                                            TYPE_COLOURS[t] || 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
-                                                        }`}
-                                                    >
-                                                        {TYPE_ABBR[t] || t}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                        {!blocksLoading && !blocksError && (
+                            <BlockAnnotator
+                                blocks={blocks}
+                                originalTypes={originalTypes}
+                                blockTypes={blockTypes}
+                                onReclassify={reclassify}
+                            />
                         )}
                     </div>
                 </div>

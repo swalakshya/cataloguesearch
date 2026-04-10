@@ -355,6 +355,11 @@ export const searchableGranths = [
     author: "Pandit Banarasidas",
     status: "searchable"
   },
+  {
+    name: "Harivansh Puran",
+    author: "Acharya Jinsen",
+    status: "searchable"
+  },
 ];
 
 /**

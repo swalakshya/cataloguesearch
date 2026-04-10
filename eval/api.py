@@ -32,7 +32,8 @@ from backend.common.utils import get_merged_config
 from backend.crawler.index_state import IndexState
 from backend.crawler.bookmark_extractor.factory import create_bookmark_extractor_by_name
 from backend.utils import json_dumps
-from backend.crawler.llm_pdf_processor import extract_indic_text, BLOCK_TYPES
+from backend.crawler.llm_pdf_processor import BLOCK_TYPES
+from eval.multi_llm import extract_indic_text_any, ALLOWED_MODELS as LLM_ALLOWED_MODELS
 from backend.crawler.paragraph_generator.advanced import AdvancedParagraphGenerator
 from backend.crawler.paragraph_generator.language_meta import get_language_meta
 from .ocr import get_ocr_service
@@ -845,9 +846,8 @@ async def process_scripture_llm(
     if not (0 <= crop_top <= 50 and 0 <= crop_bottom <= 50 and 0 <= crop_left <= 50 and 0 <= crop_right <= 50):
         raise HTTPException(status_code=400, detail="Crop percentages must be between 0 and 50")
 
-    allowed_models = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-3-flash-preview"]
-    if model_name not in allowed_models:
-        raise HTTPException(status_code=400, detail=f"Model must be one of: {allowed_models}")
+    if model_name not in LLM_ALLOWED_MODELS:
+        raise HTTPException(status_code=400, detail=f"Model must be one of: {LLM_ALLOWED_MODELS}")
 
     temp_path = None
 
@@ -900,7 +900,7 @@ async def process_scripture_llm(
 
         # Call LLM extractor
         log_handle.info(f"Calling LLM extractor: model={model_name}, language={language}")
-        blocks = extract_indic_text(pil_image, model_name=model_name)
+        blocks = extract_indic_text_any(pil_image, model_name)
 
         return ScriptureLLMResponse(
             blocks=[ScriptureLLMTextBlock(**b) for b in blocks],

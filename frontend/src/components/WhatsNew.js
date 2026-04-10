@@ -26,6 +26,15 @@ const WhatsNew = () => {
 
     const updates = [
         {
+            date: "April 10, 2026",
+            newFeatures: [
+                "None"
+            ],
+            newContent: [
+                "Granths: Harivansh Puran by Acharya Jinsen",
+            ]
+        },
+        {
             date: "April 7, 2026",
             newFeatures: [
                 "None"
