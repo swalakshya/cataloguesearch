@@ -533,9 +533,9 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                         {mode === 'llm' && (
                             <select value={modelName} onChange={(e) => setModelName(e.target.value)}
                                 className="text-xs px-2 py-1 border border-slate-300 rounded-md focus:outline-none focus:ring-sky-500 focus:border-sky-500">
-                                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
                                 <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
                                 <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                                <option value="gemini-3-flash-preview">Gemini 3 Flash (Preview)</option>
                             </select>
                         )}
                         <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">

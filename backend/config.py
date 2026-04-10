@@ -143,6 +143,8 @@ class Config:
             return self._settings.get("crawler", {}).get("ocr_engine", "tesseract")
         elif name == "DEFAULT_LLM_MODEL":
             return self._settings.get("crawler", {}).get("default_llm_model", "gemini-2.5-flash")
+        elif name == "SECONDARY_LLM_MODEL":
+            return self._settings.get("crawler", {}).get("secondary_llm_model", None)
         elif name == "LLM_WORKERS":
             return self._settings.get("crawler", {}).get("llm_workers", 2)
         else:

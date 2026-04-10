@@ -7,6 +7,7 @@ crawler:
   bookmark_extractor_llm: "gemini"
   ocr_engine: "tesseract"
   default_llm_model: "gemini-2.5-flash"
+  secondary_llm_model: "gemini-3-flash-preview"
   llm_workers: 6
 
 index:

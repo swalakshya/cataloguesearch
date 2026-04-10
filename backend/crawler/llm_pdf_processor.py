@@ -109,6 +109,7 @@ class LLMPDFProcessor(PDFProcessor):
     def __init__(self, config, llm_model: str = None, llm_workers: int = None):
         super().__init__(config)
         self._llm_model = llm_model or config.DEFAULT_LLM_MODEL
+        self._fallback_model = config.SECONDARY_LLM_MODEL
         self._llm_workers = llm_workers or config.LLM_WORKERS
 
     def get_output_file_extension(self) -> str:
@@ -186,7 +187,7 @@ class LLMPDFProcessor(PDFProcessor):
 
         with ThreadPoolExecutor(max_workers=llm_workers) as executor:
             future_to_page = {
-                executor.submit(self._process_single_page_llm, page_num, image, llm_model): page_num
+                executor.submit(self._process_single_page_llm, page_num, image, llm_model, self._fallback_model): page_num
                 for page_num, image in tasks
             }
 
@@ -194,11 +195,11 @@ class LLMPDFProcessor(PDFProcessor):
                 page_num = future_to_page[future]
                 try:
                     page_num, blocks = future.result()
-                    if blocks:
-                        self._write_output_to_file(output_ocr_dir, [(page_num, blocks)])
-                        results.append((page_num, blocks))
+                    if blocks is None:
+                        failed_pages.append(page_num)
                     else:
-                        log_handle.info(f"Page {page_num}: returned empty blocks (blank page), marking as success")
+                        if not blocks:
+                            log_handle.info(f"Page {page_num}: empty blocks (blank page), marking as success")
                         self._write_output_to_file(output_ocr_dir, [(page_num, blocks)])
                         results.append((page_num, blocks))
                 except Exception as e:
@@ -213,17 +214,21 @@ class LLMPDFProcessor(PDFProcessor):
         return results, failed_pages
 
     @staticmethod
-    def _process_single_page_llm(page_num: int, image, llm_model: str) -> tuple[int, list]:
+    def _try_single_model(image, model_name: str, num_tries: int = _MAX_RETRIES) -> list | None:
         """
-        Calls Gemini to extract and categorise text from a single page image.
-        Retries with exponential backoff on 429 rate limit errors.
+        Attempts to extract text blocks from a page image using a single model.
+        Retries with exponential backoff up to num_tries times.
+
+        Returns:
+            list of blocks on success (may be empty for blank pages),
+            None on total failure.
         """
         backoff = _INITIAL_BACKOFF
 
-        for attempt in range(_MAX_RETRIES):
+        for attempt in range(num_tries):
             try:
                 response = _get_gemini_client().models.generate_content(
-                    model=llm_model,
+                    model=model_name,
                     contents=[PROMPT, image],
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json"
@@ -232,32 +237,51 @@ class LLMPDFProcessor(PDFProcessor):
                 raw = response.text
                 if raw is None:
                     raise ValueError("Gemini returned None response text (possible safety block or transient error)")
-                blocks = json.loads(raw)
-                log_handle.info(
-                    f"Page {page_num}: extracted {len(blocks)} blocks "
-                    f"(attempt {attempt + 1})"
-                )
-                return page_num, blocks
+                return json.loads(raw)
 
             except Exception as e:
                 error_str = str(e)
+                if "404" in error_str:
+                    log_handle.warning(f"Model {model_name} not found (404), giving up on this model.")
+                    return None
                 is_rate_limit = "429" in error_str or "quota" in error_str.lower()
-
-                if attempt < _MAX_RETRIES - 1:
+                if attempt < num_tries - 1:
                     log_handle.warning(
-                        f"Page {page_num}: {'rate limited' if is_rate_limit else 'transient error'} "
+                        f"Model {model_name}: {'rate limited' if is_rate_limit else 'transient error'} "
                         f"(attempt {attempt + 1}): {e}. Retrying in {backoff}s..."
                     )
                     time.sleep(backoff)
                     backoff *= 2
                 else:
-                    log_handle.error(
-                        f"Page {page_num}: failed after {attempt + 1} attempts: {e}"
-                    )
+                    log_handle.error(f"Model {model_name}: failed after {attempt + 1} attempts: {e}")
                     traceback.print_exc()
-                    return page_num, []
 
-        return page_num, []
+        return None
+
+    @staticmethod
+    def _process_single_page_llm(
+            page_num: int, image, llm_model: str, fallback_model: str = None
+    ) -> tuple[int, list]:
+        """
+        Calls Gemini to extract and categorise text from a single page image.
+        Falls back to fallback_model if the primary model fails entirely.
+        """
+        blocks = LLMPDFProcessor._try_single_model(image, llm_model)
+        if blocks is not None:
+            log_handle.info(f"Page {page_num}: extracted {len(blocks)} blocks via {llm_model}")
+            return page_num, blocks
+
+        if fallback_model:
+            log_handle.warning(
+                f"Page {page_num}: primary model {llm_model} failed, switching to {fallback_model}"
+            )
+            blocks = LLMPDFProcessor._try_single_model(image, fallback_model)
+            if blocks is not None:
+                log_handle.info(f"Page {page_num}: extracted {len(blocks)} blocks via {fallback_model}")
+                return page_num, blocks
+
+        log_handle.error(f"Page {page_num}: all models failed, skipping.")
+        return page_num, None
 
     def _write_output_to_file(self, output_ocr_dir: str, paragraphs: list[tuple[int, list]]):
         """
