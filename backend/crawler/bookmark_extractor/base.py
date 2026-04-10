@@ -15,6 +15,7 @@ class BookmarkExtractor(ABC):
     """
 
     def __init__(self):
+        self._fallback_extractor = None
         self.system_prompt = """
 You are a data extraction assistant. Extract the Pravachan Number, Date, Gatha, Kalash, and Shlok from bookmark titles.
 
@@ -107,6 +108,14 @@ Return ONLY the JSON array, nothing else.
 
             # Call LLM for this batch
             extracted_data = self.call_llm(batch)
+
+            if not extracted_data:
+                if self._fallback_extractor:
+                    log_handle.warning(
+                        "Primary LLM failed for batch %s/%s, trying fallback extractor",
+                        batch_num + 1, total_batches
+                    )
+                    extracted_data = self._fallback_extractor.call_llm(batch)
 
             if not extracted_data:
                 log_handle.error("Failed to extract data from LLM for batch %s/%s", batch_num + 1, total_batches)

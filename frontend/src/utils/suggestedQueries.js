@@ -1,9 +1,9 @@
 /**
  * Suggested search queries shown on the home page before any search is made.
- * 5 are picked at random on each page load.
+ * 5 are picked at random on each page load / language switch.
  * Add as many as you like — one per line.
  */
-const SUGGESTED_QUERIES = [
+const SUGGESTED_QUERIES_HINDI = [
     'ज्ञान और राग कैसे भिन्न है?',
     'आत्मानुभूति का उपाय क्या है?',
     'आचार्य कुन्दकुन्द कौन थे?',
@@ -21,10 +21,29 @@ const SUGGESTED_QUERIES = [
     'विकल्प और विचार में क्या अन्तर है?'
 ];
 
+const SUGGESTED_QUERIES_GUJARATI = [
+    'આત્માનુભૂતિનો ઉપાય શું છે?',
+    'જ્ઞાન અને રાગ કેવી રીતે ભિન્ન છે?',
+    'સાચો ધર્મ શું છે?',
+    'મોક્ષમાર્ગ શું છે?',
+    'સમયસારની મહિમા શું છે?',
+    'નિશ્ચય અને વ્યવહાર નયમાં શું ફરક છે?',
+    'આચાર્ય કુન્દકુન્દ કોણ હતા?',
+    'સાચું સુખ શું છે?',
+    'શ્રદ્ધા અને જ્ઞાનમાં શું ફરક છે?',
+    'ચારિત્ર શું છે?',
+    'કર્મ અને આત્માનો સંબંધ શું છે?',
+    'સ્વભાવ અને વિભાવ શું છે?',
+    'જૈન ધર્મ શું છે?',
+    'દયા, દાન, પૂજા ધર્મ કેમ નથી?',
+    'પરમાત્મા કોને કહેવાય?'
+];
+
 /**
- * Returns `count` queries picked at random (without repetition).
+ * Returns `count` queries picked at random (without repetition) for the given language.
  */
-export const getRandomSuggestedQueries = (count = 5) => {
-    const shuffled = [...SUGGESTED_QUERIES].sort(() => Math.random() - 0.5);
+export const getRandomSuggestedQueriesByLanguage = (language = 'hindi', count = 5) => {
+    const pool = language === 'gujarati' ? SUGGESTED_QUERIES_GUJARATI : SUGGESTED_QUERIES_HINDI;
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, count);
 };

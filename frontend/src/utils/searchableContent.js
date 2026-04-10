@@ -183,6 +183,12 @@ export const searchableContent = [
     count: null,
     hindi: "searchable",
     gujarati: null
+  },
+  {
+    granth: "Chhah Dhala",
+    count: 50,
+    hindi: "searchable",
+    gujarati: null
   }
 ];
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { GoogleReCaptchaProvider } from 'react-google-recaptcha-v3';
 
@@ -19,7 +19,7 @@ import { Spinner, ChevronUpIcon, ChevronDownIcon, ExpandIcon, PdfIcon } from './
 
 // Import API service
 import { api } from './services/api';
-import { getRandomSuggestedQueries } from './utils/suggestedQueries';
+import { getRandomSuggestedQueriesByLanguage } from './utils/suggestedQueries';
 
 // --- TIPS MODAL COMPONENT ---
 const TipsModal = ({ onClose }) => {
@@ -242,7 +242,7 @@ const AppContent = () => {
     const [metadata, setMetadata] = useState({});
     const [searchData, setSearchData] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
-    const [suggestedQueries] = useState(() => getRandomSuggestedQueries(5));
+    const suggestedQueries = useMemo(() => getRandomSuggestedQueriesByLanguage(language, 5), [language]);
     const [compact, setCompact] = useState(() => localStorage.getItem('resultDensity') === 'compact');
     const toggleCompact = () => setCompact(v => { const next = !v; localStorage.setItem('resultDensity', next ? 'compact' : 'comfortable'); return next; });
     const [activeTab, setActiveTab] = useState('pravachan');

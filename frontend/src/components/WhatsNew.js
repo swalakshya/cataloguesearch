@@ -32,6 +32,7 @@ const WhatsNew = () => {
             ],
             newContent: [
                 "Granths: Harivansh Puran by Acharya Jinsen",
+                "Pravachans: Chhah Dhala by Pandit Daulat Ram (50 Pravachans, Hindi)",
             ]
         },
         {

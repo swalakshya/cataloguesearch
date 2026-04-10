@@ -47,18 +47,28 @@ def create_bookmark_extractor_by_name(llm_type: str, model: str = None) -> Bookm
 
 def create_bookmark_extractor(config: Config) -> BookmarkExtractor:
     """
-    Factory function to create the appropriate BookmarkExtractor based on BOOKMARK_EXTRACTOR_LLM config.
+    Factory function to create the appropriate BookmarkExtractor based on config.
+
+    Primary extractor is always Gemini (using DEFAULT_LLM_MODEL).
+    Falls back to the extractor defined by BOOKMARK_EXTRACTOR_LLM if Gemini fails.
 
     Args:
         config: Configuration object
 
     Returns:
-        BookmarkExtractor instance (OllamaBookmarkExtractor)
-        based on BOOKMARK_EXTRACTOR_LLM config
-
-    Raises:
-        ValueError: If the configured LLM is not supported
+        GeminiBookmarkExtractor with a fallback extractor wired up
     """
-    llm_type = config.BOOKMARK_EXTRACTOR_LLM
-    log_handle.info(f"Creating bookmark extractor from config: {llm_type}")
-    return create_bookmark_extractor_by_name(llm_type)
+    gemini_model = config.DEFAULT_LLM_MODEL or "gemini-2.5-flash"
+    fallback_llm_type = config.BOOKMARK_EXTRACTOR_LLM
+
+    log_handle.info(
+        "Creating bookmark extractor: primary=gemini(%s), fallback=%s",
+        gemini_model, fallback_llm_type
+    )
+
+    primary = GeminiBookmarkExtractor(model=gemini_model)
+
+    if fallback_llm_type:
+        primary._fallback_extractor = create_bookmark_extractor_by_name(fallback_llm_type)
+
+    return primary
