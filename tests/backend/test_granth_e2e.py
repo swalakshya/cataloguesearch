@@ -30,7 +30,7 @@ from backend.crawler.index_generator import IndexGenerator
 from backend.crawler.index_state import IndexState
 from backend.search.index_searcher import IndexSearcher
 from tests.backend.base import *   # brings in module-scoped autouse `initialise` fixture
-from tests.backend.common import write_config_file
+from tests.backend.common import write_config_file, consume_sse
 
 # ── paths ─────────────────────────────────────────────────────────────────────
 _DATA_DIR  = os.path.join(os.path.dirname(__file__), "../data/granth")
@@ -675,7 +675,7 @@ class TestGranthSearchAPI:
             json=_granth_payload("पानी हवा और धूप"),
         )
         assert r.status_code == 200
-        data = r.json()
+        data = consume_sse(r)
         for key in ("pravachan_results", "granth_results"):
             assert key in data
             for subkey in ("results", "total_hits", "page_size", "page_number"):
@@ -687,7 +687,7 @@ class TestGranthSearchAPI:
             json=_granth_payload("पानी हवा और धूप", exact_match=True),
         )
         assert r.status_code == 200
-        data = r.json()
+        data = consume_sse(r)
         assert data["granth_results"]["total_hits"] > 0
 
     def test_granth_disabled_returns_zero(self, api_server):
@@ -696,7 +696,7 @@ class TestGranthSearchAPI:
             json=_granth_payload("पानी हवा और धूप", granth_enabled=False),
         )
         assert r.status_code == 200
-        data = r.json()
+        data = consume_sse(r)
         assert data["granth_results"]["total_hits"] == 0
 
     def test_verse_text_found_via_api(self, api_server):
@@ -706,7 +706,7 @@ class TestGranthSearchAPI:
             json=_granth_payload("जल है तो कल है", exact_match=True),
         )
         assert r.status_code == 200
-        data = r.json()
+        data = consume_sse(r)
         assert data["granth_results"]["total_hits"] > 0
 
     def test_beta_sec_a_content_via_api(self, api_server):
@@ -716,7 +716,7 @@ class TestGranthSearchAPI:
             json=_granth_payload("बादलों का अध्ययन", exact_match=True),
         )
         assert r.status_code == 200
-        data = r.json()
+        data = consume_sse(r)
         assert data["granth_results"]["total_hits"] > 0
 
     def test_beta_sec_b_content_via_api(self, api_server):
@@ -726,7 +726,7 @@ class TestGranthSearchAPI:
             json=_granth_payload("प्रकाश की गति", exact_match=True),
         )
         assert r.status_code == 200
-        data = r.json()
+        data = consume_sse(r)
         assert data["granth_results"]["total_hits"] > 0
 
     def test_pravachan_search_returns_nothing(self, api_server):
@@ -745,7 +745,7 @@ class TestGranthSearchAPI:
         }
         r = requests.post(f"{api_server}/api/search", json=payload)
         assert r.status_code == 200
-        data = r.json()
+        data = consume_sse(r)
         assert data["pravachan_results"]["total_hits"] == 0
 
     def test_granth_vector_search_returns_results(self, api_server):
@@ -756,5 +756,5 @@ class TestGranthSearchAPI:
             json=_granth_payload("पानी हवा और धूप", exact_match=False),
         )
         assert r.status_code == 200
-        data = r.json()
+        data = consume_sse(r)
         assert data["granth_results"]["total_hits"] > 0

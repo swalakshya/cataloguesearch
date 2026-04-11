@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 import shutil
@@ -100,6 +101,42 @@ class APIServerManager:
                 log_handle.warning("API server thread did not stop gracefully")
         self.server_thread = None
         self.stop_event = None
+
+def consume_sse(response):
+    """
+    Consume a Server-Sent Events response from /api/search and reconstruct
+    the dict that the old JSON endpoint used to return.
+
+    Works with both streaming and non-streaming requests.Response objects.
+    """
+    _empty = lambda: {"results": [], "total_hits": 0, "page_size": 20, "page_number": 1}
+    CAT_KEY = {"Pravachan": "pravachan_results", "Granth": "granth_results", "Books": "books_results"}
+    result = {
+        "pravachan_results": _empty(),
+        "granth_results": _empty(),
+        "books_results": _empty(),
+        "suggestions": [],
+    }
+    for line in response.iter_lines(decode_unicode=True):
+        if not line or not line.startswith("data: "):
+            continue
+        try:
+            payload = json.loads(line[6:])
+        except json.JSONDecodeError:
+            continue
+        if payload.get("type") == "category":
+            key = CAT_KEY.get(payload["category"])
+            if key:
+                result[key] = {
+                    "results": payload.get("results", []),
+                    "total_hits": payload.get("total_hits", 0),
+                    "page_size": payload.get("page_size", 20),
+                    "page_number": payload.get("page_number", 1),
+                }
+        elif payload.get("type") == "done":
+            result["suggestions"] = payload.get("suggestions", [])
+    return result
+
 
 def write_config_file(file_name, config_data):
     """

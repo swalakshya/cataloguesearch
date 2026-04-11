@@ -81,8 +81,8 @@ class TestStructuralIntegrity:
     """Overall count and ordering sanity checks."""
 
     def test_total_paragraph_count(self, paragraphs):
-        """5 pages of hand-crafted data produce exactly 11 final paragraphs."""
-        assert len(paragraphs) == 11
+        """5 pages of hand-crafted data produce exactly 10 final paragraphs."""
+        assert len(paragraphs) == 10
 
     def test_no_empty_paragraphs(self, paragraphs):
         assert all(p.strip() for p in paragraphs)
@@ -330,9 +330,9 @@ class TestQABlock:
         """
         qa_para = next((p for p in paragraphs if "अज्ञान ही मनुष्य का सबसे" in p), None)
         assert qa_para is not None
-        # The IS_INDENTED prose fragment is a separate paragraph, not pulled into QA
+        # The IS_INDENTED prose fragment is NOT merged into the QA block.
+        # It is 3 words ("बड़ा शत्रु है।") so is_indexable filters it from output.
         assert "बड़ा शत्रु है" not in qa_para
-        assert any("बड़ा शत्रु है" in p for p in paragraphs)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -368,9 +368,9 @@ class TestHeaderRegexPattern:
                 "avg_right_margin": 1000,
             },
             "lines": [
-                {"line_num": 0, "text": "पहली पंक्ति।", "x_start": 100, "x_end": 400},
+                {"line_num": 0, "text": "पहली पंक्ति में यह महत्वपूर्ण विषय है।", "x_start": 100, "x_end": 400},
                 {"line_num": 1, "text": "अध्याय 2", "x_start": 100, "x_end": 400},
-                {"line_num": 2, "text": "दूसरी पंक्ति।", "x_start": 100, "x_end": 400},
+                {"line_num": 2, "text": "दूसरी पंक्ति में भी महत्वपूर्ण विषय है।", "x_start": 100, "x_end": 400},
             ],
         }
         language_meta = get_language_meta("hi", scan_config)
@@ -378,8 +378,8 @@ class TestHeaderRegexPattern:
         result = [text for _, text in gen.generate_paragraphs([page_data], scan_config)]
 
         assert not any("अध्याय 2" in p for p in result)
-        assert any("पहली पंक्ति" in p for p in result)
-        assert any("दूसरी पंक्ति" in p for p in result)
+        assert any("पहली पंक्ति में यह महत्वपूर्ण" in p for p in result)
+        assert any("दूसरी पंक्ति में भी महत्वपूर्ण" in p for p in result)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -396,8 +396,8 @@ class TestEmptyPage:
     """
 
     def test_empty_page_does_not_add_paragraphs(self, paragraphs):
-        """Total count is unchanged (11) even though 6 pages are loaded."""
-        assert len(paragraphs) == 11
+        """Total count is unchanged (10) even though 6 pages are loaded."""
+        assert len(paragraphs) == 10
 
 
 class TestPhase3ProseCombining:

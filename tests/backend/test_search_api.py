@@ -5,6 +5,7 @@ from backend.common import embedding_models
 from backend.common.opensearch import get_opensearch_client
 from backend.search.index_searcher import IndexSearcher
 from tests.backend.base import *
+from tests.backend.common import consume_sse
 
 log_handle = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ def test_api_search_endpoint(api_server):
     )
 
     assert response.status_code == 200
-    data = response.json()
+    data = consume_sse(response)
 
     # Check response structure
     validate_result_schema(data, True)
@@ -224,7 +225,7 @@ def test_books_category_excluded(api_server):
             json=search_payload,
         )
         assert search_r.status_code == 200
-        data = search_r.json()
+        data = consume_sse(search_r)
         all_results = (
             data["pravachan_results"]["results"] +
             data["granth_results"]["results"]
@@ -284,7 +285,7 @@ def test_api_exact_phrase_search(api_server):
         )
 
         assert response.status_code == 200
-        data = response.json()
+        data = consume_sse(response)
         log_handle.info(f"response: {json_dumps(data, truncate_fields=['vector_embedding'])}")
         validate_result_schema(data, True)
 
@@ -327,7 +328,7 @@ def test_api_exclude_words(api_server):
     )
 
     assert response.status_code == 200
-    data = response.json()
+    data = consume_sse(response)
     log_handle.info(f"Regular search response: {json_dumps(data, truncate_fields=['vector_embedding'])}")
 
     # Check response structure
@@ -365,7 +366,7 @@ def test_api_exclude_words(api_server):
     )
 
     assert response.status_code == 200
-    data = response.json()
+    data = consume_sse(response)
     log_handle.info(f"Exclude words search response: {json_dumps(data, truncate_fields=['vector_embedding'])}")
 
     # Check response structure
@@ -408,7 +409,7 @@ def test_api_context_endpoint(api_server):
     )
 
     assert search_response.status_code == 200
-    search_data = search_response.json()
+    search_data = consume_sse(search_response)
 
     if search_data["pravachan_results"]["total_hits"] > 0:
         # Get chunk_id from first result
@@ -462,7 +463,7 @@ def test_is_lexical_query(api_server):
     )
 
     assert response_1.status_code == 200
-    data_1 = response_1.json()
+    data_1 = consume_sse(response_1)
     log_handle.info(f"Response for 'इंदौर का इतिहास': {json_dumps(data_1, truncate_fields=['vector_embedding'])}")
 
     # Validate response structure for lexical search
@@ -506,9 +507,9 @@ def test_is_lexical_query(api_server):
         f"http://{api_server.host}:{api_server.port}/api/search",
         json=search_payload_2
     )
-    data_2 = response_2.json()
-
     assert response_2.status_code == 200
+    data_2 = consume_sse(response_2)
+
     log_handle.info(f"Response for 'इंदौर का इतिहास?': {json_dumps(data_2, truncate_fields=['vector_embedding'])}")
 
     # Validate response structure for vector search
@@ -546,7 +547,7 @@ def test_is_lexical_query(api_server):
     )
 
     assert response_3.status_code == 200
-    data_3 = response_3.json()
+    data_3 = consume_sse(response_3)
     log_handle.info(f"Response for 'સોનગઢ ઇતિહાસ': {json_dumps(data_3, truncate_fields=['vector_embedding'])}")
 
     # Validate response structure for lexical search
@@ -584,7 +585,7 @@ def test_is_lexical_query(api_server):
     )
 
     assert response_4.status_code == 200
-    data_4 = response_4.json()
+    data_4 = consume_sse(response_4)
     log_handle.info(f"Response for 'સોનગઢનો ઇતિહાસ?': {json_dumps(data_4, truncate_fields=['vector_embedding'])}")
 
     # Validate response structure for vector search
@@ -622,7 +623,7 @@ def test_is_lexical_query(api_server):
     )
 
     assert response_5.status_code == 200
-    data_5 = response_5.json()
+    data_5 = consume_sse(response_5)
     log_handle.info(f"Response for 'हंपी के बारे में कुछ बताइए': {json_dumps(data_5, truncate_fields=['vector_embedding'])}")
 
     # Validate response structure for vector search
@@ -678,7 +679,7 @@ def test_api_spell_suggestion_search(api_server):
         )
 
         assert response_1.status_code == 200
-        data_1 = response_1.json()
+        data_1 = consume_sse(response_1)
         log_handle.info(f"Response for '{test_case['misspelled_query']}': {json_dumps(data_1, truncate_fields=['vector_embedding'])}")
 
         # Should have no results but contain suggestions
@@ -718,7 +719,7 @@ def test_api_spell_suggestion_search(api_server):
         )
 
         assert response_2.status_code == 200
-        data_2 = response_2.json()
+        data_2 = consume_sse(response_2)
         log_handle.info(f"Response for '{test_case['expected_suggestion']}': {json_dumps(data_2, truncate_fields=['vector_embedding'])}")
 
         # Should have results for the correctly spelled word
@@ -784,7 +785,7 @@ def test_get_context(api_server):
         )
 
         assert search_response.status_code == 200
-        search_data = search_response.json()
+        search_data = consume_sse(search_response)
         log_handle.info(f"Search response for '{test_case['query']}': {json_dumps(search_data, truncate_fields=['vector_embedding'])}")
 
         # Validate we have search results
@@ -877,7 +878,7 @@ def test_get_similar_documents(api_server):
         )
 
         assert search_response.status_code == 200
-        search_data = search_response.json()
+        search_data = consume_sse(search_response)
         log_handle.info(f"Search response for '{test_case['query']}': {json_dumps(search_data, truncate_fields=['vector_embedding'])}")
 
         # Validate we have enough search results to get the second one
@@ -1000,7 +1001,7 @@ def test_api_year_filter_single_year_lexical(api_server):
     )
 
     assert response_no_filter.status_code == 200
-    data_no_filter = response_no_filter.json()
+    data_no_filter = consume_sse(response_no_filter)
     log_handle.info(f"Search WITHOUT year filter response: {json_dumps(data_no_filter, truncate_fields=['vector_embedding'])}")
 
     # Check if we have any results without year filter
@@ -1042,7 +1043,7 @@ def test_api_year_filter_single_year_lexical(api_server):
     )
 
     assert response.status_code == 200
-    data = response.json()
+    data = consume_sse(response)
     log_handle.info(f"Year filter (1985) response: {json_dumps(data, truncate_fields=['vector_embedding'])}")
 
     # Validate response structure
@@ -1110,7 +1111,7 @@ def test_api_year_filter_range_lexical(api_server):
     )
 
     assert response.status_code == 200
-    data = response.json()
+    data = consume_sse(response)
     log_handle.info(f"Year filter (1986-1987) response: {json_dumps(data, truncate_fields=['vector_embedding'])}")
 
     # Validate response structure
@@ -1191,7 +1192,7 @@ def test_api_series_date_filter(api_server):
     )
     assert response.status_code == 200, f"API returned status {response.status_code}: {response.text}"
 
-    data = response.json()
+    data = consume_sse(response)
     assert data["pravachan_results"]["total_hits"] > 0, \
         "Expected to find results via series date filtering"
 
@@ -1264,7 +1265,7 @@ def test_api_series_date_filter_exclude_bookmark_dates(api_server):
     )
     assert response.status_code == 200, f"API returned status {response.status_code}: {response.text}"
 
-    data = response.json()
+    data = consume_sse(response)
 
     # Should find results via series date overlap
     assert data["pravachan_results"]["total_hits"] > 0, \
@@ -1358,7 +1359,7 @@ def test_api_series_date_filter_include_bookmark_dates(api_server):
     )
     assert response.status_code == 200, f"API returned status {response.status_code}: {response.text}"
 
-    data = response.json()
+    data = consume_sse(response)
 
     # Should find results
     assert data["pravachan_results"]["total_hits"] > 0, \
