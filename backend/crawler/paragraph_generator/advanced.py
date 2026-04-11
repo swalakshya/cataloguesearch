@@ -7,6 +7,7 @@ from enum import Enum, auto
 from typing import List, Set, Optional, Tuple
 
 from backend.crawler.paragraph_generator.base import BaseParagraphGenerator, ParaInfo
+from backend.crawler.paragraph_generator.filters import is_indexable
 from backend.crawler.paragraph_generator.language_meta import LanguageMeta
 from backend.crawler.paragraph_generator.sizer import split_long_para, ABSOLUTE_TERM_RE
 
@@ -363,7 +364,12 @@ class AdvancedParagraphGenerator(BaseParagraphGenerator):
         else:
             phase4 = phase3
 
-        return [(p.page_num, p.text) for p in phase4]
+        result = [(p.page_num, p.text) for p in phase4 if is_indexable(p.text)]
+        log_handle.debug(
+            "AdvancedParagraphGenerator: %d (phase4) → %d (indexable) paragraphs",
+            len(phase4), len(result)
+        )
+        return result
 
     def _phase1_lines_to_typed_paragraphs(
             self, pages_data: list[dict],

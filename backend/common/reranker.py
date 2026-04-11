@@ -17,7 +17,7 @@ class ONNXReranker:
         log_handle.info("Reranker model loaded successfully.")
 
     def predict(self, sentence_pairs: list[list[str]], batch_size: int = 4,
-                timeout_seconds: int = 40):
+                max_length: int = 1500, timeout_seconds: int = 40):
         """Reranks a list of sentence pairs and returns their scores."""
         start_time = time.time()
         all_scores = []
@@ -38,7 +38,7 @@ class ONNXReranker:
                     padding=True,
                     truncation=True,
                     return_tensors="pt",
-                    max_length=1500,
+                    max_length=max_length,
                 )
                 outputs = self.model(**inputs)
                 batch_scores = torch.sigmoid(outputs.logits.squeeze()).cpu().numpy()

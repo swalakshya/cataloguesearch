@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { MenuIcon, CloseIcon } from './SharedComponents';
 
 // --- NAVIGATION & HEADER COMPONENTS ---
-export const Navigation = ({ currentPage, setCurrentPage }) => {
+export const Navigation = ({ currentPage, setCurrentPage, debugMode }) => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const location = useLocation();
 
@@ -14,7 +14,8 @@ export const Navigation = ({ currentPage, setCurrentPage }) => {
         { id: 'usage-guide', label: 'Usage Guide', showSearch: false, path: '/usage-guide' },
         { id: 'whats-new', label: 'What\'s New?', showSearch: false, path: '/whats-new' },
         { id: 'developer', label: 'Developer APIs', showSearch: false, path: '/developer' },
-        { id: 'feedback', label: 'Feedback', showSearch: false, path: '/feedback' }
+        { id: 'feedback', label: 'Feedback', showSearch: false, path: '/feedback' },
+        ...(debugMode ? [{ id: 'admin', label: '⚙ Admin', showSearch: false, path: '/admin' }] : []),
     ];
 
     const handleMenuClick = (itemId) => {

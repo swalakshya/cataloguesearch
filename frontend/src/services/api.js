@@ -210,5 +210,49 @@ export const api = {
         } catch {
             return false;
         }
-    }
+    },
+
+    // --- Admin API ---
+    adminAuth: async (keyHash) => {
+        const response = await fetch(`${API_BASE_URL}/admin/auth`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key_hash: keyHash }),
+        });
+        if (!response.ok) throw new Error('Invalid key');
+        return await response.json(); // { token }
+    },
+
+    getAdminConfig: async (token) => {
+        const response = await fetch(`${API_BASE_URL}/admin/config`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Unauthorized');
+        return await response.json(); // { defaults, overrides, effective }
+    },
+
+    updateAdminConfig: async (token, updates) => {
+        const response = await fetch(`${API_BASE_URL}/admin/config`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify(updates),
+        });
+        if (!response.ok) throw new Error('Failed to update config');
+        return await response.json();
+    },
+
+    resetAdminConfig: async (token, key = null) => {
+        const url = key
+            ? `${API_BASE_URL}/admin/config/${key}`
+            : `${API_BASE_URL}/admin/config`;
+        const response = await fetch(url, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Failed to reset config');
+        return await response.json();
+    },
 };

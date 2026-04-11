@@ -7,6 +7,7 @@ from opensearchpy.exceptions import NotFoundError, TransportError
 from pydantic import BaseModel, Field
 
 from backend.common.opensearch import get_metadata, get_opensearch_client
+from backend.search.result_ranker import ResultRanker
 from backend.utils import JSONResponse
 
 log_handle = logging.getLogger(__name__)
@@ -319,13 +320,87 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
         embedding_model = request.app.state.embedding_model
         client = get_opensearch_client(config)
 
-        is_lexical = index_searcher.is_lexical_query(payload.query)
+        search_mode = config.SEARCH_MODE
+        is_lexical = (
+            index_searcher.is_lexical_query(payload.query)
+            if search_mode == "auto"
+            else (search_mode == "lexical")
+        )
         filters = _build_filters(payload)
 
         text_field = _get_text_field(payload.language)
         from_ = (payload.page - 1) * payload.page_size
 
-        log_handle.debug("agent_search mode=%s", "lexical" if is_lexical else "vector")
+        log_handle.debug("agent_search mode=%s", search_mode)
+
+        # --- RRF mode ---
+        if search_mode == "rrf":
+            query_embedding = embedding_model.get_embedding(payload.query)
+            if not query_embedding:
+                log_handle.warning("agent_search RRF produced empty embedding; returning empty results")
+                return JSONResponse(content=[], status_code=200)
+
+            oversample = config.RERANK_OVERSAMPLE
+
+            # BM25 leg
+            bm25_body = {
+                "query": {
+                    "bool": {
+                        "must": [{"match": {text_field: {"query": payload.query, "operator": "and"}}}],
+                        "filter": filters,
+                    }
+                }
+            }
+            bm25_response = client.search(
+                index=config.OPENSEARCH_INDEX_NAME,
+                body=bm25_body,
+                size=oversample,
+                from_=0,
+            )
+            bm25_hits = bm25_response.get("hits", {}).get("hits", [])
+
+            # kNN leg
+            knn_query: Dict[str, Any] = {"vector_embedding": {"vector": query_embedding, "k": oversample}}
+            if filters:
+                knn_query["vector_embedding"]["filter"] = {"bool": {"filter": filters}}
+            knn_response = client.search(
+                index=config.OPENSEARCH_INDEX_NAME,
+                body={"size": oversample, "query": {"knn": knn_query}},
+                size=oversample,
+                from_=0,
+            )
+            knn_hits = knn_response.get("hits", {}).get("hits", [])
+
+            # Convert to RRF-compatible dicts (document_id = chunk _id for dedup)
+            def _hits_to_rrf(hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+                return [{"document_id": h["_id"], "score": h.get("_score") or 0.0, "_hit": h} for h in hits]
+
+            fused = ResultRanker.rrf_rank(_hits_to_rrf(bm25_hits), _hits_to_rrf(knn_hits))
+            log_handle.info("agent_search RRF bm25=%s knn=%s fused=%s", len(bm25_hits), len(knn_hits), len(fused))
+
+            if payload.rerank and index_searcher._reranker and fused:
+                sentence_pairs = [
+                    [payload.query, (item["_hit"].get("_source", {}).get(text_field, ""))[:1000]]
+                    for item in fused
+                ]
+                try:
+                    rerank_scores = index_searcher._reranker.predict(
+                        sentence_pairs,
+                        batch_size=config.RERANK_BATCH_SIZE,
+                        max_length=config.RERANK_MAX_LENGTH,
+                    )
+                    for item, score in zip(fused, rerank_scores):
+                        item["rerank_score"] = float(score)
+                    fused.sort(key=lambda x: x.get("rerank_score", 0.0), reverse=True)
+                except Exception as rerank_exc:
+                    log_handle.exception("agent_search RRF reranking failed; using RRF order: %s", rerank_exc)
+
+            paginated = fused[from_:from_ + payload.page_size]
+            results = [_chunk_from_hit(item["_hit"], payload.language) for item in paginated]
+            _shorten_results(results, request.app.state.shortener_store, request.app.state.shortener_base_url)
+            return JSONResponse(content=results, status_code=200)
+
+        # --- Lexical mode ---
         if is_lexical:
             query_body = {
                 "query": {
@@ -347,18 +422,14 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
             _shorten_results(results, request.app.state.shortener_store, request.app.state.shortener_base_url)
             return JSONResponse(content=results, status_code=200)
 
+        # --- Vector mode ---
         query_embedding = embedding_model.get_embedding(payload.query)
         if not query_embedding:
             log_handle.warning("agent_search produced empty embedding; returning empty results")
             return JSONResponse(content=[], status_code=200)
 
-        initial_fetch_size = 40 if payload.rerank else payload.page_size
-        knn_query: Dict[str, Any] = {
-            "vector_embedding": {
-                "vector": query_embedding,
-                "k": initial_fetch_size
-            }
-        }
+        initial_fetch_size = config.RERANK_OVERSAMPLE if payload.rerank else payload.page_size
+        knn_query = {"vector_embedding": {"vector": query_embedding, "k": initial_fetch_size}}
         if filters:
             knn_query["vector_embedding"]["filter"] = {"bool": {"filter": filters}}
 
@@ -386,7 +457,11 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
             sentence_pairs.append([payload.query, truncated_text])
 
         try:
-            rerank_scores = index_searcher._reranker.predict(sentence_pairs)
+            rerank_scores = index_searcher._reranker.predict(
+                sentence_pairs,
+                batch_size=config.RERANK_BATCH_SIZE,
+                max_length=config.RERANK_MAX_LENGTH,
+            )
         except Exception as rerank_exc:
             log_handle.exception("agent_search reranking failed; returning unreranked results: %s", rerank_exc)
             paginated = hits[from_:from_ + payload.page_size]

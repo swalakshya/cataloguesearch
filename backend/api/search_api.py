@@ -19,6 +19,7 @@ from backend.api.feedback_api import router as feedback_router
 from backend.api.agent.router import router as agent_router
 from backend.api.agent.app import agent_app
 from backend.api.url.router import router as url_router
+from backend.api.admin_api import router as admin_router
 from backend.shortener.core import ShortenerStore
 from backend.shortener.opensearch_loader import fetch_file_urls
 
@@ -48,6 +49,9 @@ async def lifespan(app: FastAPI):
 
     config_path = os.environ.get("CONFIG_PATH", "configs/config.yaml")
     config = Config(config_path)
+    overrides_path = os.path.join(os.path.dirname(config_path), "overrides.json")
+    config.load_overrides(overrides_path)
+    app.state.overrides_path = overrides_path
     app.state.config = config
     log_handle.info("Configuration loaded.")
 
@@ -127,6 +131,7 @@ app.add_middleware(
 app.include_router(feedback_router, prefix="/api")
 app.include_router(agent_router, prefix="/api/agent")
 app.include_router(url_router)
+app.include_router(admin_router, prefix="/api")
 
 # --- Mount Agent sub-app (public OpenAPI surface) ---
 app.mount("/agent", agent_app)
@@ -209,7 +214,12 @@ async def get_app_config(request: Request):
     config = request.app.state.config
     return JSONResponse(content={
         "debug_mode": config.DEBUG_MODE,
-        "active_categories": config.ACTIVE_CATEGORIES
+        "active_categories": config.ACTIVE_CATEGORIES,
+        "page_size_pravachan": config.PAGE_SIZE_PRAVACHAN,
+        "page_size_granth": config.PAGE_SIZE_GRANTH,
+        "page_size_books": config.PAGE_SIZE_BOOKS,
+        "enable_reranking": config.ENABLE_RERANKING,
+        "effective_mode": config.SEARCH_MODE,
     }, status_code=200)
 
 class SearchRequest(BaseModel):
@@ -218,6 +228,7 @@ class SearchRequest(BaseModel):
     """
     query: str = Field(..., example="Bangalore city history")
     language: str = Field(..., description="Language of the query.", example="hindi")
+    text_search: bool = Field(False, description="Force keyword/BM25 search instead of semantic (vector) search.")
     exact_match: bool = Field(False, description="Use exact phrase matching instead of regular match.")
     exclude_words: List[str] = Field([], description="List of words to exclude from search results.")
     categories: Dict[str, List[str]] = Field({}, example={"author": ["John Doe"], "category": ["Pravachan"]})
@@ -273,6 +284,7 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
     embedding_model = request.app.state.embedding_model
 
     keywords = request_data.query
+    text_search = request_data.text_search
     exact_match = request_data.exact_match
     exclude_words = request_data.exclude_words
     categories = request_data.categories
@@ -282,9 +294,31 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
     start_year = request_data.start_year
     end_year = request_data.end_year
 
-    active_categories = request.app.state.config.ACTIVE_CATEGORIES
+    config = request.app.state.config
+    active_categories = config.ACTIVE_CATEGORIES
+    # Union: default active categories + any category explicitly enabled in the request.
+    # This ensures explicit API requests for e.g. Books are honoured even if Books is
+    # not in the default active_categories list.
+    all_search_cats = list(
+        dict.fromkeys(
+            active_categories +
+            [c for c, cfg in search_types.items() if cfg.get("enabled", False)]
+        )
+    )
+
     has_advanced_options = exact_match or (exclude_words and len(exclude_words) > 0)
-    is_lexical_query = (index_searcher.is_lexical_query(keywords) or has_advanced_options)
+    # text_search from the request overrides the admin-configured search mode
+    effective_mode = "lexical" if text_search else config.SEARCH_MODE
+    if effective_mode == "lexical":
+        is_lexical_query = True
+    elif effective_mode == "vector":
+        is_lexical_query = False
+    elif effective_mode == "rrf":
+        is_lexical_query = None  # handled separately below
+    else:  # "auto"
+        is_lexical_query = (index_searcher.is_lexical_query(keywords) or has_advanced_options)
+
+    rerank_oversample = config.RERANK_OVERSAMPLE
 
     try:
         # Start timing for metrics
@@ -305,8 +339,37 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
         # Collect results per active category
         category_results = {}  # cat -> (results, total_hits)
 
-        if is_lexical_query:
-            for cat in active_categories:
+        if effective_mode == "rrf":
+            query_embedding = embedding_model.get_embedding(keywords)
+            if not query_embedding:
+                log_handle.warning("Could not generate embedding for RRF query. All categories skipped.")
+                for cat in all_search_cats:
+                    category_results[cat] = ([], 0)
+            else:
+                for cat in all_search_cats:
+                    cat_config = search_types.get(cat, {})
+                    if not cat_config.get("enabled", False):
+                        category_results[cat] = ([], 0)
+                        continue
+                    results, hits = index_searcher.perform_rrf_search(
+                        category=cat,
+                        keywords=keywords,
+                        exact_match=exact_match,
+                        exclude_words=exclude_words,
+                        categories=_filter_categories_for(cat, categories),
+                        embedding=query_embedding,
+                        detected_language=language,
+                        page_size=cat_config.get("page_size", 20),
+                        page_number=cat_config.get("page_number", 1),
+                        oversample=rerank_oversample,
+                        rerank=enable_reranking,
+                        start_year=start_year,
+                        end_year=end_year,
+                    )
+                    log_handle.info(f"{cat} RRF search returned {len(results)} results (total: {hits}).")
+                    category_results[cat] = (results, hits)
+        elif is_lexical_query:
+            for cat in all_search_cats:
                 cat_config = search_types.get(cat, {})
                 if not cat_config.get("enabled", False):
                     category_results[cat] = ([], 0)
@@ -329,10 +392,10 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
             query_embedding = embedding_model.get_embedding(keywords)
             if not query_embedding:
                 log_handle.warning("Could not generate embedding for query. Vector search skipped.")
-                for cat in active_categories:
+                for cat in all_search_cats:
                     category_results[cat] = ([], 0)
             else:
-                for cat in active_categories:
+                for cat in all_search_cats:
                     cat_config = search_types.get(cat, {})
                     if not cat_config.get("enabled", False):
                         category_results[cat] = ([], 0)
@@ -345,7 +408,7 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
                         page_number=cat_config.get("page_number", 1),
                         language=language,
                         rerank=enable_reranking,
-                        rerank_top_k=cat_config.get("page_size", 20),
+                        rerank_top_k=rerank_oversample,
                         start_year=start_year,
                         end_year=end_year
                     )
@@ -383,7 +446,7 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
 
         # Calculate latency and log metrics
         latency_ms = round((time.time() - start_time) * 1000, 2)
-        search_type = "lexical" if is_lexical_query else "vector"
+        search_type = effective_mode if effective_mode in ("lexical", "vector", "rrf") else ("lexical" if is_lexical_query else "vector")
         escaped_query = keywords.replace(',', ';').replace('"', "'").replace('\n', ' ').replace('\r', '')
         escaped_categories = str(categories).replace(',', ';').replace('"', "'")
         pravachan_cfg = search_types.get("Pravachan", {})

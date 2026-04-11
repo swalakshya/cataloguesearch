@@ -1,13 +1,30 @@
 # config.py
+import json
 import os
 import re
 import sys
 
 import yaml
 
+# Keys exposed in the admin UI and their hardcoded defaults.
+# These are the values used when neither config.yaml nor overrides.json supply them.
+ADMIN_PARAM_DEFAULTS = {
+    "rerank_batch_size":    4,
+    "rerank_max_length":    1500,
+    "rerank_oversample":    40,
+    "ef_search":            128,
+    "search_mode":          "auto",   # "auto" | "lexical" | "vector"
+    "page_size_pravachan":  20,
+    "page_size_granth":     10,
+    "page_size_books":      20,
+    "spelling_min_score":   0.6,
+    "enable_reranking":     True,
+}
+
 class Config:
     _instance = None
     _settings = {}
+    _overrides = {}  # admin overrides loaded from overrides.json
 
     def __new__(cls, config_file_path: str = None):
         if cls._instance is None:
@@ -126,9 +143,31 @@ class Config:
         elif name == "DEBUG_MODE":
             return os.environ.get("DEBUG", "").lower() == "true"
         elif name == "ACTIVE_CATEGORIES":
+            if "active_categories" in self._overrides:
+                return self._overrides["active_categories"]
             if os.environ.get("DEBUG", "").lower() == "true":
                 return ["Pravachan", "Granth", "Books"]
             return self._settings.get("search", {}).get("active_categories", ["Pravachan", "Granth"])
+        elif name == "RERANK_BATCH_SIZE":
+            return self._overrides.get("rerank_batch_size", ADMIN_PARAM_DEFAULTS["rerank_batch_size"])
+        elif name == "RERANK_MAX_LENGTH":
+            return self._overrides.get("rerank_max_length", ADMIN_PARAM_DEFAULTS["rerank_max_length"])
+        elif name == "RERANK_OVERSAMPLE":
+            return self._overrides.get("rerank_oversample", ADMIN_PARAM_DEFAULTS["rerank_oversample"])
+        elif name == "EF_SEARCH":
+            return self._overrides.get("ef_search", ADMIN_PARAM_DEFAULTS["ef_search"])
+        elif name == "SEARCH_MODE":
+            return self._overrides.get("search_mode", ADMIN_PARAM_DEFAULTS["search_mode"])
+        elif name == "PAGE_SIZE_PRAVACHAN":
+            return self._overrides.get("page_size_pravachan", ADMIN_PARAM_DEFAULTS["page_size_pravachan"])
+        elif name == "PAGE_SIZE_GRANTH":
+            return self._overrides.get("page_size_granth", ADMIN_PARAM_DEFAULTS["page_size_granth"])
+        elif name == "PAGE_SIZE_BOOKS":
+            return self._overrides.get("page_size_books", ADMIN_PARAM_DEFAULTS["page_size_books"])
+        elif name == "SPELLING_MIN_SCORE":
+            return self._overrides.get("spelling_min_score", ADMIN_PARAM_DEFAULTS["spelling_min_score"])
+        elif name == "ENABLE_RERANKING":
+            return self._overrides.get("enable_reranking", ADMIN_PARAM_DEFAULTS["enable_reranking"])
         elif name == "TRANSLITERATION_API_URL":
             return self._settings.get("transliteration", {}).get("api_url", "http://localhost:8001")
         elif name == "TRANSLITERATION_DEFAULT_LANGUAGE":
@@ -150,6 +189,47 @@ class Config:
         else:
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
+    # ------------------------------------------------------------------
+    # Admin override helpers
+    # ------------------------------------------------------------------
+
+    def load_overrides(self, overrides_path: str):
+        """Load admin overrides from JSON file. Call at startup."""
+        if os.path.exists(overrides_path):
+            with open(overrides_path, "r", encoding="utf-8") as fh:
+                self._overrides = json.load(fh)
+            print(f"Loaded admin overrides from {overrides_path}: {self._overrides}")
+        else:
+            self._overrides = {}
+
+    def update_overrides(self, overrides_path: str, updates: dict):
+        """Merge updates into overrides and persist."""
+        self._overrides.update(updates)
+        self._write_overrides(overrides_path)
+
+    def reset_overrides(self, overrides_path: str, key: str = None):
+        """Remove one key or all overrides and persist."""
+        if key:
+            self._overrides.pop(key, None)
+        else:
+            self._overrides = {}
+        self._write_overrides(overrides_path)
+
+    def _write_overrides(self, overrides_path: str):
+        with open(overrides_path, "w", encoding="utf-8") as fh:
+            json.dump(self._overrides, fh, indent=2, ensure_ascii=False)
+
+    def get_defaults(self) -> dict:
+        """Return admin param defaults (from ADMIN_PARAM_DEFAULTS + config.yaml active_categories)."""
+        defaults = dict(ADMIN_PARAM_DEFAULTS)
+        if os.environ.get("DEBUG", "").lower() == "true":
+            defaults["active_categories"] = ["Pravachan", "Granth", "Books"]
+        else:
+            defaults["active_categories"] = self._settings.get(
+                "search", {}
+            ).get("active_categories", ["Pravachan", "Granth"])
+        return defaults
+
     def settings(self):
         """Returns the raw dictionary of loaded settings."""
         return self._settings
@@ -161,3 +241,4 @@ class Config:
         """
         cls._instance = None
         cls._settings = {}
+        cls._overrides = {}

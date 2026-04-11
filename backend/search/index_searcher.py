@@ -9,6 +9,7 @@ from opensearchpy import NotFoundError
 
 from backend.common.opensearch import get_opensearch_config, get_opensearch_client
 from backend.common.embedding_models import get_embedding_model_factory
+from backend.search.result_ranker import ResultRanker
 from backend.utils import json_dumps
 
 log_handle = logging.getLogger(__name__)
@@ -252,7 +253,8 @@ class IndexSearcher:
         knn_query = {
             self._vector_field: {
                 "vector": embedding,
-                "k": size
+                "k": size,
+                "method_parameters": {"ef_search": self._config.EF_SEARCH},
             }
         }
 
@@ -429,6 +431,87 @@ class IndexSearcher:
             detected_language, page_size, page_number, start_year, end_year
         )
 
+    def perform_rrf_search(
+            self, category: str, keywords: str, exact_match: bool,
+            exclude_words: List[str], categories: Dict[str, List[str]],
+            embedding: List[float], detected_language: str,
+            page_size: int, page_number: int,
+            oversample: int = 40, rerank: bool = True,
+            start_year: int | None = None, end_year: int | None = None,
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """
+        Reciprocal Rank Fusion search: runs BM25 and raw kNN in parallel,
+        fuses the ranked lists with RRF, then optionally reranks the top results
+        with the cross-encoder before paginating.
+
+        Args:
+            category:          Category name used to build the category filter (e.g. "Pravachan").
+            embedding:         Pre-computed query embedding for kNN.
+            oversample:        How many candidates to fetch from each source before fusion.
+            rerank:            Whether to apply cross-encoder reranking after RRF fusion.
+            All other args mirror perform_category_search / perform_vector_search.
+        """
+        # --- BM25 leg ---
+        lexical_results, _ = self.perform_category_search(
+            category=category,
+            keywords=keywords,
+            exact_match=exact_match,
+            exclude_words=exclude_words,
+            categories=categories,
+            detected_language=detected_language,
+            page_size=oversample,
+            page_number=1,
+            start_year=start_year,
+            end_year=end_year,
+        )
+
+        # --- kNN leg (raw ranking — no reranking, RRF handles ordering) ---
+        knn_categories = {**categories, "category": [category]}
+        knn_query = self._build_vector_query(
+            embedding, knn_categories, oversample, detected_language,
+            start_year, end_year,
+        )
+        try:
+            response = self._opensearch_client.search(
+                index=self._index_name,
+                body=knn_query,
+                size=oversample,
+                from_=0,
+            )
+            knn_hits = response.get("hits", {}).get("hits", [])
+        except Exception:
+            traceback.print_exc()
+            knn_hits = []
+
+        vector_results = self._extract_results(knn_hits, is_lexical=False, language=detected_language)
+
+        # --- RRF fusion ---
+        fused = ResultRanker.rrf_rank(lexical_results, vector_results)
+
+        # --- Optional cross-encoder reranking on top of RRF ---
+        if rerank and self._reranker and fused:
+            text_field = self._text_fields.get(detected_language, "text_content_hindi")
+            # Build sentence pairs from the fused list (which holds _source via content_snippet)
+            # Fall back to content_snippet since _source is not retained after _extract_results.
+            sentence_pairs = [[keywords, r.get("content_snippet", "")] for r in fused]
+            try:
+                rerank_scores = self._reranker.predict(
+                    sentence_pairs,
+                    batch_size=self._config.RERANK_BATCH_SIZE,
+                    max_length=self._config.RERANK_MAX_LENGTH,
+                )
+                for result, score in zip(fused, rerank_scores):
+                    result["rerank_score"] = float(score)
+                fused.sort(key=lambda x: x.get("rerank_score", 0.0), reverse=True)
+                log_handle.info("RRF: reranked %d fused results.", len(fused))
+            except Exception:
+                traceback.print_exc()
+                log_handle.warning("RRF: reranking failed, using RRF order.")
+
+        total = len(fused)
+        start = (page_number - 1) * page_size
+        return fused[start:start + page_size], total
+
     def perform_vector_search(
             self, keywords: str, embedding: List[float], categories: Dict[str, List[str]],
             page_size: int, page_number: int, language: str, rerank: bool = True,
@@ -470,9 +553,11 @@ class IndexSearcher:
 
             log_handle.info("--- Starting expensive reranker.predict() call... ---")
             rerank_start_time = time.time()
-            # Use very small batch size for e2-medium
             rerank_scores = self._reranker.predict(
-                sentence_pairs)
+                sentence_pairs,
+                batch_size=self._config.RERANK_BATCH_SIZE,
+                max_length=self._config.RERANK_MAX_LENGTH,
+            )
             rerank_duration = time.time() - rerank_start_time
             log_handle.info(
                 f"--- Reranker.predict() finished. Took {rerank_duration:.2f} seconds. ---")

@@ -107,38 +107,65 @@ class ResultRanker:
                         f"Returning page {page_number} (size {page_size}).")
         return paginated_results, total_unique_results
 
-    # --- Optional: Reciprocal Rank Fusion (RRF) Implementation ---
-    # RRF is generally preferred for combining ranked lists without explicit score normalization.
-    # You can uncomment and use this if you prefer RRF.
-    # @staticmethod
-    # def rrf_rank(results_lists: List[List[Dict[str, Any]]], k: int = 60) -> List[Dict[str, Any]]:
-    #     """
-    #     Performs Reciprocal Rank Fusion (RRF) on multiple lists of search results.
-    #     Args:
-    #         results_lists (List[List[Dict[str, Any]]]): A list where each element is a list of results
-    #                                                      from a different search source (e.g., lexical, vector).
-    #         Each result dict must have 'document_id' and 'page_number'.
-    #         k (int): A constant that controls the influence of lower ranks.
-    #     Returns:
-    #         List[Dict[str, Any]]: A single list of results, ranked by RRF score.
-    #     """
-    #     fused_scores = defaultdict(float)
-    #     doc_data = {} # To store the actual document data, picking one
-    #
-    #     for results_list in results_lists:
-    #         for rank, result in enumerate(results_list):
-    #             doc_page_id = f"{result.get('document_id')}-{result.get('page_number')}"
-    #             fused_scores[doc_page_id] += 1 / (k + rank + 1)  # rank is 0-indexed
-    #             if doc_page_id not in doc_data:
-    #                 doc_data[doc_page_id] = result
-    #
-    #     # Sort by fused score
-    #     ranked_doc_ids = sorted(fused_scores.keys(), 
-    #                             key=lambda doc_id: fused_scores[doc_id], reverse=True)
-    #
-    #     final_ranked_results = []
-    #     for doc_id in ranked_doc_ids:
-    #         doc_data[doc_id]['score'] = fused_scores[doc_id]  # Add the RRF score
-    #         final_ranked_results.append(doc_data[doc_id])
-    #
-    #     return final_ranked_results
+    @staticmethod
+    def rrf_rank(
+            lexical_results: List[Dict[str, Any]],
+            vector_results: List[Dict[str, Any]],
+            k: int = 60,
+    ) -> List[Dict[str, Any]]:
+        """
+        Reciprocal Rank Fusion of lexical and vector result lists.
+
+        Score for each chunk: sum of 1/(k + rank) across whichever lists it
+        appears in. Rank is 1-indexed. Chunks absent from a list contribute 0
+        for that list — they are naturally penalised relative to chunks that
+        rank well in both.
+
+        Deduplication key is document_id (chunk-level), so two chunks from the
+        same document but different paragraphs are kept separate, which is the
+        correct behaviour for passage retrieval.
+
+        Args:
+            lexical_results: BM25-ranked list of result dicts.
+            vector_results:  kNN-ranked list of result dicts (raw order, not reranked).
+            k: Dampening constant. Default 60 is standard in the RRF literature.
+
+        Returns:
+            Single fused list sorted by descending RRF score. Each entry has
+            'score' set to the RRF value, plus 'lexical_score' and
+            'vector_score' showing the original per-source scores for debugging.
+        """
+        fused_scores: Dict[str, float] = defaultdict(float)
+        doc_data: Dict[str, Dict[str, Any]] = {}
+
+        for rank, result in enumerate(lexical_results):
+            doc_id = result.get("document_id")
+            if not doc_id:
+                continue
+            fused_scores[doc_id] += 1.0 / (k + rank + 1)
+            if doc_id not in doc_data:
+                doc_data[doc_id] = dict(result)
+                doc_data[doc_id]["lexical_score"] = 0.0
+                doc_data[doc_id]["vector_score"] = 0.0
+            doc_data[doc_id]["lexical_score"] = result.get("score", 0.0)
+
+        for rank, result in enumerate(vector_results):
+            doc_id = result.get("document_id")
+            if not doc_id:
+                continue
+            fused_scores[doc_id] += 1.0 / (k + rank + 1)
+            if doc_id not in doc_data:
+                doc_data[doc_id] = dict(result)
+                doc_data[doc_id]["lexical_score"] = 0.0
+                doc_data[doc_id]["vector_score"] = 0.0
+            doc_data[doc_id]["vector_score"] = result.get("score", 0.0)
+
+        for doc_id, rrf_score in fused_scores.items():
+            doc_data[doc_id]["score"] = rrf_score
+
+        ranked = sorted(doc_data.values(), key=lambda x: x["score"], reverse=True)
+        log_handle.info(
+            "RRF: %d lexical + %d vector → %d unique chunks fused (k=%d).",
+            len(lexical_results), len(vector_results), len(ranked), k,
+        )
+        return ranked

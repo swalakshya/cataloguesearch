@@ -4,6 +4,8 @@ import { GoogleReCaptchaProvider } from 'react-google-recaptcha-v3';
 
 // Import components
 import { Navigation, Header } from './components/Navigation';
+import AdminLoginPage from './components/admin/AdminLogin';
+import AdminPageComponent from './components/admin/AdminPage';
 import { SearchBar, MetadataFilters, AdvancedSearch, SearchOptions } from './components/SearchInterface';
 import { ResultsList, SuggestionsCard, Tabs, SimilarSourceInfoCard, SkeletonResultsList } from './components/SearchResults';
 import { ExpandModal, GranthVerseModal, GranthProseModal, WelcomeModal } from './components/Modals';
@@ -232,6 +234,7 @@ const AppContent = () => {
     const [debugMode, setDebugMode] = useState(false);
     const [activeCategories, setActiveCategories] = useState(['Pravachan', 'Granth']);
     const [language, setLanguage] = useState('hindi');
+    const [textSearch, setTextSearch] = useState(false);
     const [exactMatch, setExactMatch] = useState(false);
     const [excludeWords, setExcludeWords] = useState('');
     const [searchType] = useState('relevance'); // Always use better relevance
@@ -395,6 +398,7 @@ const AppContent = () => {
     const buildSearchPayload = useCallback((pravachanPage = 1, granthPage = 1) => {
         return {
             query,
+            text_search: textSearch,
             exact_match: exactMatch,
             exclude_words: excludeWords.split(',').map(word => word.trim()).filter(word => word.length > 0),
             categories: activeFilters.reduce((acc, f) => ({ ...acc, [f.key]: [...(acc[f.key] || []), f.value] }), {}),
@@ -420,7 +424,7 @@ const AppContent = () => {
             ...(startYear && { start_year: startYear }),
             ...(endYear && { end_year: endYear })
         };
-    }, [query, activeFilters, contentTypes, language, exactMatch, excludeWords, searchType, startYear, endYear, booksPage]);
+    }, [query, activeFilters, contentTypes, language, textSearch, exactMatch, excludeWords, searchType, startYear, endYear, booksPage]);
 
     function buildLlmFilters() {
         const filters = {};
@@ -894,7 +898,7 @@ const AppContent = () => {
                     DEBUG
                 </div>
             )}
-            <Navigation currentPage={currentPage} setCurrentPage={setCurrentPage} />
+            <Navigation currentPage={currentPage} setCurrentPage={setCurrentPage} debugMode={debugMode} />
             
             <div className="container mx-auto p-4 md:p-5">
                 <div className="max-w-[1080px] mx-auto">
@@ -1005,6 +1009,8 @@ const AppContent = () => {
                                                     />
                                                     {!isChatMode && (
                                                         <AdvancedSearch
+                                                            textSearch={textSearch}
+                                                            setTextSearch={setTextSearch}
                                                             exactMatch={exactMatch}
                                                             setExactMatch={setExactMatch}
                                                             excludeWords={excludeWords}
@@ -1393,6 +1399,13 @@ const AppContent = () => {
     );
 };
 
+// Admin route wrapper — manages session token in component state (cleared on refresh)
+function AdminRoute() {
+    const [token, setToken] = React.useState(null);
+    if (!token) return <AdminLoginPage onAuth={setToken} />;
+    return <AdminPageComponent token={token} onLogout={() => setToken(null)} />;
+}
+
 // Main App wrapper with Router
 export default function App() {
     return (
@@ -1406,6 +1419,7 @@ export default function App() {
                 <Route path="/search-index" element={<AppContent />} />
                 <Route path="/eval" element={<AppContent />} />
                 <Route path="/developer" element={<AppContent />} />
+                <Route path="/admin" element={<AdminRoute />} />
             </Routes>
         </Router>
     );
