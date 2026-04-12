@@ -43,6 +43,7 @@ from typing import List, Tuple
 
 from backend.config import Config
 from backend.crawler.paragraph_generator.base import BaseParagraphGenerator, ParaInfo
+from backend.crawler.paragraph_generator.filters import is_valid_block, is_indexable
 from backend.crawler.paragraph_generator.language_meta import LanguageMeta
 from backend.crawler.paragraph_generator.sizer import split_long_para
 
@@ -54,6 +55,7 @@ _MAX_PARA_LENGTH = 170  # maximum words per output paragraph (override via scan_
 # Strips optional leading number markers like '(२) ', '(3) ', '3. ' before
 # QA prefix matching. Handles ASCII and Devanagari digits.
 _QA_MARKER_RE = re.compile(r'^[\s([{\'"]*[0-9०-९]+[\s.)\]}\'"]*')
+
 
 # Matches verse-number markers at the end of a block, e.g.:
 #   ।।67।।   ।67।   ||67||   |67|   ।।68-199।।
@@ -118,11 +120,12 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
         else:
             phase3 = phase2
 
+        result = [(p.page_num, p.text) for p in phase3 if is_indexable(p.text)]
         log_handle.info(
-            "GranthParagraphGenerator: %d pages → %d (phase1) → %d (phase2) → %d (phase3) paragraphs",
-            len(pages_data), len(phase1), len(phase2), len(phase3)
+            "GranthParagraphGenerator: %d pages → %d (phase1) → %d (phase2) → %d (phase3) → %d (indexable) paragraphs",
+            len(pages_data), len(phase1), len(phase2), len(phase3), len(result)
         )
-        return [(p.page_num, p.text) for p in phase3]
+        return result
 
     # ------------------------------------------------------------------
     # Phase 1 — sentence-boundary combining
@@ -195,6 +198,9 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
 
                 text = self._normalize_text(text, typo_list, strip_regex)
                 if not text:
+                    continue
+
+                if not is_valid_block(text):
                     continue
 
                 if _header_regexes and any(r.search(text) for r in _header_regexes):

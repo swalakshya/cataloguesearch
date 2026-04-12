@@ -1,3 +1,5 @@
+import asyncio
+import json
 import logging
 import os
 import sys
@@ -6,6 +8,7 @@ from contextlib import asynccontextmanager
 from typing import Any, Dict, List
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -19,6 +22,7 @@ from backend.api.feedback_api import router as feedback_router
 from backend.api.agent.router import router as agent_router
 from backend.api.agent.app import agent_app
 from backend.api.url.router import router as url_router
+from backend.api.admin_api import router as admin_router
 from backend.shortener.core import ShortenerStore
 from backend.shortener.opensearch_loader import fetch_file_urls
 
@@ -48,6 +52,9 @@ async def lifespan(app: FastAPI):
 
     config_path = os.environ.get("CONFIG_PATH", "configs/config.yaml")
     config = Config(config_path)
+    overrides_path = os.path.join(os.path.dirname(config_path), "overrides.json")
+    config.load_overrides(overrides_path)
+    app.state.overrides_path = overrides_path
     app.state.config = config
     log_handle.info("Configuration loaded.")
 
@@ -127,6 +134,7 @@ app.add_middleware(
 app.include_router(feedback_router, prefix="/api")
 app.include_router(agent_router, prefix="/api/agent")
 app.include_router(url_router)
+app.include_router(admin_router, prefix="/api")
 
 # --- Mount Agent sub-app (public OpenAPI surface) ---
 app.mount("/agent", agent_app)
@@ -209,7 +217,12 @@ async def get_app_config(request: Request):
     config = request.app.state.config
     return JSONResponse(content={
         "debug_mode": config.DEBUG_MODE,
-        "active_categories": config.ACTIVE_CATEGORIES
+        "active_categories": config.ACTIVE_CATEGORIES,
+        "page_size_pravachan": config.PAGE_SIZE_PRAVACHAN,
+        "page_size_granth": config.PAGE_SIZE_GRANTH,
+        "page_size_books": config.PAGE_SIZE_BOOKS,
+        "enable_reranking": config.ENABLE_RERANKING,
+        "effective_mode": config.SEARCH_MODE,
     }, status_code=200)
 
 class SearchRequest(BaseModel):
@@ -218,6 +231,7 @@ class SearchRequest(BaseModel):
     """
     query: str = Field(..., example="Bangalore city history")
     language: str = Field(..., description="Language of the query.", example="hindi")
+    text_search: bool = Field(False, description="Force keyword/BM25 search instead of semantic (vector) search.")
     exact_match: bool = Field(False, description="Use exact phrase matching instead of regular match.")
     exclude_words: List[str] = Field([], description="List of words to exclude from search results.")
     categories: Dict[str, List[str]] = Field({}, example={"author": ["John Doe"], "category": ["Pravachan"]})
@@ -263,16 +277,18 @@ class SearchResponse(BaseModel):
     books_results: SearchTypeResults = Field(default_factory=SearchTypeResults)
     suggestions: List[str] = Field(default_factory=list, description="Spelling suggestions when no results found")
 
-@app.post("/api/search", response_model=SearchResponse)
+@app.post("/api/search")
 async def search(request: Request, request_data: SearchRequest = Body(...)):
     """
     Handles search requests to the OpenSearch index.
-    Performs lexical and vector searches, collates results, and returns paginated output.
+    Streams results per category using Server-Sent Events so the frontend can
+    display each category's results as soon as they are ready.
     """
     index_searcher = request.app.state.index_searcher
     embedding_model = request.app.state.embedding_model
 
     keywords = request_data.query
+    text_search = request_data.text_search
     exact_match = request_data.exact_match
     exclude_words = request_data.exclude_words
     categories = request_data.categories
@@ -282,108 +298,163 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
     start_year = request_data.start_year
     end_year = request_data.end_year
 
-    active_categories = request.app.state.config.ACTIVE_CATEGORIES
-    has_advanced_options = exact_match or (exclude_words and len(exclude_words) > 0)
-    is_lexical_query = (index_searcher.is_lexical_query(keywords) or has_advanced_options)
-
-    try:
-        # Start timing for metrics
-        start_time = time.time()
-
-        # Get client IP - check X-Forwarded-For and X-Real-IP headers first (for nginx proxy)
-        client_ip = (
-            request.headers.get("x-real-ip") or
-            request.headers.get("x-forwarded-for", "").split(",")[0].strip() or
-            getattr(request.client, 'host', 'unknown') if request.client else 'unknown'
+    config = request.app.state.config
+    active_categories = config.ACTIVE_CATEGORIES
+    all_search_cats = list(
+        dict.fromkeys(
+            active_categories +
+            [c for c, cfg in search_types.items() if cfg.get("enabled", False)]
         )
+    )
 
-        log_handle.info(f"Received search request: keywords='{keywords}', "
-                        f"exact_match={exact_match}, exclude_words={exclude_words}, "
-                        f"categories={categories}, search_types={search_types}, "
-                        f"language={language}, enable_reranking={enable_reranking}")
+    has_advanced_options = exact_match or (exclude_words and len(exclude_words) > 0)
+    effective_mode = "lexical" if text_search else config.SEARCH_MODE
+    if effective_mode == "lexical":
+        is_lexical_query = True
+    elif effective_mode == "vector":
+        is_lexical_query = False
+    elif effective_mode == "rrf":
+        is_lexical_query = None
+    else:  # "auto"
+        is_lexical_query = (index_searcher.is_lexical_query(keywords) or has_advanced_options)
 
-        # Collect results per active category
-        category_results = {}  # cat -> (results, total_hits)
+    rerank_oversample = config.RERANK_OVERSAMPLE
+    start_time = time.time()
+    client_ip = (
+        request.headers.get("x-real-ip") or
+        request.headers.get("x-forwarded-for", "").split(",")[0].strip() or
+        (getattr(request.client, 'host', 'unknown') if request.client else 'unknown')
+    )
 
-        if is_lexical_query:
-            for cat in active_categories:
-                cat_config = search_types.get(cat, {})
-                if not cat_config.get("enabled", False):
-                    category_results[cat] = ([], 0)
-                    continue
-                results, hits = index_searcher.perform_category_search(
-                    category=cat,
-                    keywords=keywords,
-                    exact_match=exact_match,
-                    exclude_words=exclude_words,
-                    categories=_filter_categories_for(cat, categories),
-                    detected_language=language,
-                    page_size=cat_config.get("page_size", 20),
-                    page_number=cat_config.get("page_number", 1),
-                    start_year=start_year,
-                    end_year=end_year
+    log_handle.info(f"Received search request: keywords='{keywords}', "
+                    f"exact_match={exact_match}, exclude_words={exclude_words}, "
+                    f"categories={categories}, search_types={search_types}, "
+                    f"language={language}, enable_reranking={enable_reranking}")
+
+    async def _generate():
+        loop = asyncio.get_running_loop()
+        category_results = {}
+
+        # --- Embedding (for rrf / vector modes, and auto mode routed to vector) ---
+        query_embedding = None
+        needs_embedding = effective_mode in ("rrf", "vector") or (effective_mode == "auto" and not is_lexical_query)
+        if needs_embedding:
+            try:
+                query_embedding = await loop.run_in_executor(
+                    None, lambda: embedding_model.get_embedding(keywords)
                 )
-                log_handle.info(f"{cat} search returned {len(results)} results (total: {hits}).")
-                category_results[cat] = (results, hits)
-        else:
-            query_embedding = embedding_model.get_embedding(keywords)
+            except Exception as emb_err:
+                log_handle.error(f"Embedding generation failed: {emb_err}")
             if not query_embedding:
-                log_handle.warning("Could not generate embedding for query. Vector search skipped.")
-                for cat in active_categories:
+                log_handle.warning("Could not generate embedding. All categories skipped.")
+                for cat in all_search_cats:
+                    cfg = search_types.get(cat, {})
+                    event = json.dumps({
+                        "type": "category", "category": cat,
+                        "results": [], "total_hits": 0,
+                        "page_size": cfg.get("page_size", 20),
+                        "page_number": cfg.get("page_number", 1),
+                    }, ensure_ascii=False)
+                    yield f"data: {event}\n\n"
                     category_results[cat] = ([], 0)
+                yield f"data: {json.dumps({'type': 'done', 'suggestions': []}, ensure_ascii=False)}\n\n"
+                return
+
+        # --- Per-category search (sequential, streamed) ---
+        for cat in all_search_cats:
+            cat_config = search_types.get(cat, {})
+            if not cat_config.get("enabled", False):
+                results, hits = [], 0
             else:
-                for cat in active_categories:
-                    cat_config = search_types.get(cat, {})
-                    if not cat_config.get("enabled", False):
-                        category_results[cat] = ([], 0)
-                        continue
-                    results, hits = index_searcher.perform_vector_search(
-                        keywords=keywords,
-                        embedding=query_embedding,
-                        categories={**_filter_categories_for(cat, categories), 'category': [cat]},
-                        page_size=cat_config.get("page_size", 20),
-                        page_number=cat_config.get("page_number", 1),
-                        language=language,
-                        rerank=enable_reranking,
-                        rerank_top_k=cat_config.get("page_size", 20),
-                        start_year=start_year,
-                        end_year=end_year
-                    )
-                    log_handle.info(f"{cat} vector search returned {len(results)} results (total: {hits}).")
-                    category_results[cat] = (results, hits)
+                try:
+                    if effective_mode == "rrf":
+                        results, hits = await loop.run_in_executor(
+                            None,
+                            lambda c=cat, cfg=cat_config: index_searcher.perform_rrf_search(
+                                category=c,
+                                keywords=keywords,
+                                exact_match=exact_match,
+                                exclude_words=exclude_words,
+                                categories=_filter_categories_for(c, categories),
+                                embedding=query_embedding,
+                                detected_language=language,
+                                page_size=cfg.get("page_size", 20),
+                                page_number=cfg.get("page_number", 1),
+                                oversample=rerank_oversample,
+                                rerank=enable_reranking,
+                                start_year=start_year,
+                                end_year=end_year,
+                            )
+                        )
+                        log_handle.info(f"{cat} RRF search returned {len(results)} results (total: {hits}).")
+                    elif is_lexical_query:
+                        results, hits = await loop.run_in_executor(
+                            None,
+                            lambda c=cat, cfg=cat_config: index_searcher.perform_category_search(
+                                category=c,
+                                keywords=keywords,
+                                exact_match=exact_match,
+                                exclude_words=exclude_words,
+                                categories=_filter_categories_for(c, categories),
+                                detected_language=language,
+                                page_size=cfg.get("page_size", 20),
+                                page_number=cfg.get("page_number", 1),
+                                start_year=start_year,
+                                end_year=end_year,
+                            )
+                        )
+                        log_handle.info(f"{cat} lexical search returned {len(results)} results (total: {hits}).")
+                    else:
+                        results, hits = await loop.run_in_executor(
+                            None,
+                            lambda c=cat, cfg=cat_config: index_searcher.perform_vector_search(
+                                keywords=keywords,
+                                embedding=query_embedding,
+                                categories={**_filter_categories_for(c, categories), 'category': [c]},
+                                page_size=cfg.get("page_size", 20),
+                                page_number=cfg.get("page_number", 1),
+                                language=language,
+                                rerank=enable_reranking,
+                                rerank_top_k=rerank_oversample,
+                                start_year=start_year,
+                                end_year=end_year,
+                            )
+                        )
+                        log_handle.info(f"{cat} vector search returned {len(results)} results (total: {hits}).")
+                except Exception as cat_err:
+                    log_handle.error(f"Error searching category {cat}: {cat_err}")
+                    results, hits = [], 0
 
-        def _make_type_results(cat):
-            r, h = category_results.get(cat, ([], 0))
-            cfg = search_types.get(cat, {})
-            return SearchTypeResults(
-                results=r, total_hits=h,
-                page_size=cfg.get("page_size", 20),
-                page_number=cfg.get("page_number", 1)
-            )
+            category_results[cat] = (results, hits)
+            event = json.dumps({
+                "type": "category", "category": cat,
+                "results": results, "total_hits": hits,
+                "page_size": cat_config.get("page_size", 20),
+                "page_number": cat_config.get("page_number", 1),
+            }, ensure_ascii=False)
+            yield f"data: {event}\n\n"
 
-        # Get spelling suggestions if lexical query returned no results
+        # --- Suggestions + metrics + done event ---
         total_hits = sum(h for _, h in category_results.values())
         suggestions = []
         if is_lexical_query and total_hits == 0:
-            suggestions = index_searcher.get_spelling_suggestions(
-                index_name=request.app.state.config.OPENSEARCH_INDEX_NAME,
-                text=keywords,
-                language=language,
-                min_score=0.6,
-                num_suggestions=3
-            )
-            log_handle.info(f"No results found for lexical query '{keywords}'. Suggestions: {suggestions}")
+            try:
+                suggestions = await loop.run_in_executor(
+                    None,
+                    lambda: index_searcher.get_spelling_suggestions(
+                        index_name=config.OPENSEARCH_INDEX_NAME,
+                        text=keywords,
+                        language=language,
+                        min_score=0.6,
+                        num_suggestions=3,
+                    )
+                )
+                log_handle.info(f"No results for '{keywords}'. Suggestions: {suggestions}")
+            except Exception as sug_err:
+                log_handle.error(f"Spelling suggestions failed: {sug_err}")
 
-        response = SearchResponse(
-            pravachan_results=_make_type_results("Pravachan"),
-            granth_results=_make_type_results("Granth"),
-            books_results=_make_type_results("Books"),
-            suggestions=suggestions
-        )
-
-        # Calculate latency and log metrics
         latency_ms = round((time.time() - start_time) * 1000, 2)
-        search_type = "lexical" if is_lexical_query else "vector"
+        search_type = effective_mode if effective_mode in ("lexical", "vector", "rrf") else ("lexical" if is_lexical_query else "vector")
         escaped_query = keywords.replace(',', ';').replace('"', "'").replace('\n', ' ').replace('\r', '')
         escaped_categories = str(categories).replace(',', ';').replace('"', "'")
         pravachan_cfg = search_types.get("Pravachan", {})
@@ -391,13 +462,15 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
             f"{client_ip},{escaped_query},{search_type},{exact_match},{escaped_categories},{language},"
             f"{enable_reranking},{pravachan_cfg.get('page_size', 20)},{pravachan_cfg.get('page_number', 1)},{latency_ms},{total_hits}"
         )
+        log_handle.info(f"Search complete: total_hits={total_hits}, latency={latency_ms}ms")
 
-        log_handle.info(f"Search response: {json_dumps(response.model_dump())}")
-        return response
+        yield f"data: {json.dumps({'type': 'done', 'suggestions': suggestions}, ensure_ascii=False)}\n\n"
 
-    except Exception as e:
-        log_handle.exception(f"An error occurred during search request processing: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
+    return StreamingResponse(
+        _generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 @app.get("/api/similar-documents/{doc_id}", response_model=Dict[str, Any])
 async def get_similar_documents(request: Request, doc_id: str, language: str = Query("hi", enum=["hi", "gu", "en"])):

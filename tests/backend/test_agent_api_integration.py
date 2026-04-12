@@ -16,7 +16,7 @@ def _agent_search(base_url, query, content_type=None):
     payload = {
         "query": query,
         "language": "hi",
-        "content_type": content_type if content_type is not None else ["Granth", "Books"],
+        "content_type": content_type if content_type is not None else ["Pravachan"],
         "page_size": 5,
         "page": 1,
         "rerank": False,

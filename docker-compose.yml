@@ -61,6 +61,7 @@ services:
       - BASE_DIR=/app
       - SHORTENER_BASE_URL=${SHORTENER_BASE_URL:-https://swalakshya.me}
       - SHORT_CODE_LEN=${SHORT_CODE_LEN:-7}
+      - ADMIN_KEY=${ADMIN_KEY}
     volumes:
       - cataloguesearch-data:/app/data
       - cataloguesearch-logs:/app/logs

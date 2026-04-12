@@ -540,17 +540,53 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
     );
 };
 
-export const AdvancedSearch = ({ exactMatch, setExactMatch, excludeWords, setExcludeWords }) => {
+export const AdvancedSearch = ({ textSearch, setTextSearch, exactMatch, setExactMatch, excludeWords, setExcludeWords }) => {
+    const [showTextSearchTooltip, setShowTextSearchTooltip] = useState(false);
     const [showExactMatchTooltip, setShowExactMatchTooltip] = useState(false);
     const [showExcludeWordsTooltip, setShowExcludeWordsTooltip] = useState(false);
+
+    const handleTextSearchChange = (checked) => {
+        setTextSearch(checked);
+        if (!checked) setExactMatch(false);
+    };
 
     return (
         <div className="space-y-2">
             <p className="text-xs text-slate-900 font-semibold uppercase tracking-wide">Advanced search</p>
             <div className="space-y-2.5">
-                {/* Exact Match toggle */}
+                {/* Text Search toggle */}
                 <div className="relative flex items-center gap-2">
                     <label className="flex items-center gap-2 text-slate-700 cursor-pointer select-none">
+                        <input
+                            type="checkbox"
+                            checked={textSearch}
+                            onChange={(e) => handleTextSearchChange(e.target.checked)}
+                            className="form-checkbox h-3.5 w-3.5 text-sky-600 focus:ring-sky-500 rounded"
+                        />
+                        <span className="text-sm">Text search</span>
+                    </label>
+                    <button
+                        type="button"
+                        className="text-slate-300 hover:text-slate-600 transition-colors"
+                        onMouseEnter={() => setShowTextSearchTooltip(true)}
+                        onMouseLeave={() => setShowTextSearchTooltip(false)}
+                        onClick={() => setShowTextSearchTooltip(!showTextSearchTooltip)}
+                    >
+                        <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                        </svg>
+                    </button>
+                    {showTextSearchTooltip && (
+                        <div className="absolute left-0 top-full mt-1 bg-slate-800 text-white text-xs rounded px-2 py-1 z-10 whitespace-nowrap">
+                            Force keyword-based search instead of semantic (vector) search
+                        </div>
+                    )}
+                </div>
+
+                {/* Exact phrase match — only shown when Text Search is enabled */}
+                {textSearch && (
+                <div className="relative flex items-center gap-2 pl-5">
+                    <label className="flex items-center gap-2 text-slate-600 cursor-pointer select-none">
                         <input
                             type="checkbox"
                             checked={exactMatch}
@@ -576,6 +612,7 @@ export const AdvancedSearch = ({ exactMatch, setExactMatch, excludeWords, setExc
                         </div>
                     )}
                 </div>
+                )}
 
                 {/* Exclude Words */}
                 <div className="relative">

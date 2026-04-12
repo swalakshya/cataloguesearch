@@ -198,15 +198,15 @@ export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, re
                             href={`${result.file_url}#page=${result.pdf_page_number ?? result.page_number}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs text-slate-900 hover:text-blue-700 px-1.5 py-0.5 rounded hover:bg-blue-50 transition-colors"
+                            className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700 px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors"
                         >
                             <PdfIcon />PDF
                         </a>
                     )}
-                    <button onClick={() => setShowShareModal(true)} className="inline-flex items-center gap-1 text-xs text-slate-900 hover:text-sky-700 px-1.5 py-0.5 rounded hover:bg-sky-50 transition-colors">
+                    <button onClick={() => setShowShareModal(true)} className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 px-1.5 py-0.5 rounded hover:bg-blue-50 transition-colors">
                         <ShareIcon />Share
                     </button>
-                    <button onClick={handleExpandClick} className="inline-flex items-center gap-1 text-xs text-slate-900 hover:text-sky-700 px-1.5 py-0.5 rounded hover:bg-sky-50 transition-colors">
+                    <button onClick={handleExpandClick} className="inline-flex items-center gap-1 text-xs text-violet-600 hover:text-violet-700 px-1.5 py-0.5 rounded hover:bg-violet-50 transition-colors">
                         <ExpandIcon />Expand
                     </button>
                     {resultType !== 'granth' && (

@@ -155,6 +155,29 @@ def _run_parallel(tasks):
 # Tests — both extractors run in parallel per test
 # ---------------------------------------------------------------------------
 
+def test_cache_fix_extractor_is_wrapped(initialise):
+    """
+    Verifies that create_bookmark_extractor returns a CachedBookmarkExtractor.
+    No API calls — just checks the type and that the cache dict is wired up.
+    The session-scoped autouse fixture has already enabled caching, so we just
+    call the factory and verify the wrapper is in place.
+    """
+    from backend.config import Config
+    from backend.crawler.bookmark_extractor.factory import create_bookmark_extractor
+    from tests.backend.cached_bookmark_extractor import CachedBookmarkExtractor
+
+    config = Config()
+    extractor = create_bookmark_extractor(config)
+    assert isinstance(extractor, CachedBookmarkExtractor), (
+        f"Expected CachedBookmarkExtractor but got {type(extractor).__name__}. "
+        f"The bookmark cache fix is not working — create_bookmark_extractor is still not patched."
+    )
+    assert isinstance(extractor.cache, dict), (
+        "CachedBookmarkExtractor.cache must be a dict."
+    )
+    log_handle.info("✅ create_bookmark_extractor correctly returns CachedBookmarkExtractor")
+
+
 def test_bookmark_extraction(ollama_extractor, gemini_extractor):
     """
     Tests call_llm parsing using real PDF bookmark strings.

@@ -52,6 +52,9 @@ coverage.xml
 .pytest_cache/
 pytestdebug.log
 
+# Runtime config overrides (managed via Admin UI, not committed)
+configs/overrides.json
+
 # Environments
 .env
 .venv

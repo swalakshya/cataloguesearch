@@ -4,6 +4,8 @@ import { GoogleReCaptchaProvider } from 'react-google-recaptcha-v3';
 
 // Import components
 import { Navigation, Header } from './components/Navigation';
+import AdminLoginPage from './components/admin/AdminLogin';
+import AdminPageComponent from './components/admin/AdminPage';
 import { SearchBar, MetadataFilters, AdvancedSearch, SearchOptions } from './components/SearchInterface';
 import { ResultsList, SuggestionsCard, Tabs, SimilarSourceInfoCard, SkeletonResultsList } from './components/SearchResults';
 import { ExpandModal, GranthVerseModal, GranthProseModal, WelcomeModal } from './components/Modals';
@@ -232,6 +234,7 @@ const AppContent = () => {
     const [debugMode, setDebugMode] = useState(false);
     const [activeCategories, setActiveCategories] = useState(['Pravachan', 'Granth']);
     const [language, setLanguage] = useState('hindi');
+    const [textSearch, setTextSearch] = useState(false);
     const [exactMatch, setExactMatch] = useState(false);
     const [excludeWords, setExcludeWords] = useState('');
     const [searchType] = useState('relevance'); // Always use better relevance
@@ -395,6 +398,7 @@ const AppContent = () => {
     const buildSearchPayload = useCallback((pravachanPage = 1, granthPage = 1) => {
         return {
             query,
+            text_search: textSearch,
             exact_match: exactMatch,
             exclude_words: excludeWords.split(',').map(word => word.trim()).filter(word => word.length > 0),
             categories: activeFilters.reduce((acc, f) => ({ ...acc, [f.key]: [...(acc[f.key] || []), f.value] }), {}),
@@ -420,7 +424,7 @@ const AppContent = () => {
             ...(startYear && { start_year: startYear }),
             ...(endYear && { end_year: endYear })
         };
-    }, [query, activeFilters, contentTypes, language, exactMatch, excludeWords, searchType, startYear, endYear, booksPage]);
+    }, [query, activeFilters, contentTypes, language, textSearch, exactMatch, excludeWords, searchType, startYear, endYear, booksPage]);
 
     function buildLlmFilters() {
         const filters = {};
@@ -476,15 +480,24 @@ const AppContent = () => {
         setSourceDocForSimilarity(null);
 
         const requestPayload = buildSearchPayload(1, 1);
-        const data = await api.search(requestPayload);
+        let firstTabSet = false;
+        const data = await api.search(requestPayload, (category, partialData) => {
+            setSearchData({ ...partialData });
+            if (!firstTabSet) {
+                if (partialData.pravachan_results?.total_hits > 0) {
+                    setActiveTab('pravachan'); firstTabSet = true;
+                } else if (partialData.granth_results?.total_hits > 0) {
+                    setActiveTab('granth'); firstTabSet = true;
+                } else if (partialData.books_results?.total_hits > 0) {
+                    setActiveTab('books'); firstTabSet = true;
+                }
+            }
+        });
         setSearchData(data);
-
-        if (data.pravachan_results?.total_hits > 0) {
-            setActiveTab('pravachan');
-        } else if (data.granth_results?.total_hits > 0) {
-            setActiveTab('granth');
-        } else if (data.books_results?.total_hits > 0) {
-            setActiveTab('books');
+        if (!firstTabSet) {
+            if (data.pravachan_results?.total_hits > 0) setActiveTab('pravachan');
+            else if (data.granth_results?.total_hits > 0) setActiveTab('granth');
+            else if (data.books_results?.total_hits > 0) setActiveTab('books');
         }
         setIsLoading(false);
     }, [query, buildSearchPayload]);
@@ -713,14 +726,24 @@ const AppContent = () => {
             query: suggestion  // Override with suggestion
         };
 
-        api.search(requestPayload).then(data => {
+        let firstTabSet = false;
+        api.search(requestPayload, (category, partialData) => {
+            setSearchData({ ...partialData });
+            if (!firstTabSet) {
+                if (partialData.pravachan_results?.total_hits > 0) {
+                    setActiveTab('pravachan'); firstTabSet = true;
+                } else if (partialData.granth_results?.total_hits > 0) {
+                    setActiveTab('granth'); firstTabSet = true;
+                } else if (partialData.books_results?.total_hits > 0) {
+                    setActiveTab('books'); firstTabSet = true;
+                }
+            }
+        }).then(data => {
             setSearchData(data);
-            if (data.pravachan_results?.total_hits > 0) {
-                setActiveTab('pravachan');
-            } else if (data.granth_results?.total_hits > 0) {
-                setActiveTab('granth');
-            } else if (data.books_results?.total_hits > 0) {
-                setActiveTab('books');
+            if (!firstTabSet) {
+                if (data.pravachan_results?.total_hits > 0) setActiveTab('pravachan');
+                else if (data.granth_results?.total_hits > 0) setActiveTab('granth');
+                else if (data.books_results?.total_hits > 0) setActiveTab('books');
             }
             setIsLoading(false);
         });
@@ -894,7 +917,7 @@ const AppContent = () => {
                     DEBUG
                 </div>
             )}
-            <Navigation currentPage={currentPage} setCurrentPage={setCurrentPage} />
+            <Navigation currentPage={currentPage} setCurrentPage={setCurrentPage} debugMode={debugMode} />
             
             <div className="container mx-auto p-4 md:p-5">
                 <div className="max-w-[1080px] mx-auto">
@@ -1005,6 +1028,8 @@ const AppContent = () => {
                                                     />
                                                     {!isChatMode && (
                                                         <AdvancedSearch
+                                                            textSearch={textSearch}
+                                                            setTextSearch={setTextSearch}
                                                             exactMatch={exactMatch}
                                                             setExactMatch={setExactMatch}
                                                             excludeWords={excludeWords}
@@ -1016,7 +1041,7 @@ const AppContent = () => {
                                         )}
                                     </div>
 
-                            {homeMode && isLoading && <SkeletonResultsList />}
+                            {homeMode && isLoading && !searchData && <SkeletonResultsList />}
 
                             {homeMode && llmAvailable && !chatEnabled && (llmAnswer || llmError || llmLoading) && (
                                 <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 mb-4">
@@ -1168,7 +1193,7 @@ const AppContent = () => {
                                 </div>
                             )}
                             
-                            {homeMode && !isLoading && (searchData || similarDocumentsData) && (
+                            {homeMode && (searchData || similarDocumentsData) && (
                                 <div className="mt-4">
                                     <SuggestionsCard
                                         suggestions={searchData?.suggestions}
@@ -1214,6 +1239,9 @@ const AppContent = () => {
                                             similarDocumentsData={similarDocumentsData}
                                             onClearSimilar={handleClearSimilar}
                                         />
+                                        {activeTab === 'pravachan' && isLoading && !(searchData?.pravachan_results?.results.length > 0) && (
+                                            <div className="flex justify-center items-center py-16"><Spinner /></div>
+                                        )}
                                         {activeTab === 'pravachan' && searchData?.pravachan_results?.results.length > 0 && (
                                             <ResultsList
                                                 results={searchData.pravachan_results.results}
@@ -1230,6 +1258,9 @@ const AppContent = () => {
                                                 language={language}
                                                 compact={compact}
                                             />
+                                        )}
+                                        {activeTab === 'granth' && isLoading && !(searchData?.granth_results?.results.length > 0) && (
+                                            <div className="flex justify-center items-center py-16"><Spinner /></div>
                                         )}
                                         {activeTab === 'granth' && searchData?.granth_results?.results.length > 0 && (
                                             <ResultsList
@@ -1248,6 +1279,9 @@ const AppContent = () => {
                                                 language={language}
                                                 compact={compact}
                                             />
+                                        )}
+                                        {activeTab === 'books' && isLoading && !(searchData?.books_results?.results.length > 0) && (
+                                            <div className="flex justify-center items-center py-16"><Spinner /></div>
                                         )}
                                         {activeTab === 'books' && searchData?.books_results?.results.length > 0 && (
                                             <ResultsList
@@ -1393,6 +1427,13 @@ const AppContent = () => {
     );
 };
 
+// Admin route wrapper — manages session token in component state (cleared on refresh)
+function AdminRoute() {
+    const [token, setToken] = React.useState(null);
+    if (!token) return <AdminLoginPage onAuth={setToken} />;
+    return <AdminPageComponent token={token} onLogout={() => setToken(null)} />;
+}
+
 // Main App wrapper with Router
 export default function App() {
     return (
@@ -1406,6 +1447,7 @@ export default function App() {
                 <Route path="/search-index" element={<AppContent />} />
                 <Route path="/eval" element={<AppContent />} />
                 <Route path="/developer" element={<AppContent />} />
+                <Route path="/admin" element={<AdminRoute />} />
             </Routes>
         </Router>
     );
