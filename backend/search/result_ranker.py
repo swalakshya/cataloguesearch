@@ -116,10 +116,10 @@ class ResultRanker:
         """
         Reciprocal Rank Fusion of lexical and vector result lists.
 
-        Score for each chunk: sum of 1/(k + rank) across whichever lists it
-        appears in. Rank is 1-indexed. Chunks absent from a list contribute 0
-        for that list — they are naturally penalised relative to chunks that
-        rank well in both.
+        Score for each chunk: sum of 1/(k + r) across whichever lists it
+        appears in, where r is the 1-indexed position in that list. Chunks
+        absent from a list contribute 0 — they are naturally penalised
+        relative to chunks that rank well in both.
 
         Deduplication key is document_id (chunk-level), so two chunks from the
         same document but different paragraphs are kept separate, which is the

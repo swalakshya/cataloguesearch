@@ -196,15 +196,38 @@ class Config:
     def load_overrides(self, overrides_path: str):
         """Load admin overrides from JSON file. Call at startup."""
         if os.path.exists(overrides_path):
-            with open(overrides_path, "r", encoding="utf-8") as fh:
-                self._overrides = json.load(fh)
-            print(f"Loaded admin overrides from {overrides_path}: {self._overrides}")
+            try:
+                with open(overrides_path, "r", encoding="utf-8") as fh:
+                    self._overrides = json.load(fh)
+                print(f"Loaded admin overrides from {overrides_path}: {self._overrides}")
+            except json.JSONDecodeError as exc:
+                print(f"WARNING: overrides.json is corrupt and will be ignored: {exc}")
+                self._overrides = {}
         else:
             self._overrides = {}
 
+    def _coerce_override(self, key: str, value):
+        """Coerce an override value to the type expected by ADMIN_PARAM_DEFAULTS."""
+        expected = ADMIN_PARAM_DEFAULTS.get(key)
+        if expected is None:
+            return value  # unknown key — pass through unchanged
+        expected_type = type(expected)
+        if expected_type is bool:
+            if isinstance(value, str):
+                return value.lower() in ("true", "1", "yes")
+            return bool(value)
+        if expected_type is int:
+            return int(value)
+        if expected_type is float:
+            return float(value)
+        if expected_type is str:
+            return str(value)
+        return value
+
     def update_overrides(self, overrides_path: str, updates: dict):
         """Merge updates into overrides and persist."""
-        self._overrides.update(updates)
+        coerced = {k: self._coerce_override(k, v) for k, v in updates.items()}
+        self._overrides.update(coerced)
         self._write_overrides(overrides_path)
 
     def reset_overrides(self, overrides_path: str, key: str = None):

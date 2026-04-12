@@ -4,6 +4,8 @@ import re
 # any of [], (), {} — e.g. "[258]", "(हिरिगीत)", "{रोला}".
 _BRACKET_ONLY_RE = re.compile(r'^\s*[\[({][^\])}]*[\])}]\s*$')
 
+# Paragraphs with ≤5 words are too short to be useful search results
+# (e.g. lone labels, page references, or sentence fragments).
 MIN_INDEXABLE_WORDS = 5
 
 

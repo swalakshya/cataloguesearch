@@ -88,7 +88,7 @@ export const api = {
                 for (const line of lines) {
                     if (!line.startsWith('data: ')) continue;
                     let payload;
-                    try { payload = JSON.parse(line.slice(6)); } catch { continue; }
+                    try { payload = JSON.parse(line.slice(6)); } catch (e) { console.warn('SSE: failed to parse event:', e, line); continue; }
                     if (payload.type === 'category') {
                         const key = CAT_KEY[payload.category];
                         if (key) {
@@ -108,6 +108,7 @@ export const api = {
             return result;
         } catch (error) {
             console.error("API Error: Could not perform search", error);
+            if (onProgress) onProgress(null, { ...result, error: error.message });
             return result;
         }
     },

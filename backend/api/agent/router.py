@@ -351,25 +351,33 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
                     }
                 }
             }
-            bm25_response = client.search(
-                index=config.OPENSEARCH_INDEX_NAME,
-                body=bm25_body,
-                size=oversample,
-                from_=0,
-            )
-            bm25_hits = bm25_response.get("hits", {}).get("hits", [])
+            try:
+                bm25_response = client.search(
+                    index=config.OPENSEARCH_INDEX_NAME,
+                    body=bm25_body,
+                    size=oversample,
+                    from_=0,
+                )
+                bm25_hits = bm25_response.get("hits", {}).get("hits", [])
+            except Exception:
+                log_handle.warning("agent_search RRF: BM25 leg failed", exc_info=True)
+                bm25_hits = []
 
             # kNN leg
             knn_query: Dict[str, Any] = {"vector_embedding": {"vector": query_embedding, "k": oversample}}
             if filters:
                 knn_query["vector_embedding"]["filter"] = {"bool": {"filter": filters}}
-            knn_response = client.search(
-                index=config.OPENSEARCH_INDEX_NAME,
-                body={"size": oversample, "query": {"knn": knn_query}},
-                size=oversample,
-                from_=0,
-            )
-            knn_hits = knn_response.get("hits", {}).get("hits", [])
+            try:
+                knn_response = client.search(
+                    index=config.OPENSEARCH_INDEX_NAME,
+                    body={"size": oversample, "query": {"knn": knn_query}},
+                    size=oversample,
+                    from_=0,
+                )
+                knn_hits = knn_response.get("hits", {}).get("hits", [])
+            except Exception:
+                log_handle.warning("agent_search RRF: kNN leg failed", exc_info=True)
+                knn_hits = []
 
             # Convert to RRF-compatible dicts (document_id = chunk _id for dedup)
             def _hits_to_rrf(hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

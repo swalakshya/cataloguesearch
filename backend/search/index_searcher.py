@@ -480,7 +480,7 @@ class IndexSearcher:
             )
             knn_hits = response.get("hits", {}).get("hits", [])
         except Exception:
-            traceback.print_exc()
+            log_handle.warning("perform_rrf_search: kNN leg failed; proceeding with lexical only", exc_info=True)
             knn_hits = []
 
         vector_results = self._extract_results(knn_hits, is_lexical=False, language=detected_language)
