@@ -1,4 +1,6 @@
+import hashlib
 import logging
+import os
 import pytest
 import requests
 from backend.common import embedding_models
@@ -8,6 +10,8 @@ from tests.backend.base import *
 from tests.backend.common import consume_sse
 
 log_handle = logging.getLogger(__name__)
+
+_admin_token = None
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -1720,3 +1724,162 @@ def test_agent_search_with_contributor_filter(api_server):
     assert resp.status_code == 200
     assert isinstance(resp.json(), list)
     log_handle.info("✓ agent_search contributor filter ran without error")
+
+
+# ---------------------------------------------------------------------------
+# Admin API tests
+# ---------------------------------------------------------------------------
+
+_ADMIN_TEST_KEY = "test-admin-secret"
+
+
+def test_admin_auth_no_key(api_server):
+    """Auth returns 503 when ADMIN_KEY env var is not set."""
+    os.environ.pop("ADMIN_KEY", None)
+    response = requests.post(
+        f"http://{api_server.host}:{api_server.port}/api/admin/auth",
+        json={"key_hash": "doesnotmatter"},
+    )
+    assert response.status_code == 503
+
+
+def test_admin_auth_success(api_server):
+    """Auth returns a token when the correct SHA-256 hash is supplied."""
+    global _admin_token
+    os.environ["ADMIN_KEY"] = _ADMIN_TEST_KEY
+    key_hash = hashlib.sha256(_ADMIN_TEST_KEY.encode()).hexdigest()
+    response = requests.post(
+        f"http://{api_server.host}:{api_server.port}/api/admin/auth",
+        json={"key_hash": key_hash},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "token" in data
+    _admin_token = data["token"]
+    log_handle.info("✓ admin auth succeeded, token acquired")
+
+
+def test_admin_config_update(api_server):
+    """POST /admin/config sets page_size_pravachan=3; GET /admin/config reflects it."""
+    auth = {"Authorization": f"Bearer {_admin_token}"}
+
+    update_resp = requests.post(
+        f"http://{api_server.host}:{api_server.port}/api/admin/config",
+        json={"page_size_pravachan": 3},
+        headers=auth,
+    )
+    assert update_resp.status_code == 200
+    assert update_resp.json()["overrides"]["page_size_pravachan"] == 3
+
+    get_resp = requests.get(
+        f"http://{api_server.host}:{api_server.port}/api/admin/config",
+        headers=auth,
+    )
+    assert get_resp.status_code == 200
+    cfg = get_resp.json()
+    assert cfg["overrides"]["page_size_pravachan"] == 3
+    assert cfg["effective"]["page_size_pravachan"] == 3
+    log_handle.info("✓ admin config update reflected in GET /admin/config")
+
+
+def test_admin_config_affects_search(api_server):
+    """/api/config exposes the override; search with page_size=3 returns ≤3 results."""
+    auth = {"Authorization": f"Bearer {_admin_token}"}
+    try:
+        app_cfg = requests.get(
+            f"http://{api_server.host}:{api_server.port}/api/config"
+        ).json()
+        assert app_cfg["page_size_pravachan"] == 3
+
+        search_payload = {
+            "query": "बेंगलुरु",
+            "language": "hi",
+            "exact_match": False,
+            "exclude_words": [],
+            "categories": {},
+            "search_types": {
+                "Pravachan": {"enabled": True, "page_size": 3, "page_number": 1},
+                "Granth":    {"enabled": False, "page_size": 3, "page_number": 1},
+            },
+            "enable_reranking": False,
+        }
+        search_resp = requests.post(
+            f"http://{api_server.host}:{api_server.port}/api/search",
+            json=search_payload,
+        )
+        assert search_resp.status_code == 200
+        data = consume_sse(search_resp)
+        results = data["pravachan_results"]["results"]
+        assert len(results) <= 3
+        log_handle.info("✓ search with page_size=3 returned %d results (≤3)", len(results))
+    finally:
+        reset_resp = requests.delete(
+            f"http://{api_server.host}:{api_server.port}/api/admin/config",
+            headers=auth,
+        )
+        assert reset_resp.status_code == 200
+        log_handle.info("✓ admin config reset after test")
+
+
+def test_admin_search_mode_rrf(api_server):
+    """Setting search_mode=rrf triggers RRF fusion; results carry lexical_score + vector_score."""
+    # Acquire a fresh token (test may run standalone without test_admin_auth_success)
+    os.environ["ADMIN_KEY"] = _ADMIN_TEST_KEY
+    key_hash = hashlib.sha256(_ADMIN_TEST_KEY.encode()).hexdigest()
+    token = requests.post(
+        f"http://{api_server.host}:{api_server.port}/api/admin/auth",
+        json={"key_hash": key_hash},
+    ).json()["token"]
+    auth = {"Authorization": f"Bearer {token}"}
+    try:
+        # Switch to RRF mode
+        update_resp = requests.post(
+            f"http://{api_server.host}:{api_server.port}/api/admin/config",
+            json={"search_mode": "rrf"},
+            headers=auth,
+        )
+        assert update_resp.status_code == 200
+
+        # Confirm /api/config reflects it
+        app_cfg = requests.get(
+            f"http://{api_server.host}:{api_server.port}/api/config"
+        ).json()
+        assert app_cfg["effective_mode"] == "rrf"
+
+        # Use a short query that auto-mode would classify as lexical —
+        # in RRF mode it must go through rrf_rank regardless.
+        search_payload = {
+            "query": "बेंगलुरु",
+            "language": "hi",
+            "exact_match": False,
+            "exclude_words": [],
+            "categories": {},
+            "search_types": {
+                "Pravachan": {"enabled": True, "page_size": 5, "page_number": 1},
+                "Granth":    {"enabled": False, "page_size": 5, "page_number": 1},
+            },
+            "enable_reranking": False,
+        }
+        search_resp = requests.post(
+            f"http://{api_server.host}:{api_server.port}/api/search",
+            json=search_payload,
+        )
+        assert search_resp.status_code == 200
+        data = consume_sse(search_resp)
+        results = data["pravachan_results"]["results"]
+        assert len(results) > 0, "Expected results in RRF mode"
+
+        # rrf_rank stamps lexical_score and vector_score on every result —
+        # these fields prove the RRF code path ran (not lexical or vector-only).
+        for r in results:
+            assert "lexical_score" in r, f"Result missing lexical_score: {r.get('document_id')}"
+            assert "vector_score" in r, f"Result missing vector_score: {r.get('document_id')}"
+
+        log_handle.info("✓ RRF mode: %d results, all carry lexical_score + vector_score", len(results))
+    finally:
+        reset_resp = requests.delete(
+            f"http://{api_server.host}:{api_server.port}/api/admin/config",
+            headers=auth,
+        )
+        assert reset_resp.status_code == 200
+        log_handle.info("✓ admin config reset after RRF test")
