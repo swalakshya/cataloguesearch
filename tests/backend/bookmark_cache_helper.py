@@ -50,17 +50,23 @@ def enable_bookmark_caching(cache: dict):
     _original_create_by_name = factory.create_bookmark_extractor_by_name
     _original_create = factory.create_bookmark_extractor
 
-    # Create wrapped version - ONLY wrap create_bookmark_extractor_by_name
-    # Don't wrap create_bookmark_extractor to avoid double wrapping
     def cached_create_by_name(llm_type: str, model: str = None) -> BookmarkExtractor:
-        """Wrapped version that returns cached extractor"""
         real_extractor = _original_create_by_name(llm_type, model)
         cached_extractor = CachedBookmarkExtractor(real_extractor, _active_cache)
-        log_handle.info(f"🔧 Wrapped {type(real_extractor).__name__} with CachedBookmarkExtractor")
+        log_handle.info(f"🔧 Wrapped {type(real_extractor).__name__} with CachedBookmarkExtractor (by_name)")
         return cached_extractor
 
-    # Monkey-patch only the by_name factory (used by create_bookmark_extractor)
+    def cached_create(config) -> BookmarkExtractor:
+        # create_bookmark_extractor directly instantiates GeminiBookmarkExtractor
+        # without going through create_bookmark_extractor_by_name, so the primary
+        # extractor was never cached. Wrapping here fixes that.
+        real_extractor = _original_create(config)
+        cached_extractor = CachedBookmarkExtractor(real_extractor, _active_cache)
+        log_handle.info(f"🔧 Wrapped {type(real_extractor).__name__} with CachedBookmarkExtractor (config)")
+        return cached_extractor
+
     factory.create_bookmark_extractor_by_name = cached_create_by_name
+    factory.create_bookmark_extractor = cached_create
 
     log_handle.info("✅ Bookmark caching enabled for all extractors")
 

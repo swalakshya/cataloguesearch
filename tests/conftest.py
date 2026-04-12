@@ -51,47 +51,6 @@ def ensure_opensearch_running():
     # Keeping it running saves startup time on the next run.
     # Stop it manually when done: docker-compose -f docker-compose.test.yml down
 
-@pytest.fixture(scope="session")
-def bookmark_cache():
-    """
-    Session-scoped bookmark cache for CachedBookmarkExtractor.
-
-    This cache is shared across ALL test files in the entire pytest session,
-    dramatically reducing test time by avoiding redundant LLM calls for the
-    same bookmarks.
-
-    The cache maps hash(indexed_titles) -> LLM response, making it
-    self-invalidating when bookmarks change.
-
-    Expected savings: ~19 minutes (88 LLM calls → ~12 LLM calls)
-    """
-    cache = {}
-    yield cache
-    # Log cache statistics at end of session
-    print(f"\n📊 Bookmark Cache Statistics:")
-    print(f"   Total cached entries: {len(cache)}")
-
-
-@pytest.fixture(scope="session", autouse=True)
-def enable_bookmark_caching_for_tests(bookmark_cache):
-    """
-    Automatically enable bookmark caching for all tests.
-
-    This fixture runs once at the start of the test session and enables
-    caching by monkey-patching the bookmark extractor factory.
-
-    The autouse=True means this runs automatically without being explicitly
-    requested by tests.
-    """
-    from tests.backend.bookmark_cache_helper import enable_bookmark_caching, disable_bookmark_caching
-
-    # Enable caching at session start
-    enable_bookmark_caching(bookmark_cache)
-
-    yield
-
-    # Disable at session end (cleanup)
-    disable_bookmark_caching()
 
 def pytest_addoption(parser):
     """Adds the --run-slow command-line option to pytest."""
@@ -128,8 +87,6 @@ def pytest_collection_modifyitems(config, items):
     elif config.getoption("--run-integration"):
         # If --run-integration is given, do not skip integration tests
         skip_integration = False
-
-
 
     if skip_slow:
         # If skip all tests marked as 'slow'
