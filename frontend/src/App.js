@@ -245,6 +245,7 @@ const AppContent = () => {
     const [metadata, setMetadata] = useState({});
     const [searchData, setSearchData] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [loadingCategories, setLoadingCategories] = useState(new Set());
     const suggestedQueries = useMemo(() => getRandomSuggestedQueriesByLanguage(language, 5), [language]);
     const [compact, setCompact] = useState(() => localStorage.getItem('resultDensity') === 'compact');
     const toggleCompact = () => setCompact(v => { const next = !v; localStorage.setItem('resultDensity', next ? 'compact' : 'comfortable'); return next; });
@@ -464,6 +465,7 @@ const AppContent = () => {
             return;
         }
         setIsLoading(true);
+        setSearchData(null);
         setLlmAnswer(null);
         setLlmReferences([]);
         setLlmError(null);
@@ -480,25 +482,14 @@ const AppContent = () => {
         setSourceDocForSimilarity(null);
 
         const requestPayload = buildSearchPayload(1, 1);
-        let firstTabSet = false;
+        setLoadingCategories(new Set(activeCategories));
+        setActiveTab(activeCategories[0]?.toLowerCase() || 'pravachan');
         const data = await api.search(requestPayload, (category, partialData) => {
             setSearchData({ ...partialData });
-            if (!firstTabSet) {
-                if (partialData.pravachan_results?.total_hits > 0) {
-                    setActiveTab('pravachan'); firstTabSet = true;
-                } else if (partialData.granth_results?.total_hits > 0) {
-                    setActiveTab('granth'); firstTabSet = true;
-                } else if (partialData.books_results?.total_hits > 0) {
-                    setActiveTab('books'); firstTabSet = true;
-                }
-            }
+            setLoadingCategories(prev => { const n = new Set(prev); n.delete(category); return n; });
         });
         setSearchData(data);
-        if (!firstTabSet) {
-            if (data.pravachan_results?.total_hits > 0) setActiveTab('pravachan');
-            else if (data.granth_results?.total_hits > 0) setActiveTab('granth');
-            else if (data.books_results?.total_hits > 0) setActiveTab('books');
-        }
+        setLoadingCategories(new Set());
         setIsLoading(false);
     }, [query, buildSearchPayload]);
 
@@ -726,25 +717,15 @@ const AppContent = () => {
             query: suggestion  // Override with suggestion
         };
 
-        let firstTabSet = false;
+        setSearchData(null);
+        setLoadingCategories(new Set(activeCategories));
+        setActiveTab(activeCategories[0]?.toLowerCase() || 'pravachan');
         api.search(requestPayload, (category, partialData) => {
             setSearchData({ ...partialData });
-            if (!firstTabSet) {
-                if (partialData.pravachan_results?.total_hits > 0) {
-                    setActiveTab('pravachan'); firstTabSet = true;
-                } else if (partialData.granth_results?.total_hits > 0) {
-                    setActiveTab('granth'); firstTabSet = true;
-                } else if (partialData.books_results?.total_hits > 0) {
-                    setActiveTab('books'); firstTabSet = true;
-                }
-            }
+            setLoadingCategories(prev => { const n = new Set(prev); n.delete(category); return n; });
         }).then(data => {
             setSearchData(data);
-            if (!firstTabSet) {
-                if (data.pravachan_results?.total_hits > 0) setActiveTab('pravachan');
-                else if (data.granth_results?.total_hits > 0) setActiveTab('granth');
-                else if (data.books_results?.total_hits > 0) setActiveTab('books');
-            }
+            setLoadingCategories(new Set());
             setIsLoading(false);
         });
     };
@@ -1041,7 +1022,6 @@ const AppContent = () => {
                                         )}
                                     </div>
 
-                            {homeMode && isLoading && !searchData && <SkeletonResultsList />}
 
                             {homeMode && llmAvailable && !chatEnabled && (llmAnswer || llmError || llmLoading) && (
                                 <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 mb-4">
@@ -1193,7 +1173,7 @@ const AppContent = () => {
                                 </div>
                             )}
                             
-                            {homeMode && (searchData || similarDocumentsData) && (
+                            {homeMode && (isLoading || searchData || similarDocumentsData) && (
                                 <div className="mt-4">
                                     <SuggestionsCard
                                         suggestions={searchData?.suggestions}
@@ -1238,9 +1218,11 @@ const AppContent = () => {
                                             searchData={searchData}
                                             similarDocumentsData={similarDocumentsData}
                                             onClearSimilar={handleClearSimilar}
+                                            loadingCategories={loadingCategories}
+                                            activeCategories={activeCategories}
                                         />
-                                        {activeTab === 'pravachan' && isLoading && !(searchData?.pravachan_results?.results.length > 0) && (
-                                            <div className="flex justify-center items-center py-16"><Spinner /></div>
+                                        {activeTab === 'pravachan' && loadingCategories.has('Pravachan') && (
+                                            <SkeletonResultsList />
                                         )}
                                         {activeTab === 'pravachan' && searchData?.pravachan_results?.results.length > 0 && (
                                             <ResultsList
@@ -1259,8 +1241,8 @@ const AppContent = () => {
                                                 compact={compact}
                                             />
                                         )}
-                                        {activeTab === 'granth' && isLoading && !(searchData?.granth_results?.results.length > 0) && (
-                                            <div className="flex justify-center items-center py-16"><Spinner /></div>
+                                        {activeTab === 'granth' && loadingCategories.has('Granth') && (
+                                            <SkeletonResultsList />
                                         )}
                                         {activeTab === 'granth' && searchData?.granth_results?.results.length > 0 && (
                                             <ResultsList
@@ -1280,8 +1262,8 @@ const AppContent = () => {
                                                 compact={compact}
                                             />
                                         )}
-                                        {activeTab === 'books' && isLoading && !(searchData?.books_results?.results.length > 0) && (
-                                            <div className="flex justify-center items-center py-16"><Spinner /></div>
+                                        {activeTab === 'books' && loadingCategories.has('Books') && (
+                                            <SkeletonResultsList />
                                         )}
                                         {activeTab === 'books' && searchData?.books_results?.results.length > 0 && (
                                             <ResultsList

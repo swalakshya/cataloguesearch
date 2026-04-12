@@ -26,23 +26,26 @@ const WhatsNew = () => {
 
     const updates = [
         {
-            date: "April 10, 2026",
+            date: "April 12, 2026",
             newFeatures: [
-                "None"
+                "Search quality improvements: RRF hybrid search combining BM25 + semantic search",
+                "Results now stream per category — first tab appears faster",
+                "Text search toggle to force keyword search",
+                "All category tabs shown immediately on search with loading indicators",
             ],
+        },
+        {
+            date: "April 10, 2026",
             newContent: [
                 "Granths: Harivansh Puran by Acharya Jinsen",
                 "Pravachans: Chhah Dhala by Pandit Daulat Ram (50 Pravachans, Hindi)",
-            ]
+            ],
         },
         {
             date: "April 7, 2026",
-            newFeatures: [
-                "None"
-            ],
             newContent: [
                 "Granths: Sarvartha Siddhi, Jain Siddhant Darpan, Gyan Darpan and Moksh Marg Prakashak Parishisht",
-            ]
+            ],
         },
         {
             date: "April 3, 2026",
@@ -54,111 +57,91 @@ const WhatsNew = () => {
                 "Pravachan Series: Niyamsar 1975 series in Gujarati",
                 "Pravachan Books: Dhanya Munidasha, Panchkalyanak Pravachan",
                 "Granths: Aaradhansaar, Gyan Goshthi, Jambu Swami Charitra and Satta Swaroop",
-            ]
+            ],
         },
         {
             date: "March 16, 2026",
             newFeatures: [
-                "Support for indexing multi-page PDFs.",
-                " This ensures support for many more Granths."
+                "Support for indexing multi-page PDFs — enables many more Granths.",
             ],
             newContent: [
-                "Jain Siddhant Praveshika by Pandit Gopaldas ji Baraiya!"
-            ]
+                "Jain Siddhant Praveshika by Pandit Gopaldas ji Baraiya!",
+            ],
         },
         {
             date: "March 11, 2026",
             newContent: [
-                "New Granths added: Samaysaar Kalash Tika,",
-                "Kartikeya Anupreksha and Padmanandi Panchvinchhati"
+                "New Granths added: Samaysaar Kalash Tika, Kartikeya Anupreksha and Padmanandi Panchvinchhati",
             ],
-            newFeatures: [
-                "None"
-            ]
         },
         {
             date: "February 28, 2026",
+            newFeatures: [
+                "New automated way to parse and index scriptures to speed-up the indexing process",
+            ],
             newContent: [
                 "Total 11 new Granths added, including Panch Parmagams.",
-                "Look at the Content page to see the list of available Granths"
+                "Look at the Content page to see the list of available Granths",
             ],
-            newFeatures: [
-                "New automated way to parse and index scriptures to speed-up the indexing process"
-            ]
         },
         {
             date: "January 15, 2026",
             newContent: [
                 "Hindi Pravachans (compiled) on Mokshmarg Prakashak",
-                "Total Indexed Pravachans: ~3200"
+                "Total Indexed Pravachans: ~3200",
             ],
-            newFeatures: [
-                "No new features"
-            ]
         },
         {
             date: "December 6, 2025",
-            newContent: [
-                "No new content"
-            ],
             newFeatures: [
                 "The user can now filter the Pravachan to a particular year to narrow down the search.",
-                "The search results also show the date and pravachan number of a pravachan series, if available."
-            ]
+                "The search results also show the date and pravachan number of a pravachan series, if available.",
+            ],
         },
         {
             date: "November 7, 2025",
-            newContent: [
-                "No new content"
-            ],
             newFeatures: [
-                "Transliteration support! Users can now type in english letters to generate words in Hindi or Gujarati Scripts."
-            ]
+                "Transliteration support! Users can now type in english letters to generate words in Hindi or Gujarati Scripts.",
+            ],
         },
         {
             date: "October 5, 2025",
+            newFeatures: [
+                "NEW! Swalakshya now supports indexing of Mool Shastra as well!",
+                "Chhah Dhala, Purusharth Siddhi Upay and Ishtopadesh are now searchable",
+            ],
             newContent: [
                 "Hindi Pravachans on Bahinshree Nu Vachanamrut",
                 "Gujarati Pravachans on Pravachansar 1968-69 Series",
-                "Total Indexed Pravachans: ~3700"
+                "Total Indexed Pravachans: ~3700",
             ],
-            newFeatures: [
-                "NEW! Swalakshya now supports indexing of Mool Shastra as well!",
-                "Chhah Dhala, Purusharth Siddhi Upay and Ishtopadesh are now searchable"
-            ]
         },
         {
             date: "September 19, 2025",
-            newContent: [
-                "Gujarati Pravachans on Samaysar 1966 (15th time) Series",
-                "Total Indexed Pravachans: ~3200"
-            ],
             newFeatures: [
                 "NEW! Support for Search Gujarati Pravachans is added!",
-                "A new Content page is added that details all the searchable content that is available."
-            ]
+                "A new Content page is added that details all the searchable content that is available.",
+            ],
+            newContent: [
+                "Gujarati Pravachans on Samaysar 1966 (15th time) Series",
+                "Total Indexed Pravachans: ~3200",
+            ],
         },
         {
             date: "September 7, 2025",
+            newFeatures: [
+                "Page load automatically focuses on search-box for ease of use",
+                "Use \"/\" shortcut to focus on the search box",
+            ],
             newContent: [
                 "Pravachans on Padmanandi Panchvinchati 1960 Series",
                 "Pravachans (compiled) on Kartikeya Anupreksha 1952 Series",
                 "Pravachans on Niyamsaar 1971 Series",
-                "Total Indexed Pravachans: ~2600"
+                "Total Indexed Pravachans: ~2600",
             ],
-            newFeatures: [
-                "Page load automatically focuses on search-box for ease of use",
-                "Use \"/\" shortcut to focus on the search box"
-            ]
         },
         {
             date: "August 29, 2025",
-            newContent: [
-                "Pravachans on Purusharth Siddhi Upay 1966 Series",
-                "Pravachans on Natak Samaysaar 1971 Series",
-                "Pravachans on Yogsaar 1966 Series",
-                "Total Indexed Pravachans: ~2300"
-            ],
             newFeatures: [
                 "\"Share icon\" to share Pravachan snippets",
                 "Fixing pagination issues in semantic search",
@@ -167,29 +150,30 @@ const WhatsNew = () => {
                     link: "/usage-guide#typing-guide",
                     linkText: "View Guide"
                 },
-                "Minor UI improvements"
-            ]
+                "Minor UI improvements",
+            ],
+            newContent: [
+                "Pravachans on Purusharth Siddhi Upay 1966 Series",
+                "Pravachans on Natak Samaysaar 1971 Series",
+                "Pravachans on Yogsaar 1966 Series",
+                "Total Indexed Pravachans: ~2300",
+            ],
         },
         {
             date: "August 24, 2025",
-            newContent: [
-                "Pravachans on Parmatma Prakash 1976-77 Series",
-                "Pravachans on Samaysar Kalash Tika 1977-78 Series",
-                "Total Indexed Pravachans: ~2000"
-            ],
             newFeatures: [
                 "\"Exclude Words\": Only show results which do not have these words",
                 "Usage guide for new users",
                 "Minor UI bug fixes",
-            ]
+            ],
+            newContent: [
+                "Pravachans on Parmatma Prakash 1976-77 Series",
+                "Pravachans on Samaysar Kalash Tika 1977-78 Series",
+                "Total Indexed Pravachans: ~2000",
+            ],
         },
         {
             date: "August 17, 2025",
-            newContent: [
-                "Pravachans on Panchastikaya 1969-70 Series",
-                "Pravachans on Asht Pahud 1973-74 Series",
-                "Total Indexed Pravachans: ~1500"
-            ],
             newFeatures: [
                 {
                     text: "Website Launched!",
@@ -200,22 +184,27 @@ const WhatsNew = () => {
                 "\"Did you mean?\": Spell Check functionality",
                 "Similar document discovery functionality",
                 "Numerous improvements in data quality",
-            ]
+            ],
+            newContent: [
+                "Pravachans on Panchastikaya 1969-70 Series",
+                "Pravachans on Asht Pahud 1973-74 Series",
+                "Total Indexed Pravachans: ~1500",
+            ],
         },
         {
             date: "August 10, 2025",
+            newFeatures: [
+                "Full lexical/keyword search",
+                "BETA: Full semantic search (question/answer)",
+                "\"More Like This\": Look at similar documents",
+            ],
             newContent: [
                 "Pravachans on Samaysar 1978-80 Series",
                 "Pravachans on Pravachansar 1979-80 Series",
                 "Pravachans on Niyamsar 1979-80 Series",
                 "Total Indexed Pravachans: ~1000",
             ],
-            newFeatures: [
-                "Full lexical/keyword search",
-                "BETA: Full semantic search (question/answer)",
-                "\"More Like This\": Look at similar documents"
-            ]
-        }
+        },
     ];
 
     return (
@@ -236,42 +225,43 @@ const WhatsNew = () => {
                         </div>
 
                         <div className="px-6 py-6">
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                {/* New Content Section */}
-                                <div>
-                                    <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center">
-                                        <svg className="w-5 h-5 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                        </svg>
-                                        New Content
-                                    </h3>
-                                    <ul className="space-y-2">
-                                        {update.newContent.map((item, itemIndex) => (
-                                            <li key={itemIndex} className="flex items-start">
-                                                <span className="flex-shrink-0 w-2 h-2 bg-green-500 rounded-full mt-2 mr-3"></span>
-                                                {renderContent(item)}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-
-                                {/* New Features Section */}
-                                <div>
-                                    <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center">
-                                        <svg className="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                        </svg>
-                                        New Features
-                                    </h3>
-                                    <ul className="space-y-2">
-                                        {update.newFeatures.map((feature, featureIndex) => (
-                                            <li key={featureIndex} className="flex items-start">
-                                                <span className="flex-shrink-0 w-2 h-2 bg-blue-500 rounded-full mt-2 mr-3"></span>
-                                                {renderContent(feature)}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
+                            <div className={`grid grid-cols-1 gap-8 ${update.newFeatures?.length > 0 && update.newContent?.length > 0 ? 'lg:grid-cols-2' : ''}`}>
+                                {update.newFeatures?.length > 0 && (
+                                    <div>
+                                        <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center">
+                                            <svg className="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                            </svg>
+                                            New Features
+                                        </h3>
+                                        <ul className="space-y-2">
+                                            {update.newFeatures.map((feature, featureIndex) => (
+                                                <li key={featureIndex} className="flex items-start">
+                                                    <span className="flex-shrink-0 w-2 h-2 bg-blue-500 rounded-full mt-2 mr-3"></span>
+                                                    {renderContent(feature)}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                                {update.newContent?.length > 0 && (
+                                    <div>
+                                        <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center">
+                                            <svg className="w-5 h-5 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                            New Content
+                                        </h3>
+                                        <ul className="space-y-2">
+                                            {update.newContent.map((item, itemIndex) => (
+                                                <li key={itemIndex} className="flex items-start">
+                                                    <span className="flex-shrink-0 w-2 h-2 bg-green-500 rounded-full mt-2 mr-3"></span>
+                                                    {renderContent(item)}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

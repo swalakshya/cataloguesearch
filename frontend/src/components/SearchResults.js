@@ -322,52 +322,79 @@ export const Pagination = ({ currentPage, totalPages, onPageChange }) => {
     );
 };
 
-export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData, onClearSimilar }) => {
+const TabSpinner = () => (
+    <svg className="w-3.5 h-3.5 animate-spin text-slate-400" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+    </svg>
+);
+
+export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData, onClearSimilar, loadingCategories, activeCategories }) => {
     const pravachanCount = searchData?.pravachan_results?.total_hits || 0;
     const granthCount = searchData?.granth_results?.total_hits || 0;
     const booksCount = searchData?.books_results?.total_hits || 0;
     const similarCount = similarDocumentsData?.total_results || 0;
     const hasSuggestions = searchData?.suggestions && searchData.suggestions.length > 0;
-    // Don't render tabs if there are no results and no similar documents
+    const isLoadingPravachan = loadingCategories?.has('Pravachan');
+    const isLoadingGranth = loadingCategories?.has('Granth');
+    const isLoadingBooks = loadingCategories?.has('Books');
+    const anyLoading = loadingCategories?.size > 0;
+
     const hasAnyResults = (!hasSuggestions && (pravachanCount > 0 || granthCount > 0 || booksCount > 0)) || similarDocumentsData;
-    if (!hasAnyResults) return null;
+    const showPravachan = !hasSuggestions && (isLoadingPravachan || pravachanCount > 0);
+    const showGranth = !hasSuggestions && (isLoadingGranth || granthCount > 0);
+    const showBooks = !hasSuggestions && (isLoadingBooks || booksCount > 0);
+
+    if (!anyLoading && !hasAnyResults) return null;
 
     return (
         <div style={{ backgroundColor: 'var(--bg-card, white)' }} className="flex items-center border-b border-slate-200 bg-white px-3 rounded-t">
-            {!hasSuggestions && pravachanCount > 0 && (
+            {showPravachan && (
                 <button
                     onClick={() => setActiveTab('pravachan')}
-                    className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${activeTab === 'pravachan'
-                        ? 'border-sky-500 text-sky-700'
-                        : 'border-transparent text-slate-900 hover:text-slate-900'
+                    className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${isLoadingPravachan
+                        ? 'border-transparent text-slate-400'
+                        : activeTab === 'pravachan'
+                            ? 'border-sky-500 text-sky-700'
+                            : 'border-transparent text-slate-900 hover:text-slate-900'
                         }`}
                 >
-                    🎙️ Pravachan
-                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeTab === 'pravachan' ? 'bg-sky-100 text-sky-600' : 'bg-neutral-200 text-slate-900'}`}>{pravachanCount}</span>
+                    {isLoadingPravachan ? <TabSpinner /> : '🎙️'} Pravachan
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeTab === 'pravachan' ? 'bg-sky-100 text-sky-600' : 'bg-neutral-200 text-slate-900'}`}>
+                        {isLoadingPravachan ? '…' : pravachanCount}
+                    </span>
                 </button>
             )}
-            {!hasSuggestions && granthCount > 0 && (
+            {showGranth && (
                 <button
                     onClick={() => setActiveTab('granth')}
-                    className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${activeTab === 'granth'
-                        ? 'border-amber-500 text-amber-700'
-                        : 'border-transparent text-slate-900 hover:text-slate-900'
+                    className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${isLoadingGranth
+                        ? 'border-transparent text-slate-400'
+                        : activeTab === 'granth'
+                            ? 'border-amber-500 text-amber-700'
+                            : 'border-transparent text-slate-900 hover:text-slate-900'
                         }`}
                 >
-                    📜 Granth
-                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeTab === 'granth' ? 'bg-amber-100 text-amber-600' : 'bg-neutral-200 text-slate-900'}`}>{granthCount}</span>
+                    {isLoadingGranth ? <TabSpinner /> : '📜'} Granth
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeTab === 'granth' ? 'bg-amber-100 text-amber-600' : 'bg-neutral-200 text-slate-900'}`}>
+                        {isLoadingGranth ? '…' : granthCount}
+                    </span>
                 </button>
             )}
-            {!hasSuggestions && booksCount > 0 && (
+            {showBooks && (
                 <button
                     onClick={() => setActiveTab('books')}
-                    className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${activeTab === 'books'
-                        ? 'border-orange-500 text-orange-700'
-                        : 'border-transparent text-slate-900 hover:text-slate-900'
+                    className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${isLoadingBooks
+                        ? 'border-transparent text-slate-400'
+                        : activeTab === 'books'
+                            ? 'border-orange-500 text-orange-700'
+                            : 'border-transparent text-slate-900 hover:text-slate-900'
                         }`}
                 >
-                    📚 Books
-                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeTab === 'books' ? 'bg-orange-100 text-orange-600' : 'bg-neutral-200 text-slate-900'}`}>{booksCount}</span>
+                    {isLoadingBooks ? <TabSpinner /> : '📚'} Books
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeTab === 'books' ? 'bg-orange-100 text-orange-600' : 'bg-neutral-200 text-slate-900'}`}>
+                        {isLoadingBooks ? '…' : booksCount}
+                    </span>
                 </button>
             )}
             {similarDocumentsData && (
