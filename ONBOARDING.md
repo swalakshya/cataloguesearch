@@ -308,6 +308,29 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
 
 Then restore the snapshot using `./scripts/restore_snapshots.sh` as described above.
 
+### 5. Set up HTTPS certificate renewal
+
+Certbot uses the `standalone` plugin which needs port 80. Since the frontend container owns port 80, configure pre/post hooks to stop/start it during renewal:
+
+```bash
+sudo certbot certonly --standalone -d swalakshya.me -d www.swalakshya.me
+```
+
+Then add hooks to `/etc/letsencrypt/renewal/swalakshya.me.conf` under `[renewalparams]`:
+
+```ini
+pre_hook = docker compose --env-file /root/.env.prod -f /root/docker-compose.prod.yml stop cataloguesearch-frontend
+post_hook = docker compose --env-file /root/.env.prod -f /root/docker-compose.prod.yml start cataloguesearch-frontend
+```
+
+Test with:
+
+```bash
+sudo certbot renew --force-renewal --dry-run
+```
+
+Certbot's systemd timer handles auto-renewal — no cron needed.
+
 ---
 
 ## LICENSE
