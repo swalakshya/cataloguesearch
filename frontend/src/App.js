@@ -1179,7 +1179,7 @@ const AppContent = () => {
                                         suggestions={searchData?.suggestions}
                                         originalQuery={query}
                                         onSuggestionClick={handleSuggestionClick}
-                                        hasResults={(searchData?.pravachan_results?.total_hits || 0) > 0 || (searchData?.granth_results?.total_hits || 0) > 0 || (searchData?.books_results?.total_hits || 0) > 0}
+                                        hasResults={loadingCategories.size > 0 || (searchData?.pravachan_results?.total_hits || 0) > 0 || (searchData?.granth_results?.total_hits || 0) > 0 || (searchData?.books_results?.total_hits || 0) > 0}
                                     />
                                     {/* Query echo + density toggle */}
                                     {searchData && query && (
