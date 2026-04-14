@@ -1459,8 +1459,13 @@ app.add_middleware(
 )
 app.include_router(router, prefix="/api")
 
+from eval.load_test.api import router as load_test_router  # noqa: E402
+from eval.load_test import db as load_test_db              # noqa: E402
+app.include_router(load_test_router, prefix="/api")
+
 @app.on_event("startup")
 async def startup():
+    load_test_db.init_db()
     logs_dir = os.environ.get("LOGS_DIR", "logs")
     setup_logging(
         logs_dir=logs_dir, console_level=VERBOSE_LEVEL_NUM,

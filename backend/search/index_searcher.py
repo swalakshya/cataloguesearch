@@ -376,7 +376,7 @@ class IndexSearcher:
             hits = response.get('hits', {}).get('hits', [])
             total_hits = response.get('hits', {}).get('total', {}).get('value', 0)
             log_handle.info(f"Lexical search executed. Total hits: {total_hits}.")
-            log_handle.info(
+            log_handle.verbose(
                 f"Lexical search response: "
                 f"{json_dumps(response, truncate_fields=['content_snippet', 'vector_embedding'])}")
             return (self._extract_results(hits, is_lexical=True, language=detected_language),

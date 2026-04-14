@@ -25,6 +25,7 @@ python-dotenv==1.0.1         # For managing environment variables from .env file
 psutil==5.9.8                # For process and system monitoring
 protobuf~=4.25.3             # Protocol buffers, common dependency for ML libraries
 requests==2.32.3             # HTTP library for API calls
+aiohttp==3.9.5               # Async HTTP client for load test runner
 sib-api-v3-sdk==7.6.0        # Brevo (SendinBlue) Python SDK for email services
 
 ## Testing & Development
