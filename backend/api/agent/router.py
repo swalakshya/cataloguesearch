@@ -340,7 +340,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
                 log_handle.warning("agent_search RRF produced empty embedding; returning empty results")
                 return JSONResponse(content=[], status_code=200)
 
-            oversample = config.RERANK_OVERSAMPLE
+            oversample = config._agent_config["rerank_oversample"]
 
             # BM25 leg
             bm25_body = {
@@ -394,8 +394,8 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
                 try:
                     rerank_scores = index_searcher._reranker.predict(
                         sentence_pairs,
-                        batch_size=config.RERANK_BATCH_SIZE,
-                        max_length=config.RERANK_MAX_LENGTH,
+                        batch_size=config._agent_config["rerank_batch_size"],
+                        max_length=config._agent_config["rerank_max_length"],
                     )
                     for item, score in zip(fused, rerank_scores):
                         item["rerank_score"] = float(score)
@@ -436,7 +436,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
             log_handle.warning("agent_search produced empty embedding; returning empty results")
             return JSONResponse(content=[], status_code=200)
 
-        initial_fetch_size = config.RERANK_OVERSAMPLE if payload.rerank else payload.page_size
+        initial_fetch_size = config._agent_config["rerank_oversample"] if payload.rerank else payload.page_size
         knn_query = {"vector_embedding": {"vector": query_embedding, "k": initial_fetch_size}}
         if filters:
             knn_query["vector_embedding"]["filter"] = {"bool": {"filter": filters}}
@@ -467,8 +467,8 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
         try:
             rerank_scores = index_searcher._reranker.predict(
                 sentence_pairs,
-                batch_size=config.RERANK_BATCH_SIZE,
-                max_length=config.RERANK_MAX_LENGTH,
+                batch_size=config._agent_config["rerank_batch_size"],
+                max_length=config._agent_config["rerank_max_length"],
             )
         except Exception as rerank_exc:
             log_handle.exception("agent_search reranking failed; returning unreranked results: %s", rerank_exc)

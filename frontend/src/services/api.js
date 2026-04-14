@@ -285,4 +285,37 @@ export const api = {
         if (!response.ok) throw new Error('Failed to reset config');
         return await response.json();
     },
+
+    getAgentConfig: async (token) => {
+        const response = await fetch(`${API_BASE_URL}/admin/agent-config`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Unauthorized');
+        return await response.json();
+    },
+
+    updateAgentConfig: async (token, updates) => {
+        const response = await fetch(`${API_BASE_URL}/admin/agent-config`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify(updates),
+        });
+        if (!response.ok) throw new Error('Failed to update agent config');
+        return await response.json();
+    },
+
+    resetAgentConfig: async (token, key = null) => {
+        const url = key
+            ? `${API_BASE_URL}/admin/agent-config/${key}`
+            : `${API_BASE_URL}/admin/agent-config`;
+        const response = await fetch(url, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Failed to reset agent config');
+        return await response.json();
+    },
 };

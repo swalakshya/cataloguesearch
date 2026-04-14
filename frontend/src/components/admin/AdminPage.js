@@ -1,6 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { api } from '../../services/api';
 
+const AGENT_PARAM_META = {
+    rerank_oversample: { label: 'Rerank oversample (top-k)', type: 'number', min: 10, max: 200, step: 5 },
+    rerank_batch_size: { label: 'Rerank batch size',         type: 'number', min: 1,  max: 64,  step: 1 },
+    rerank_max_length: { label: 'Rerank max token length',   type: 'number', min: 64, max: 4096, step: 64 },
+};
+
 const PARAM_META = {
     rerank_batch_size:   { label: 'Rerank batch size',        type: 'number', min: 1,   max: 64,  step: 1 },
     rerank_max_length:   { label: 'Rerank max token length',  type: 'number', min: 64,  max: 4096, step: 64 },
@@ -15,8 +21,8 @@ const PARAM_META = {
     active_categories:   { label: 'Default active categories', type: 'multiselect', options: ['Pravachan', 'Granth', 'Books'] },
 };
 
-const ConfigRow = ({ paramKey, defaults, overrides, effective, onSave, onReset }) => {
-    const meta = PARAM_META[paramKey];
+const ConfigRow = ({ paramKey, defaults, overrides, effective, onSave, onReset, metaMap = PARAM_META }) => {
+    const meta = metaMap[paramKey];
     const isOverridden = paramKey in overrides;
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState(effective[paramKey]);
@@ -133,6 +139,8 @@ const AdminPage = ({ token, onLogout }) => {
     const [config, setConfig] = useState(null);
     const [error, setError] = useState('');
     const [resetConfirm, setResetConfirm] = useState(false);
+    const [agentConfig, setAgentConfig] = useState(null);
+    const [agentResetConfirm, setAgentResetConfirm] = useState(false);
 
     const loadConfig = useCallback(async () => {
         try {
@@ -144,12 +152,21 @@ const AdminPage = ({ token, onLogout }) => {
         }
     }, [token, onLogout]);
 
-    useEffect(() => { loadConfig(); }, [loadConfig]);
+    const loadAgentConfig = useCallback(async () => {
+        try {
+            const data = await api.getAgentConfig(token);
+            setAgentConfig(data);
+        } catch {
+            setError('Failed to load agent config.');
+        }
+    }, [token]);
+
+    useEffect(() => { loadConfig(); loadAgentConfig(); }, [loadConfig, loadAgentConfig]);
 
     const handleSave = async (key, value) => {
         try {
             await api.updateAdminConfig(token, { [key]: value });
-            await loadConfig();
+            await Promise.all([loadConfig(), loadAgentConfig()]);
         } catch {
             setError('Failed to save. Please try again.');
         }
@@ -158,7 +175,7 @@ const AdminPage = ({ token, onLogout }) => {
     const handleReset = async (key) => {
         try {
             await api.resetAdminConfig(token, key);
-            await loadConfig();
+            await Promise.all([loadConfig(), loadAgentConfig()]);
         } catch {
             setError('Failed to reset. Please try again.');
         }
@@ -167,19 +184,48 @@ const AdminPage = ({ token, onLogout }) => {
     const handleResetAll = async () => {
         try {
             await api.resetAdminConfig(token);
-            await loadConfig();
+            await Promise.all([loadConfig(), loadAgentConfig()]);
             setResetConfirm(false);
         } catch {
             setError('Failed to reset. Please try again.');
         }
     };
 
-    if (!config) {
+    const handleAgentSave = async (key, value) => {
+        try {
+            await api.updateAgentConfig(token, { [key]: value });
+            await loadAgentConfig();
+        } catch {
+            setError('Failed to save agent config. Please try again.');
+        }
+    };
+
+    const handleAgentReset = async (key) => {
+        try {
+            await api.resetAgentConfig(token, key);
+            await loadAgentConfig();
+        } catch {
+            setError('Failed to reset agent config. Please try again.');
+        }
+    };
+
+    const handleAgentResetAll = async () => {
+        try {
+            await api.resetAgentConfig(token);
+            await loadAgentConfig();
+            setAgentResetConfirm(false);
+        } catch {
+            setError('Failed to reset agent config. Please try again.');
+        }
+    };
+
+    if (!config || !agentConfig) {
         return <div className="p-8 text-slate-500 text-sm">Loading…</div>;
     }
 
     const { defaults, overrides, effective } = config;
     const overrideCount = Object.keys(overrides).length;
+    const agentOverrideCount = Object.keys(agentConfig.overrides).length;
 
     return (
         <div className="max-w-4xl mx-auto px-4 py-8">
@@ -240,6 +286,62 @@ const AdminPage = ({ token, onLogout }) => {
             <p className="text-xs text-slate-400 mt-4">
                 Changes take effect immediately. Overrides persist across restarts via <code>configs/overrides.json</code>.
                 <span className="inline-block w-2 h-2 rounded-full bg-orange-400 mx-1 mb-0.5" /> = overridden value.
+            </p>
+
+            {/* Agent Config */}
+            <div className="flex items-center justify-between mt-10 mb-4">
+                <div>
+                    <h2 className="text-xl font-bold text-slate-800">Agent Config</h2>
+                    <p className="text-sm text-slate-500 mt-0.5">
+                        {agentOverrideCount > 0
+                            ? <><span className="text-orange-500 font-medium">{agentOverrideCount} override{agentOverrideCount > 1 ? 's' : ''} active</span> — overrides the inherited Search Config values</>
+                            : 'All values inherited from Search Config above'}
+                    </p>
+                </div>
+                <div className="flex items-center gap-3">
+                    {agentOverrideCount > 0 && !agentResetConfirm && (
+                        <button onClick={() => setAgentResetConfirm(true)} className="text-sm text-red-600 hover:text-red-800 border border-red-200 px-3 py-1.5 rounded-lg transition-colors">
+                            Reset all to inherited
+                        </button>
+                    )}
+                    {agentResetConfirm && (
+                        <div className="flex items-center gap-2 text-sm">
+                            <span className="text-slate-600">Are you sure?</span>
+                            <button onClick={handleAgentResetAll} className="text-red-600 hover:text-red-800 font-medium">Yes, reset all</button>
+                            <button onClick={() => setAgentResetConfirm(false)} className="text-slate-500">Cancel</button>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                <table className="w-full">
+                    <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50">
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Parameter</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Inherited (Search Config)</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Current</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {Object.keys(AGENT_PARAM_META).map(key => (
+                            <ConfigRow
+                                key={key}
+                                paramKey={key}
+                                defaults={agentConfig.defaults}
+                                overrides={agentConfig.overrides}
+                                effective={agentConfig.effective}
+                                onSave={handleAgentSave}
+                                onReset={handleAgentReset}
+                                metaMap={AGENT_PARAM_META}
+                            />
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            <p className="text-xs text-slate-400 mt-4">
+                Agent config inherits from Search Config. Override individual values to tune the agent independently.
             </p>
         </div>
     );
