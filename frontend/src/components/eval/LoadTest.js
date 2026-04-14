@@ -148,7 +148,7 @@ export default function LoadTest() {
             fetchRuns();
         };
         eventSourceRef.current = es;
-    }, [fetchRuns]);
+    }, [fetchRuns, fetchAdminConfig, config.base_api_url]);
 
     const handleFileChange = async (e) => {
         const file = e.target.files[0];

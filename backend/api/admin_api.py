@@ -93,6 +93,15 @@ async def update_admin_config(
     bad_keys = set(updates.keys()) - allowed
     if bad_keys:
         raise HTTPException(status_code=400, detail=f"Unknown keys: {sorted(bad_keys)}")
+    # Validate rerank_oversample >= max page size after proposed update
+    page_keys = ("page_size_pravachan", "page_size_granth", "page_size_books")
+    would_be_oversample = int(updates.get("rerank_oversample", config.RERANK_OVERSAMPLE))
+    would_be_pages = [int(updates.get(k, getattr(config, k.upper()))) for k in page_keys]
+    if would_be_oversample < max(would_be_pages):
+        raise HTTPException(
+            status_code=400,
+            detail=f"rerank_oversample ({would_be_oversample}) must be >= largest page size ({max(would_be_pages)})",
+        )
     config.update_overrides(request.app.state.overrides_path, updates)
     log_handle.info("Admin overrides updated: %s", list(updates.keys()))
     return {"status": "ok", "overrides": dict(config._overrides)}

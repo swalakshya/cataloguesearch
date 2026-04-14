@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
@@ -9,6 +10,7 @@ from pydantic import BaseModel, Field
 from backend.common.opensearch import get_metadata, get_opensearch_client
 from backend.search.result_ranker import ResultRanker
 from backend.utils import JSONResponse
+from utils.logger import set_query_id
 
 log_handle = logging.getLogger(__name__)
 
@@ -298,6 +300,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
     do not need to know which role a person holds.
     """
     try:
+        set_query_id(os.urandom(3).hex())
         log_handle.info(
             "agent_search request",
             extra={
