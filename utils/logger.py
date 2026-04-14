@@ -1,3 +1,4 @@
+import contextvars
 import logging
 import os
 from logging.handlers import RotatingFileHandler
@@ -7,6 +8,19 @@ logging.addLevelName(VERBOSE_LEVEL_NUM, "VERBOSE")
 
 METRICS_LEVEL_NUM = 25
 logging.addLevelName(METRICS_LEVEL_NUM, "METRICS")
+
+_query_id_var: contextvars.ContextVar[str] = contextvars.ContextVar('query_id', default='')
+
+
+def set_query_id(qid: str) -> None:
+    _query_id_var.set(qid)
+
+
+class _QueryIdFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        qid = _query_id_var.get()
+        record.query_id = f' [{qid}]' if qid else ''
+        return True
 
 def verbose(self, message, *args, **kws):
     if self.isEnabledFor(VERBOSE_LEVEL_NUM):
@@ -31,7 +45,7 @@ def setup_logging(logs_dir="logs",
 
     # Added %(filename)s to show the source file and %(funcName)s for the function.
     # Replaced %(name)s with the more informative filename.
-    log_format = '[%(asctime)s %(levelname)s - %(filename)s:%(funcName)s : %(lineno)d] %(message)s'
+    log_format = '[%(asctime)s %(levelname)s - %(filename)s:%(funcName)s : %(lineno)d]%(query_id)s %(message)s'
     date_format = '%Y-%m-%d %H:%M:%S'
 
     root_logger = logging.getLogger()
@@ -41,10 +55,13 @@ def setup_logging(logs_dir="logs",
     if root_logger.hasHandlers():
         root_logger.handlers.clear()
 
+    qid_filter = _QueryIdFilter()
+
     # Console handler
     console_handler = logging.StreamHandler()
     console_handler.setLevel(console_level)
     console_handler.setFormatter(logging.Formatter(log_format, date_format))
+    console_handler.addFilter(qid_filter)
     root_logger.addHandler(console_handler)
 
     # Suppress noisy OpenSearch client logs
@@ -63,6 +80,7 @@ def setup_logging(logs_dir="logs",
         )
         info_handler.setLevel(logging.INFO)
         info_handler.setFormatter(logging.Formatter(log_format, date_format))
+        info_handler.addFilter(qid_filter)
         root_logger.addHandler(info_handler)
 
         verbose_handler = RotatingFileHandler(
@@ -70,6 +88,7 @@ def setup_logging(logs_dir="logs",
         )
         verbose_handler.setLevel(VERBOSE_LEVEL_NUM)
         verbose_handler.setFormatter(logging.Formatter(log_format, date_format))
+        verbose_handler.addFilter(qid_filter)
         root_logger.addHandler(verbose_handler)
 
         # Metrics handler with CSV-friendly format

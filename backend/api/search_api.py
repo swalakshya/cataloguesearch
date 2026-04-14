@@ -5,7 +5,7 @@ import os
 import sys
 import time
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -17,7 +17,7 @@ from backend.common.opensearch import get_opensearch_client, get_metadata
 from backend.config import Config
 from backend.search.index_searcher import IndexSearcher
 from backend.utils import json_dumps, JSONResponse, log_memory_usage
-from utils.logger import setup_logging, VERBOSE_LEVEL_NUM, METRICS_LEVEL_NUM
+from utils.logger import setup_logging, VERBOSE_LEVEL_NUM, METRICS_LEVEL_NUM, set_query_id
 from backend.api.feedback_api import router as feedback_router
 from backend.api.agent.router import router as agent_router
 from backend.api.agent.app import agent_app
@@ -44,8 +44,10 @@ def _filter_categories_for(cat: str, categories: Dict[str, List[str]]) -> Dict[s
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logs_dir = os.environ.get("LOGS_DIR", "logs")
+    log_level_str = os.environ.get("LOG_LEVEL", "VERBOSE").upper()
+    console_level = logging.INFO if log_level_str == "INFO" else VERBOSE_LEVEL_NUM
     setup_logging(
-        logs_dir=logs_dir, console_level=VERBOSE_LEVEL_NUM,
+        logs_dir=logs_dir, console_level=console_level,
         file_level=VERBOSE_LEVEL_NUM,
         console_only=False)
     log_handle.info("Logging setup complete.")
@@ -260,6 +262,7 @@ class SearchRequest(BaseModel):
     )
 
     enable_reranking: bool = Field(True, description="Enable re-ranking for better relevance.")
+    query_id: Optional[str] = Field(None, description="Optional caller-supplied ID for correlating client and server timings.")
 
 class SearchTypeResults(BaseModel):
     """Results for a specific search type (Pravachan or Granth)."""
@@ -297,6 +300,8 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
     language = request_data.language
     start_year = request_data.start_year
     end_year = request_data.end_year
+    query_id = request_data.query_id
+    set_query_id(query_id or '')
 
     config = request.app.state.config
     active_categories = config.ACTIVE_CATEGORIES
@@ -326,7 +331,7 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
         (getattr(request.client, 'host', 'unknown') if request.client else 'unknown')
     )
 
-    log_handle.info(f"Received search request: keywords='{keywords}', "
+    log_handle.info(f"Received search request: query_id={query_id}, keywords='{keywords}', "
                     f"exact_match={exact_match}, exclude_words={exclude_words}, "
                     f"categories={categories}, search_types={search_types}, "
                     f"language={language}, enable_reranking={enable_reranking}")
@@ -462,7 +467,7 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
             f"{client_ip},{escaped_query},{search_type},{exact_match},{escaped_categories},{language},"
             f"{enable_reranking},{pravachan_cfg.get('page_size', 20)},{pravachan_cfg.get('page_number', 1)},{latency_ms},{total_hits}"
         )
-        log_handle.info(f"Search complete: total_hits={total_hits}, latency={latency_ms}ms")
+        log_handle.info(f"Search complete: query_id={query_id}, search_type={search_type}, total_hits={total_hits}, latency={latency_ms}ms")
 
         yield f"data: {json.dumps({'type': 'done', 'suggestions': suggestions}, ensure_ascii=False)}\n\n"
 

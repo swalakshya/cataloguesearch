@@ -422,6 +422,7 @@ const AppContent = () => {
                 }
             },
             enable_reranking: searchType === 'relevance',
+            query_id: Array.from(crypto.getRandomValues(new Uint8Array(3)), b => b.toString(16).padStart(2, '0')).join(''),
             ...(startYear && { start_year: startYear }),
             ...(endYear && { end_year: endYear })
         };

@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Body, Header, HTTPException, Request
 
-from backend.config import ADMIN_PARAM_DEFAULTS
+from backend.config import ADMIN_PARAM_DEFAULTS, AGENT_PARAM_DEFAULTS
 
 log_handle = logging.getLogger(__name__)
 
@@ -93,6 +93,15 @@ async def update_admin_config(
     bad_keys = set(updates.keys()) - allowed
     if bad_keys:
         raise HTTPException(status_code=400, detail=f"Unknown keys: {sorted(bad_keys)}")
+    # Validate rerank_oversample >= max page size after proposed update
+    page_keys = ("page_size_pravachan", "page_size_granth", "page_size_books")
+    would_be_oversample = int(updates.get("rerank_oversample", config.RERANK_OVERSAMPLE))
+    would_be_pages = [int(updates.get(k, getattr(config, k.upper()))) for k in page_keys]
+    if would_be_oversample < max(would_be_pages):
+        raise HTTPException(
+            status_code=400,
+            detail=f"rerank_oversample ({would_be_oversample}) must be >= largest page size ({max(would_be_pages)})",
+        )
     config.update_overrides(request.app.state.overrides_path, updates)
     log_handle.info("Admin overrides updated: %s", list(updates.keys()))
     return {"status": "ok", "overrides": dict(config._overrides)}
@@ -109,6 +118,66 @@ async def reset_all_admin_config(
     config.reset_overrides(request.app.state.overrides_path)
     log_handle.info("Admin overrides reset (all)")
     return {"status": "ok"}
+
+
+@router.get("/admin/agent-config")
+async def get_agent_config(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+):
+    """Return defaults (inherited from main search config), current agent overrides, and effective values."""
+    _require_auth(authorization)
+    config = request.app.state.config
+    defaults = config.get_agent_defaults()
+    overrides = dict(config._agent_overrides)
+    effective = {k: overrides[k] if k in overrides else defaults[k] for k in defaults}
+    return {"defaults": defaults, "overrides": overrides, "effective": effective}
+
+
+@router.post("/admin/agent-config")
+async def update_agent_config(
+    request: Request,
+    updates: Dict[str, Any] = Body(...),
+    authorization: Optional[str] = Header(None),
+):
+    """Merge updates into agent overrides. Unknown keys are rejected."""
+    _require_auth(authorization)
+    config = request.app.state.config
+    bad_keys = set(updates.keys()) - set(AGENT_PARAM_DEFAULTS.keys())
+    if bad_keys:
+        raise HTTPException(status_code=400, detail=f"Unknown agent config keys: {sorted(bad_keys)}")
+    config.update_agent_overrides(request.app.state.overrides_path, updates)
+    log_handle.info("Agent overrides updated: %s", list(updates.keys()))
+    return {"status": "ok", "overrides": dict(config._agent_overrides)}
+
+
+@router.delete("/admin/agent-config")
+async def reset_all_agent_config(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+):
+    """Reset all agent overrides."""
+    _require_auth(authorization)
+    config = request.app.state.config
+    config.reset_agent_overrides(request.app.state.overrides_path)
+    log_handle.info("Agent overrides reset (all)")
+    return {"status": "ok"}
+
+
+@router.delete("/admin/agent-config/{key}")
+async def reset_one_agent_config(
+    key: str,
+    request: Request,
+    authorization: Optional[str] = Header(None),
+):
+    """Reset a single agent override key."""
+    _require_auth(authorization)
+    if key not in AGENT_PARAM_DEFAULTS:
+        raise HTTPException(status_code=400, detail=f"Unknown agent config key: {key}")
+    config = request.app.state.config
+    config.reset_agent_overrides(request.app.state.overrides_path, key=key)
+    log_handle.info("Agent override reset: %s", key)
+    return {"status": "ok", "key": key}
 
 
 @router.delete("/admin/config/{key}")

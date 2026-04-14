@@ -21,10 +21,20 @@ ADMIN_PARAM_DEFAULTS = {
     "enable_reranking":     True,
 }
 
+# Agent-specific tunable params. At runtime, _build_agent_config() resolves these
+# as: agent overrides (if set) on top of current effective main Search Config values.
+AGENT_PARAM_DEFAULTS = {
+    "rerank_oversample":  40,
+    "rerank_batch_size":  4,
+    "rerank_max_length":  1500,
+}
+
 class Config:
     _instance = None
     _settings = {}
-    _overrides = {}  # admin overrides loaded from overrides.json
+    _overrides = {}        # search admin overrides
+    _agent_overrides = {}  # agent-specific overrides (raw, persisted)
+    _agent_config = {}     # resolved agent config (rebuilt on load/update)
 
     def __new__(cls, config_file_path: str = None):
         if cls._instance is None:
@@ -198,13 +208,54 @@ class Config:
         if os.path.exists(overrides_path):
             try:
                 with open(overrides_path, "r", encoding="utf-8") as fh:
-                    self._overrides = json.load(fh)
+                    data = json.load(fh)
+                self._agent_overrides = data.pop("agent", {})
+                self._overrides = data
                 print(f"Loaded admin overrides from {overrides_path}: {self._overrides}")
+                if self._agent_overrides:
+                    print(f"Loaded agent overrides: {self._agent_overrides}")
             except json.JSONDecodeError as exc:
                 print(f"WARNING: overrides.json is corrupt and will be ignored: {exc}")
                 self._overrides = {}
+                self._agent_overrides = {}
         else:
             self._overrides = {}
+            self._agent_overrides = {}
+        self._agent_config = self._build_agent_config()
+
+    def _build_agent_config(self) -> dict:
+        """Resolve agent config: agent overrides on top of current effective main values."""
+        resolved = {
+            "rerank_oversample": self.RERANK_OVERSAMPLE,
+            "rerank_batch_size": self.RERANK_BATCH_SIZE,
+            "rerank_max_length": self.RERANK_MAX_LENGTH,
+        }
+        resolved.update(self._agent_overrides)
+        return resolved
+
+    def get_agent_defaults(self) -> dict:
+        """Return agent param defaults as the current effective main config values."""
+        return {
+            "rerank_oversample": self.RERANK_OVERSAMPLE,
+            "rerank_batch_size": self.RERANK_BATCH_SIZE,
+            "rerank_max_length": self.RERANK_MAX_LENGTH,
+        }
+
+    def update_agent_overrides(self, overrides_path: str, updates: dict):
+        """Merge updates into agent overrides, persist, and rebuild resolved config."""
+        coerced = {k: self._coerce_override(k, v) for k, v in updates.items()}
+        self._agent_overrides.update(coerced)
+        self._write_overrides(overrides_path)
+        self._agent_config = self._build_agent_config()
+
+    def reset_agent_overrides(self, overrides_path: str, key: str = None):
+        """Remove one agent override key or all, persist, and rebuild resolved config."""
+        if key:
+            self._agent_overrides.pop(key, None)
+        else:
+            self._agent_overrides = {}
+        self._write_overrides(overrides_path)
+        self._agent_config = self._build_agent_config()
 
     def _coerce_override(self, key: str, value):
         """Coerce an override value to the type expected by ADMIN_PARAM_DEFAULTS."""
@@ -225,22 +276,27 @@ class Config:
         return value
 
     def update_overrides(self, overrides_path: str, updates: dict):
-        """Merge updates into overrides and persist."""
+        """Merge updates into overrides, persist, and rebuild agent config."""
         coerced = {k: self._coerce_override(k, v) for k, v in updates.items()}
         self._overrides.update(coerced)
         self._write_overrides(overrides_path)
+        self._agent_config = self._build_agent_config()
 
     def reset_overrides(self, overrides_path: str, key: str = None):
-        """Remove one key or all overrides and persist."""
+        """Remove one key or all overrides, persist, and rebuild agent config."""
         if key:
             self._overrides.pop(key, None)
         else:
             self._overrides = {}
         self._write_overrides(overrides_path)
+        self._agent_config = self._build_agent_config()
 
     def _write_overrides(self, overrides_path: str):
+        data = dict(self._overrides)
+        if self._agent_overrides:
+            data["agent"] = self._agent_overrides
         with open(overrides_path, "w", encoding="utf-8") as fh:
-            json.dump(self._overrides, fh, indent=2, ensure_ascii=False)
+            json.dump(data, fh, indent=2, ensure_ascii=False)
 
     def get_defaults(self) -> dict:
         """Return admin param defaults (from ADMIN_PARAM_DEFAULTS + config.yaml active_categories)."""
@@ -265,3 +321,5 @@ class Config:
         cls._instance = None
         cls._settings = {}
         cls._overrides = {}
+        cls._agent_overrides = {}
+        cls._agent_config = {}

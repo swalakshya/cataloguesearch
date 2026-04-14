@@ -5,6 +5,7 @@ import OCRPreview from './OCRPreview';
 import FileBrowser from './FileBrowser';
 import ParaClassifier from './ParaClassifier';
 import UnindexedPDFs from './UnindexedPDFs';
+import LoadTest from './LoadTest';
 import { storeDirectoryHandles, getStoredDirectoryHandles, validateDirectoryHandles, requestStoredPermissions, clearStoredDirectoryHandles } from '../../utils/directoryHandlers';
 
 const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
@@ -254,6 +255,12 @@ const UIEval = () => {
                                         isActive={activeTab === 'unindexed-pdfs'}
                                         onClick={setActiveTab}
                                     />
+                                    <NavButton
+                                        id="load-test"
+                                        label="Load Test"
+                                        isActive={activeTab === 'load-test'}
+                                        onClick={setActiveTab}
+                                    />
                                 </div>
 
                                 {/* File Browser Button */}
@@ -271,7 +278,7 @@ const UIEval = () => {
                             </div>
 
                             {/* Base Paths Info */}
-                            {basePaths && activeTab !== 'home' && (
+                            {basePaths && activeTab !== 'home' && activeTab !== 'load-test' && (
                                 <div className="mt-4 pt-4 border-t border-slate-200">
                                     <div className="text-sm text-slate-600">
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -538,6 +545,10 @@ const UIEval = () => {
 
                         {activeTab === 'unindexed-pdfs' && (
                             <UnindexedPDFs />
+                        )}
+
+                        {activeTab === 'load-test' && (
+                            <LoadTest />
                         )}
 
                     </div>
