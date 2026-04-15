@@ -166,5 +166,5 @@ async def get_analytics(
         "latency": _stats(latencies),
         "ttfb": _stats(ttfbs),
         "by_day": by_day_list,
-        "queries": rows[-_QUERY_CAP:],  # most recent N
+        "queries": rows[-_QUERY_CAP:],  # most recent N chronologically (frontend re-sorts)
     }

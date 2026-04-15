@@ -229,7 +229,6 @@ const AdminPage = ({ token, onLogout }) => {
     const overrideCount = Object.keys(overrides).length;
     const agentOverrideCount = Object.keys(agentConfig.overrides).length;
     const handleSessionExpired = () => {
-        setError('Session expired. Please log in again.');
         onLogout();
     };
 
