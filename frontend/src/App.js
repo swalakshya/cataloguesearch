@@ -1410,11 +1410,13 @@ const AppContent = () => {
     );
 };
 
-// Admin route wrapper — manages session token in component state (cleared on refresh)
+// Admin route wrapper — persists session token in localStorage (survives tab close, expires after 1 day)
 function AdminRoute() {
-    const [token, setToken] = React.useState(null);
-    if (!token) return <AdminLoginPage onAuth={setToken} />;
-    return <AdminPageComponent token={token} onLogout={() => setToken(null)} />;
+    const [token, setToken] = React.useState(() => localStorage.getItem('adminToken'));
+    const handleAuth = (t) => { localStorage.setItem('adminToken', t); setToken(t); };
+    const handleLogout = () => { localStorage.removeItem('adminToken'); setToken(null); };
+    if (!token) return <AdminLoginPage onAuth={handleAuth} />;
+    return <AdminPageComponent token={token} onLogout={handleLogout} />;
 }
 
 // Main App wrapper with Router

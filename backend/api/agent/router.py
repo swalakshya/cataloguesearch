@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from backend.common.opensearch import get_metadata, get_opensearch_client
 from backend.search.result_ranker import ResultRanker
 from backend.utils import JSONResponse
-from utils.logger import set_query_id
+from utils.logger import set_query_id, get_query_id, METRICS_LEVEL_NUM
 
 log_handle = logging.getLogger(__name__)
 
@@ -301,6 +301,24 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
     """
     try:
         set_query_id(os.urandom(3).hex())
+        start_time = time.time()
+        client_ip = (
+            request.headers.get("x-real-ip") or
+            request.headers.get("x-forwarded-for", "").split(",")[0].strip() or
+            (getattr(request.client, 'host', 'unknown') if request.client else 'unknown')
+        )
+
+        def _log_metrics(results: list, mode: str, reranked: bool) -> None:
+            latency_ms = round((time.time() - start_time) * 1000, 2)
+            escaped_q = payload.query.replace(',', ';').replace('"', "'").replace('\n', ' ').replace('\r', '')
+            escaped_ct = str(payload.content_type).replace(',', ';').replace('"', "'")
+            log_handle.log(
+                METRICS_LEVEL_NUM,
+                f"agent,{get_query_id()},{client_ip},{escaped_q},{mode},{reranked},"
+                f"{payload.language},{escaped_ct},{payload.page_size},{payload.page},"
+                f"{latency_ms},-,{len(results)}"
+            )
+
         log_handle.info(
             "agent_search request",
             extra={
@@ -341,6 +359,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
             query_embedding = embedding_model.get_embedding(payload.query)
             if not query_embedding:
                 log_handle.warning("agent_search RRF produced empty embedding; returning empty results")
+                _log_metrics([], "rrf", False)
                 return JSONResponse(content=[], status_code=200)
 
             oversample = config._agent_config["rerank_oversample"]
@@ -409,6 +428,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
             paginated = fused[from_:from_ + payload.page_size]
             results = [_chunk_from_hit(item["_hit"], payload.language) for item in paginated]
             _shorten_results(results, request.app.state.shortener_store, request.app.state.shortener_base_url)
+            _log_metrics(results, "rrf", payload.rerank and bool(index_searcher._reranker))
             return JSONResponse(content=results, status_code=200)
 
         # --- Lexical mode ---
@@ -431,12 +451,14 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
             log_handle.info("agent_search lexical hits=%s", len(hits))
             results = [_chunk_from_hit(hit, payload.language) for hit in hits]
             _shorten_results(results, request.app.state.shortener_store, request.app.state.shortener_base_url)
+            _log_metrics(results, "lexical", False)
             return JSONResponse(content=results, status_code=200)
 
         # --- Vector mode ---
         query_embedding = embedding_model.get_embedding(payload.query)
         if not query_embedding:
             log_handle.warning("agent_search produced empty embedding; returning empty results")
+            _log_metrics([], "vector", False)
             return JSONResponse(content=[], status_code=200)
 
         initial_fetch_size = config._agent_config["rerank_oversample"] if payload.rerank else payload.page_size
@@ -459,6 +481,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
             paginated = hits[from_:from_ + payload.page_size]
             results = [_chunk_from_hit(hit, payload.language) for hit in paginated]
             _shorten_results(results, request.app.state.shortener_store, request.app.state.shortener_base_url)
+            _log_metrics(results, "vector", False)
             return JSONResponse(content=results, status_code=200)
 
         sentence_pairs = []
@@ -478,6 +501,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
             paginated = hits[from_:from_ + payload.page_size]
             results = [_chunk_from_hit(hit, payload.language) for hit in paginated]
             _shorten_results(results, request.app.state.shortener_store, request.app.state.shortener_base_url)
+            _log_metrics(results, "vector", False)
             return JSONResponse(content=results, status_code=200)
         for hit, score in zip(hits, rerank_scores):
             hit["rerank_score"] = score
@@ -486,6 +510,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
         paginated_hits = reranked_hits[from_:from_ + payload.page_size]
         results = [_chunk_from_hit(hit, payload.language) for hit in paginated_hits]
         _shorten_results(results, request.app.state.shortener_store, request.app.state.shortener_base_url)
+        _log_metrics(results, "vector", True)
         return JSONResponse(content=results, status_code=200)
 
     except Exception as exc:

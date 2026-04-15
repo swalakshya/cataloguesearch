@@ -318,4 +318,26 @@ export const api = {
         if (!response.ok) throw new Error('Failed to reset agent config');
         return await response.json();
     },
+
+    getAnalytics: async (token, { fromDate, toDate, source } = {}) => {
+        const params = new URLSearchParams();
+        if (fromDate) params.set('from_date', fromDate);
+        if (toDate) params.set('to_date', toDate);
+        if (source) params.set('source', source);
+        const response = await fetch(`${API_BASE_URL}/admin/analytics?${params}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) {
+            let detail = null;
+            try {
+                const body = await response.json();
+                detail = body?.detail || null;
+            } catch {
+                detail = null;
+            }
+            if (response.status === 401) throw new Error('Unauthorized');
+            throw new Error(detail || 'Failed to load analytics');
+        }
+        return await response.json();
+    },
 };

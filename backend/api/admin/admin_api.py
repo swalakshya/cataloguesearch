@@ -1,10 +1,12 @@
 """Admin API — config overrides + session-based auth."""
+import glob as _glob
 import hashlib
 import logging
 import os
 import secrets
 import time
-from typing import Any, Dict, Optional
+from collections import defaultdict
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Header, HTTPException, Request
 
@@ -18,7 +20,7 @@ router = APIRouter(tags=["admin"])
 # In-memory session store: token -> expiry (unix timestamp)
 # ---------------------------------------------------------------------------
 _sessions: Dict[str, float] = {}
-_SESSION_TTL = 3600  # 1 hour
+_SESSION_TTL = 86400  # 1 day
 
 
 def _get_key_hash() -> str:

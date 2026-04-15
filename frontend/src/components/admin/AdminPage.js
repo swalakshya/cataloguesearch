@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { api } from '../../services/api';
+import AnalyticsDashboard from '../analytics/AnalyticsDashboard';
 
 const AGENT_PARAM_META = {
     rerank_oversample: { label: 'Rerank oversample (top-k)', type: 'number', min: 10, max: 200, step: 5 },
@@ -141,6 +142,7 @@ const AdminPage = ({ token, onLogout }) => {
     const [resetConfirm, setResetConfirm] = useState(false);
     const [agentConfig, setAgentConfig] = useState(null);
     const [agentResetConfirm, setAgentResetConfirm] = useState(false);
+    const [activeSection, setActiveSection] = useState('analytics');
 
     const loadConfig = useCallback(async () => {
         try {
@@ -226,123 +228,162 @@ const AdminPage = ({ token, onLogout }) => {
     const { defaults, overrides, effective } = config;
     const overrideCount = Object.keys(overrides).length;
     const agentOverrideCount = Object.keys(agentConfig.overrides).length;
+    const handleSessionExpired = () => {
+        setError('Session expired. Please log in again.');
+        onLogout();
+    };
 
     return (
-        <div className="max-w-4xl mx-auto px-4 py-8">
-            <div className="flex items-center justify-between mb-6">
+        <div className="max-w-6xl mx-auto px-4 py-8">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between mb-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-800">Admin — Search Config</h1>
-                    <p className="text-sm text-slate-500 mt-0.5">
-                        {overrideCount > 0
-                            ? <><span className="text-orange-500 font-medium">{overrideCount} override{overrideCount > 1 ? 's' : ''} active</span> — values differ from config.yaml defaults</>
-                            : 'All values are at config.yaml defaults'}
-                    </p>
+                    <h1 className="text-2xl font-bold text-slate-800">Admin Console</h1>
+                    <p className="text-sm text-slate-500 mt-0.5">Manage search settings and inspect query analytics.</p>
                 </div>
-                <div className="flex items-center gap-3">
-                    {overrideCount > 0 && !resetConfirm && (
-                        <button onClick={() => setResetConfirm(true)} className="text-sm text-red-600 hover:text-red-800 border border-red-200 px-3 py-1.5 rounded-lg transition-colors">
-                            Reset all to defaults
-                        </button>
-                    )}
-                    {resetConfirm && (
-                        <div className="flex items-center gap-2 text-sm">
-                            <span className="text-slate-600">Are you sure?</span>
-                            <button onClick={handleResetAll} className="text-red-600 hover:text-red-800 font-medium">Yes, reset all</button>
-                            <button onClick={() => setResetConfirm(false)} className="text-slate-500">Cancel</button>
+                <button onClick={onLogout} className="self-start text-sm text-slate-500 hover:text-slate-700">Log out</button>
+            </div>
+
+            <div className="inline-flex rounded-xl bg-slate-100 p-1 mb-6">
+                <button
+                    onClick={() => setActiveSection('settings')}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                        activeSection === 'settings'
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                >
+                    Settings
+                </button>
+                <button
+                    onClick={() => setActiveSection('analytics')}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                        activeSection === 'analytics'
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                >
+                    Analytics
+                </button>
+            </div>
+
+            {activeSection === 'settings' ? (
+                <>
+                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between mb-4">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-800">Settings</h2>
+                            <p className="text-sm text-slate-500 mt-0.5">
+                                {overrideCount > 0
+                                    ? <><span className="text-orange-500 font-medium">{overrideCount} override{overrideCount > 1 ? 's' : ''} active</span> — values differ from config.yaml defaults</>
+                                    : 'All values are at config.yaml defaults'}
+                            </p>
                         </div>
-                    )}
-                    <button onClick={onLogout} className="text-sm text-slate-500 hover:text-slate-700">Log out</button>
-                </div>
-            </div>
-
-            {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
-
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                <table className="w-full">
-                    <thead>
-                        <tr className="border-b border-slate-200 bg-slate-50">
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Parameter</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Default</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Current</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {Object.keys(PARAM_META).map(key => (
-                            <ConfigRow
-                                key={key}
-                                paramKey={key}
-                                defaults={defaults}
-                                overrides={overrides}
-                                effective={effective}
-                                onSave={handleSave}
-                                onReset={handleReset}
-                            />
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-
-            <p className="text-xs text-slate-400 mt-4">
-                Changes take effect immediately. Overrides persist across restarts via <code>configs/overrides.json</code>.
-                <span className="inline-block w-2 h-2 rounded-full bg-orange-400 mx-1 mb-0.5" /> = overridden value.
-            </p>
-
-            {/* Agent Config */}
-            <div className="flex items-center justify-between mt-10 mb-4">
-                <div>
-                    <h2 className="text-xl font-bold text-slate-800">Agent Config</h2>
-                    <p className="text-sm text-slate-500 mt-0.5">
-                        {agentOverrideCount > 0
-                            ? <><span className="text-orange-500 font-medium">{agentOverrideCount} override{agentOverrideCount > 1 ? 's' : ''} active</span> — overrides the inherited Search Config values</>
-                            : 'All values inherited from Search Config above'}
-                    </p>
-                </div>
-                <div className="flex items-center gap-3">
-                    {agentOverrideCount > 0 && !agentResetConfirm && (
-                        <button onClick={() => setAgentResetConfirm(true)} className="text-sm text-red-600 hover:text-red-800 border border-red-200 px-3 py-1.5 rounded-lg transition-colors">
-                            Reset all to inherited
-                        </button>
-                    )}
-                    {agentResetConfirm && (
-                        <div className="flex items-center gap-2 text-sm">
-                            <span className="text-slate-600">Are you sure?</span>
-                            <button onClick={handleAgentResetAll} className="text-red-600 hover:text-red-800 font-medium">Yes, reset all</button>
-                            <button onClick={() => setAgentResetConfirm(false)} className="text-slate-500">Cancel</button>
+                        <div className="flex items-center gap-3">
+                            {overrideCount > 0 && !resetConfirm && (
+                                <button onClick={() => setResetConfirm(true)} className="text-sm text-red-600 hover:text-red-800 border border-red-200 px-3 py-1.5 rounded-lg transition-colors">
+                                    Reset all to defaults
+                                </button>
+                            )}
+                            {resetConfirm && (
+                                <div className="flex items-center gap-2 text-sm">
+                                    <span className="text-slate-600">Are you sure?</span>
+                                    <button onClick={handleResetAll} className="text-red-600 hover:text-red-800 font-medium">Yes, reset all</button>
+                                    <button onClick={() => setResetConfirm(false)} className="text-slate-500">Cancel</button>
+                                </div>
+                            )}
                         </div>
-                    )}
-                </div>
-            </div>
+                    </div>
 
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                <table className="w-full">
-                    <thead>
-                        <tr className="border-b border-slate-200 bg-slate-50">
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Parameter</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Inherited (Search Config)</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Current</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {Object.keys(AGENT_PARAM_META).map(key => (
-                            <ConfigRow
-                                key={key}
-                                paramKey={key}
-                                defaults={agentConfig.defaults}
-                                overrides={agentConfig.overrides}
-                                effective={agentConfig.effective}
-                                onSave={handleAgentSave}
-                                onReset={handleAgentReset}
-                                metaMap={AGENT_PARAM_META}
-                            />
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-            <p className="text-xs text-slate-400 mt-4">
-                Agent config inherits from Search Config. Override individual values to tune the agent independently.
-            </p>
+                    {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
+
+                    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="border-b border-slate-200 bg-slate-50">
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Parameter</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Default</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Current</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {Object.keys(PARAM_META).map(key => (
+                                    <ConfigRow
+                                        key={key}
+                                        paramKey={key}
+                                        defaults={defaults}
+                                        overrides={overrides}
+                                        effective={effective}
+                                        onSave={handleSave}
+                                        onReset={handleReset}
+                                    />
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <p className="text-xs text-slate-400 mt-4">
+                        Changes take effect immediately. Overrides persist across restarts via <code>configs/overrides.json</code>.
+                        <span className="inline-block w-2 h-2 rounded-full bg-orange-400 mx-1 mb-0.5" /> = overridden value.
+                    </p>
+
+                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between mt-10 mb-4">
+                        <div>
+                            <h3 className="text-xl font-bold text-slate-800">Agent Config</h3>
+                            <p className="text-sm text-slate-500 mt-0.5">
+                                {agentOverrideCount > 0
+                                    ? <><span className="text-orange-500 font-medium">{agentOverrideCount} override{agentOverrideCount > 1 ? 's' : ''} active</span> — overrides the inherited Search Config values</>
+                                    : 'All values inherited from Search Config above'}
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            {agentOverrideCount > 0 && !agentResetConfirm && (
+                                <button onClick={() => setAgentResetConfirm(true)} className="text-sm text-red-600 hover:text-red-800 border border-red-200 px-3 py-1.5 rounded-lg transition-colors">
+                                    Reset all to inherited
+                                </button>
+                            )}
+                            {agentResetConfirm && (
+                                <div className="flex items-center gap-2 text-sm">
+                                    <span className="text-slate-600">Are you sure?</span>
+                                    <button onClick={handleAgentResetAll} className="text-red-600 hover:text-red-800 font-medium">Yes, reset all</button>
+                                    <button onClick={() => setAgentResetConfirm(false)} className="text-slate-500">Cancel</button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="border-b border-slate-200 bg-slate-50">
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Parameter</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Inherited (Search Config)</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Current</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {Object.keys(AGENT_PARAM_META).map(key => (
+                                    <ConfigRow
+                                        key={key}
+                                        paramKey={key}
+                                        defaults={agentConfig.defaults}
+                                        overrides={agentConfig.overrides}
+                                        effective={agentConfig.effective}
+                                        onSave={handleAgentSave}
+                                        onReset={handleAgentReset}
+                                        metaMap={AGENT_PARAM_META}
+                                    />
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-4">
+                        Agent config inherits from Search Config. Override individual values to tune the agent independently.
+                    </p>
+                </>
+            ) : (
+                <AnalyticsDashboard token={token} onSessionExpired={handleSessionExpired} />
+            )}
         </div>
     );
 };
