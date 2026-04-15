@@ -36,6 +36,7 @@ class _ExactLevelFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         return record.levelno == self.level
 
+
 def verbose(self, message, *args, **kws):
     if self.isEnabledFor(VERBOSE_LEVEL_NUM):
         # Call self.log with stacklevel=2. This tells the logging module to go

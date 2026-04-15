@@ -7,9 +7,9 @@ async function sha256(text) {
 }
 
 const AdminLogin = ({ onAuth }) => {
-    const [key, setKey] = useState(() => localStorage.getItem('adminKey') || '');
+    const [key, setKey] = useState(() => sessionStorage.getItem('adminKey') || '');
     const [showKey, setShowKey] = useState(false);
-    const [saveKey, setSaveKey] = useState(() => !!localStorage.getItem('adminKey'));
+    const [saveKey, setSaveKey] = useState(() => !!sessionStorage.getItem('adminKey'));
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -20,8 +20,8 @@ const AdminLogin = ({ onAuth }) => {
         try {
             const keyHash = await sha256(key);
             const { token } = await api.adminAuth(keyHash);
-            if (saveKey) localStorage.setItem('adminKey', key);
-            else localStorage.removeItem('adminKey');
+            if (saveKey) sessionStorage.setItem('adminKey', key);
+            else sessionStorage.removeItem('adminKey');
             onAuth(token);
         } catch {
             setError('Invalid key. Please try again.');

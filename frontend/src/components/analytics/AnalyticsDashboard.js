@@ -61,9 +61,8 @@ const AnalyticsDashboard = ({ token, onSessionExpired }) => {
     }, [token, onSessionExpired]);
 
     useEffect(() => {
-        loadAnalytics(appliedFilters);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+        loadAnalytics(createDefaultFilters());
+    }, [loadAnalytics]);
 
     const handleApply = () => {
         if (draftFilters.fromDate && draftFilters.toDate && draftFilters.fromDate > draftFilters.toDate) {

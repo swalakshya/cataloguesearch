@@ -1,4 +1,5 @@
 """Analytics API — query metrics from metrics.log."""
+import asyncio
 import glob as _glob
 import logging
 import os
@@ -120,7 +121,7 @@ async def get_analytics(
         raise HTTPException(status_code=400, detail="from_date must be <= to_date")
 
     logs_dir = os.environ.get("LOGS_DIR", "logs")
-    all_rows = _parse_metrics(logs_dir)
+    all_rows = await asyncio.to_thread(_parse_metrics, logs_dir)
 
     # Apply filters
     rows = []
@@ -159,10 +160,11 @@ async def get_analytics(
         key=lambda x: x["date"],
     )
 
+    _QUERY_CAP = 5000
     return {
         "total": len(rows),
         "latency": _stats(latencies),
         "ttfb": _stats(ttfbs),
         "by_day": by_day_list,
-        "queries": rows,
+        "queries": rows[-_QUERY_CAP:],  # most recent N
     }

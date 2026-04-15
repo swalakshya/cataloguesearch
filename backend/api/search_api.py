@@ -473,7 +473,7 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
         log_handle.metrics(
             f"search,{get_query_id()},{client_ip},{escaped_query},{search_type},{enable_reranking},"
             f"{language},{escaped_categories},{pravachan_cfg.get('page_size', 20)},"
-            f"{pravachan_cfg.get('page_number', 1)},{latency_ms},{ttfb_ms},{total_hits}"
+            f"{pravachan_cfg.get('page_number', 1)},{latency_ms},{ttfb_ms if ttfb_ms is not None else '-'},{total_hits}"
         )
         log_handle.info(f"Search complete: query_id={query_id}, search_type={search_type}, total_hits={total_hits}, latency={latency_ms}ms")
 

@@ -1,12 +1,10 @@
 """Admin API — config overrides + session-based auth."""
-import glob as _glob
 import hashlib
 import logging
 import os
 import secrets
 import time
-from collections import defaultdict
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Body, Header, HTTPException, Request
 

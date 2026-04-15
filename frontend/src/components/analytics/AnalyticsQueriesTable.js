@@ -38,12 +38,10 @@ const ExpandedDetail = ({ row }) => (
 
 const QueryRow = ({ row, index }) => {
     const [expanded, setExpanded] = useState(false);
-    const key = `${row.query_id}-${row.timestamp}-${index}`;
 
     return (
         <>
             <tr
-                key={key}
                 onClick={() => setExpanded(e => !e)}
                 className="cursor-pointer hover:bg-slate-50 transition-colors"
             >

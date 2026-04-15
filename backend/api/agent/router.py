@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from backend.common.opensearch import get_metadata, get_opensearch_client
 from backend.search.result_ranker import ResultRanker
 from backend.utils import JSONResponse
-from utils.logger import set_query_id, get_query_id, METRICS_LEVEL_NUM
+from utils.logger import set_query_id, get_query_id
 
 log_handle = logging.getLogger(__name__)
 
@@ -312,8 +312,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
             latency_ms = round((time.time() - start_time) * 1000, 2)
             escaped_q = payload.query.replace(',', ';').replace('"', "'").replace('\n', ' ').replace('\r', '')
             escaped_ct = str(payload.content_type).replace(',', ';').replace('"', "'")
-            log_handle.log(
-                METRICS_LEVEL_NUM,
+            log_handle.metrics(
                 f"agent,{get_query_id()},{client_ip},{escaped_q},{mode},{reranked},"
                 f"{payload.language},{escaped_ct},{payload.page_size},{payload.page},"
                 f"{latency_ms},-,{len(results)}"
