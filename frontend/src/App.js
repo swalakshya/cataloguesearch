@@ -764,7 +764,8 @@ const AppContent = () => {
 
     const cleanAnswerText = (answerText) => {
         if (!answerText) return '';
-        const refIdx = answerText.search(/\n?References\b/i);
+        // Strip any leading asterisks around the References/संदर्भ keyword before matching
+        const refIdx = answerText.search(/\n?\**\s*(?:References\b|संदर्भ)/i);
         const trimmed = refIdx >= 0 ? answerText.slice(0, refIdx) : answerText;
         return trimmed.trim();
     };
@@ -772,38 +773,86 @@ const AppContent = () => {
     const formatAnswerHtml = (answerText) => {
         if (!answerText) return '';
         let sanitizedAnswer = cleanAnswerText(answerText);
-        sanitizedAnswer = sanitizedAnswer.replace(/<\/sub>\s*]/gi, '</sub>');
+
+        // Mark detail-prompt phrases BEFORE any tokenization so the marker survives even if the
+        // phrase gets wrapped in *bold* or _italic_ by the backend.
+        // @@BREAK@@ contains no chars that any tokenization regex targets.
+        sanitizedAnswer = sanitizedAnswer.replace(
+            /(If you want I can answer this in detail|अगर आप चाहें तो मैं और विस्तार से उत्तर दे सकता)/g,
+            '@@BREAK@@$1'
+        );
+
         const headingParts = [];
+        const boldParts = [];
+        const italicParts = [];
+        const citationParts = [];
+        const codeParts = [];
+        const quoteParts = [];
+        const parenParts = [];
+
+        // Step 1: Extract _italic_ FIRST — before any underscore-containing tokens are created,
+        // so the token strings like __CODE_0__ don't get falsely matched by _([^_\n]+?)_
+        sanitizedAnswer = sanitizedAnswer.replace(/_([^_\n]+?)_/g, (match, content) => {
+            italicParts.push(content);
+            return `__ITAL_${italicParts.length - 1}__`;
+        });
+
+        // Step 2: Extract ## / ### headings
         sanitizedAnswer = sanitizedAnswer.replace(/^#{2,3}\s*(.+)$/gm, (match, content) => {
             headingParts.push(content);
             return `__HEADING_BOLD_${headingParts.length - 1}__`;
         });
-        sanitizedAnswer = sanitizedAnswer.replace(/^\s*\*\*(.+?)\*\*\s*$/gm, (match, content) => {
+
+        // Step 3: Extract standalone *text* lines as bold headings (single asterisk, WhatsApp style)
+        sanitizedAnswer = sanitizedAnswer.replace(/^\s*\*([^*\n]+?)\*\s*$/gm, (match, content) => {
             headingParts.push(content);
             return `__HEADING_BOLD_${headingParts.length - 1}__`;
         });
-        const boldParts = [];
-        const italicParts = [];
-        const citationParts = [];
 
-        let text = sanitizedAnswer.replace(/\*\*(.+?)\*\*/gs, (match, content) => {
+        // Step 4: Strip triple backticks — render content as plain text (no code styling)
+        sanitizedAnswer = sanitizedAnswer.replace(/```([^`][\s\S]*?)```/g, (match, content) => content);
+
+        // Step 5: Extract single backtick inline code (not preceded/followed by another backtick)
+        sanitizedAnswer = sanitizedAnswer.replace(/(?<!`)`([^`\n]+)`(?!`)/g, (match, content) => {
+            codeParts.push(content);
+            return `__CODE_${codeParts.length - 1}__`;
+        });
+
+        // Step 6: Extract > quote lines (WhatsApp-style citations); trailing (ref) becomes an italic subscript
+        // Leading whitespace before > is stripped so indented quote lines still match
+        sanitizedAnswer = sanitizedAnswer.replace(/^\s*>\s*(.+)$/gm, (match, content) => {
+            const refMatch = content.match(/^([\s\S]+?)\s*(\([^)]+\))\s*$/);
+            if (refMatch) {
+                quoteParts.push(refMatch[1]);
+                citationParts.push(refMatch[2]);
+                return `__QUOT_${quoteParts.length - 1}__ __CITE_${citationParts.length - 1}__`;
+            }
+            quoteParts.push(content);
+            return `__QUOT_${quoteParts.length - 1}__`;
+        });
+
+        // Step 7: Extract inline *bold* (single asterisk, WhatsApp style)
+        let text = sanitizedAnswer.replace(/\*([^*\n]+?)\*/g, (match, content) => {
             boldParts.push(content);
             return `__BOLD_${boldParts.length - 1}__`;
         });
 
-        text = text.replace(/<sub>([\s\S]*?)<\/sub>/gi, (match, content) => {
-            citationParts.push(content);
-            return `__CITE_${citationParts.length - 1}__`;
+        // Step 8: Extract curly-quoted text as italic
+        text = text.replace(/”([^”]+)”/g, (match, content) => {
+            italicParts.push(content);
+            return `__ITAL_${italicParts.length - 1}__`;
         });
-
-        text = text.replace(/“([^”]+)”/g, (match, content) => {
+        text = text.replace(/”([^”]+)”/g, (match, content) => {
             italicParts.push(content);
             return `__ITAL_${italicParts.length - 1}__`;
         });
 
-        text = text.replace(/"([^"]+)"/g, (match, content) => {
-            italicParts.push(content);
-            return `__ITAL_${italicParts.length - 1}__`;
+        // Step 9: Extract parenthesised text for smaller rendering.
+        // Runs after all other tokenizations so (ref) from citations is already gone (__CITE__ token).
+        // __PAREN__ is placed first in the replacement chain so any inner tokens still get resolved.
+        text = text.replace(/\(([^)\n]+)\)/g, (match, content) => {
+            parenParts.push(content);
+            return `__PAREN_${parenParts.length - 1}__`;
         });
 
         const escapeHtml = (value) =>
@@ -814,14 +863,39 @@ const AppContent = () => {
 
         text = escapeHtml(text);
 
-        text = text.replace(/__CITE_(\d+)__(\s*[|.।])/g, (match, idx, punct) => {
-            return `${punct}__CITE_${idx}__`;
+        // Collapse multiple consecutive newlines to a single one to reduce visual gap
+        text = text.replace(/\n{2,}/g, '\n');
+
+        // Split into lines; insert spacing before headings and citation blocks
+        const lines = text.split('\n');
+        const segments = [];
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (segments.length > 0) {
+                // Blank line before headings
+                if (/^__HEADING_BOLD_\d+__$/.test(trimmed)) {
+                    segments.push('');
+                }
+                // Small-gap line before citation blocks (grey quote lines)
+                if (/^__QUOT_\d+__/.test(trimmed)) {
+                    segments.push('<span style="display:block;height:0.3rem"></span>');
+                }
+            }
+            segments.push(line);
+        }
+
+        let html = segments.join('<br/>');
+
+        // __PAREN__ first so any inner tokens (__BOLD__, __ITAL__, etc.) are resolved by subsequent steps
+        html = html.replace(/__PAREN_(\d+)__/g, (match, idx) => {
+            const content = parenParts[Number(idx)] || '';
+            return `<span style="font-size:0.82em">(${escapeHtml(content)})</span>`;
         });
 
-        let html = text.replace(/\n/g, '<br/>');
         html = html.replace(/__HEADING_BOLD_(\d+)__/g, (match, idx) => {
             const content = headingParts[Number(idx)] || '';
-            return `<strong>${escapeHtml(content)}</strong><hr class="llm-bold-separator"/>`;
+            return `<strong>${escapeHtml(content)}</strong><hr class=”llm-bold-separator”/>`;
         });
         html = html.replace(/__BOLD_(\d+)__/g, (match, idx) => {
             const content = boldParts[Number(idx)] || '';
@@ -831,11 +905,26 @@ const AppContent = () => {
             const content = italicParts[Number(idx)] || '';
             return `<em>${escapeHtml(content)}</em>`;
         });
+        html = html.replace(/__QUOT_(\d+)__/g, (match, idx) => {
+            const content = quoteParts[Number(idx)] || '';
+            return `<span style="background-color:#f1f5f9;border-left:3px solid #94a3b8;padding:0.25em 0.5em;display:inline-block;font-style:italic;border-radius:0 4px 4px 0">${escapeHtml(content)}</span>`;
+        });
         html = html.replace(/__CITE_(\d+)__/g, (match, idx) => {
             const content = citationParts[Number(idx)] || '';
             const escaped = escapeHtml(content);
-            return `<span class="llm-citation-line"><sub class="llm-citation"><em>${escaped}</em></sub></span>`;
+            return `<div style=”display:block;text-align:right;margin-top:0.1rem”><sub style=”font-size:0.65em;color:#475569;font-style:italic”>${escaped}</sub></div>`;
         });
+        html = html.replace(/__CODE_(\d+)__/g, (match, idx) => {
+            const content = codeParts[Number(idx)] || '';
+            return `<span class=”llm-code”>${escapeHtml(content)}</span>`;
+        });
+
+        // Change #1: citation divs are display:block so they create their own line break;
+        // remove the extra <br/> the segment join places immediately after </div> to avoid double-spacing.
+        html = html.replace(/<\/div><br\/>/g, '</div>');
+
+        // Resolve detail-prompt break markers inserted before tokenization
+        html = html.replace(/@@BREAK@@/g, '<br/>');
 
         return html;
     };
