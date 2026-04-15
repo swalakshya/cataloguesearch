@@ -18,7 +18,7 @@ router = APIRouter(tags=["admin"])
 # In-memory session store: token -> expiry (unix timestamp)
 # ---------------------------------------------------------------------------
 _sessions: Dict[str, float] = {}
-_SESSION_TTL = 3600  # 1 hour
+_SESSION_TTL = 86400  # 1 day
 
 
 def _get_key_hash() -> str:

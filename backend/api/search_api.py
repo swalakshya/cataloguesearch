@@ -17,12 +17,13 @@ from backend.common.opensearch import get_opensearch_client, get_metadata
 from backend.config import Config
 from backend.search.index_searcher import IndexSearcher
 from backend.utils import json_dumps, JSONResponse, log_memory_usage
-from utils.logger import setup_logging, VERBOSE_LEVEL_NUM, METRICS_LEVEL_NUM, set_query_id
+from utils.logger import setup_logging, VERBOSE_LEVEL_NUM, METRICS_LEVEL_NUM, set_query_id, get_query_id
 from backend.api.feedback_api import router as feedback_router
 from backend.api.agent.router import router as agent_router
 from backend.api.agent.app import agent_app
 from backend.api.url.router import router as url_router
-from backend.api.admin_api import router as admin_router
+from backend.api.admin.admin_api import router as admin_router
+from backend.api.admin.analytics import router as analytics_router
 from backend.shortener.core import ShortenerStore
 from backend.shortener.opensearch_loader import fetch_file_urls
 
@@ -137,6 +138,7 @@ app.include_router(feedback_router, prefix="/api")
 app.include_router(agent_router, prefix="/api/agent")
 app.include_router(url_router)
 app.include_router(admin_router, prefix="/api")
+app.include_router(analytics_router, prefix="/api")
 
 # --- Mount Agent sub-app (public OpenAPI surface) ---
 app.mount("/agent", agent_app)
@@ -336,7 +338,10 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
                     f"categories={categories}, search_types={search_types}, "
                     f"language={language}, enable_reranking={enable_reranking}")
 
+    ttfb_ms = None
+
     async def _generate():
+        nonlocal ttfb_ms
         loop = asyncio.get_running_loop()
         category_results = {}
 
@@ -438,6 +443,8 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
                 "page_number": cat_config.get("page_number", 1),
             }, ensure_ascii=False)
             yield f"data: {event}\n\n"
+            if ttfb_ms is None:
+                ttfb_ms = round((time.time() - start_time) * 1000, 2)
 
         # --- Suggestions + metrics + done event ---
         total_hits = sum(h for _, h in category_results.values())
@@ -464,8 +471,9 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
         escaped_categories = str(categories).replace(',', ';').replace('"', "'")
         pravachan_cfg = search_types.get("Pravachan", {})
         log_handle.metrics(
-            f"{client_ip},{escaped_query},{search_type},{exact_match},{escaped_categories},{language},"
-            f"{enable_reranking},{pravachan_cfg.get('page_size', 20)},{pravachan_cfg.get('page_number', 1)},{latency_ms},{total_hits}"
+            f"search,{get_query_id()},{client_ip},{escaped_query},{search_type},{enable_reranking},"
+            f"{language},{escaped_categories},{pravachan_cfg.get('page_size', 20)},"
+            f"{pravachan_cfg.get('page_number', 1)},{latency_ms},{ttfb_ms if ttfb_ms is not None else '-'},{total_hits}"
         )
         log_handle.info(f"Search complete: query_id={query_id}, search_type={search_type}, total_hits={total_hits}, latency={latency_ms}ms")
 

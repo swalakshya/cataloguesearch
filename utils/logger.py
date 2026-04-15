@@ -16,11 +16,26 @@ def set_query_id(qid: str) -> None:
     _query_id_var.set(qid)
 
 
+def get_query_id() -> str:
+    return _query_id_var.get()
+
+
 class _QueryIdFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         qid = _query_id_var.get()
         record.query_id = f' [{qid}]' if qid else ''
         return True
+
+
+class _ExactLevelFilter(logging.Filter):
+    """Only pass records whose level matches exactly (used for metrics handler)."""
+    def __init__(self, level: int):
+        super().__init__()
+        self.level = level
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.levelno == self.level
+
 
 def verbose(self, message, *args, **kws):
     if self.isEnabledFor(VERBOSE_LEVEL_NUM):
@@ -98,4 +113,5 @@ def setup_logging(logs_dir="logs",
         metrics_handler.setLevel(METRICS_LEVEL_NUM)
         metrics_format = '%(asctime)s,%(message)s'
         metrics_handler.setFormatter(logging.Formatter(metrics_format, date_format))
+        metrics_handler.addFilter(_ExactLevelFilter(METRICS_LEVEL_NUM))
         root_logger.addHandler(metrics_handler)
