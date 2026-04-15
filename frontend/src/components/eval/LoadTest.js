@@ -19,12 +19,16 @@ const DEFAULTS = {
 const BLOCK_SIZE_OPTIONS = [512, 1024, 1500];
 
 function StatBox({ label, value, unit = 'ms' }) {
+    const displayValue = (value != null && unit === 'ms')
+        ? (value / 1000).toFixed(1)
+        : value;
+    const displayUnit = unit === 'ms' ? 's' : unit;
     return (
         <div className="bg-slate-50 border border-slate-200 rounded-md p-3 text-center">
             <div className="text-xs text-slate-500 mb-1">{label}</div>
             <div className="text-lg font-mono font-semibold text-slate-800">
-                {value != null ? `${value}` : '—'}
-                {value != null && <span className="text-xs text-slate-400 ml-1">{unit}</span>}
+                {displayValue != null ? `${displayValue}` : '—'}
+                {displayValue != null && <span className="text-xs text-slate-400 ml-1">{displayUnit}</span>}
             </div>
         </div>
     );

@@ -17,6 +17,7 @@ log = logging.getLogger(__name__)
 _SEARCH_PATH = "/api/search"
 _ADMIN_AUTH_PATH = "/api/admin/auth"
 _ADMIN_CONFIG_PATH = "/api/admin/config"
+_ADMIN_CACHE_CLEAR_PATH = "/api/admin/cache/clear"
 
 # Search categories enabled for all load test queries
 _SEARCH_TYPES = {
@@ -125,6 +126,18 @@ class LoadTestRunner:
                     log.warning("Admin config update failed: HTTP %s", resp.status)
         except Exception as exc:
             log.warning("Admin config update error: %s", exc)
+
+    async def _clear_cache(self, session: aiohttp.ClientSession, token: str) -> None:
+        url = self.config.base_api_url.rstrip("/") + _ADMIN_CACHE_CLEAR_PATH
+        headers = {"Authorization": f"Bearer {token}"}
+        try:
+            async with session.post(url, headers=headers) as resp:
+                if resp.status == 200:
+                    log.info("OpenSearch cache cleared before load test")
+                else:
+                    log.warning("Cache clear returned HTTP %s — continuing anyway", resp.status)
+        except Exception as exc:
+            log.warning("Cache clear failed: %s — continuing anyway", exc)
 
     async def _restore_defaults(self, session: aiohttp.ClientSession, token: str) -> None:
         url = self.config.base_api_url.rstrip("/") + _ADMIN_CONFIG_PATH
@@ -249,12 +262,13 @@ class LoadTestRunner:
 
     async def run(self, query_data: Dict) -> None:
         cfg = self.config
-        connector = aiohttp.TCPConnector(limit=cfg.max_concurrent + 4)
+        connector = aiohttp.TCPConnector(limit=cfg.max_concurrent + 4, ssl=False)
         try:
             async with aiohttp.ClientSession(connector=connector) as session:
                 # Snapshot current config before touching anything
                 token = await self._admin_token(session)
                 if token:
+                    await self._clear_cache(session, token)
                     effective = await self._fetch_effective_config(session, token)
                     if effective:
                         try:

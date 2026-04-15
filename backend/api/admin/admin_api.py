@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Body, Header, HTTPException, Request
 
+from backend.common.opensearch import get_opensearch_client
 from backend.config import ADMIN_PARAM_DEFAULTS, AGENT_PARAM_DEFAULTS
 
 log_handle = logging.getLogger(__name__)
@@ -178,6 +179,23 @@ async def reset_one_agent_config(
     config.reset_agent_overrides(request.app.state.overrides_path, key=key)
     log_handle.info("Agent override reset: %s", key)
     return {"status": "ok", "key": key}
+
+
+@router.post("/admin/cache/clear")
+async def clear_opensearch_cache(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+):
+    """Clear all OpenSearch caches (request, query, fielddata) on all indices."""
+    _require_auth(authorization)
+    client = get_opensearch_client(request.app.state.config)
+    try:
+        result = client.indices.clear_cache(index="_all")
+        log_handle.info("OpenSearch cache cleared: %s", result)
+        return {"status": "ok", "result": result}
+    except Exception as exc:
+        log_handle.warning("Failed to clear OpenSearch cache: %s", exc)
+        raise HTTPException(status_code=503, detail=f"Cache clear failed: {exc}") from exc
 
 
 @router.delete("/admin/config/{key}")
