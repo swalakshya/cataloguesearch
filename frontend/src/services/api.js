@@ -70,7 +70,7 @@ export const api = {
         try {
             const response = await fetch(`${API_BASE_URL}/search`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Query-Source': 'search' },
                 body: JSON.stringify(requestPayload),
             });
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -319,11 +319,15 @@ export const api = {
         return await response.json();
     },
 
-    getAnalytics: async (token, { fromDate, toDate, source } = {}) => {
+    getAnalytics: async (token, { fromDate, toDate, source, language, minHits, maxHits } = {}) => {
         const params = new URLSearchParams();
         if (fromDate) params.set('from_date', fromDate);
         if (toDate) params.set('to_date', toDate);
-        if (source) params.set('source', source);
+        const sourceList = Array.isArray(source) ? source : (source ? [source] : []);
+        if (sourceList.length > 0) params.set('source', sourceList.join(','));
+        if (language) params.set('language', language);
+        if (minHits != null && minHits !== 0) params.set('min_hits', minHits);
+        if (maxHits != null && maxHits !== 1000) params.set('max_hits', maxHits);
         const response = await fetch(`${API_BASE_URL}/admin/analytics?${params}`, {
             headers: { 'Authorization': `Bearer ${token}` },
         });

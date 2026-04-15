@@ -1,48 +1,89 @@
 import React from 'react';
+import MultiSelectDropdown from './MultiSelectDropdown';
 
-const AnalyticsFilters = ({ filters, onChange, onApply, onReset, loading }) => {
-    const handleChange = (field, value) => {
-        onChange({
-            ...filters,
-            [field]: value,
-        });
-    };
+const SegmentedButtons = ({ options, value, onChange }) => (
+    <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs">
+        {options.map(([val, label]) => (
+            <button
+                key={val}
+                type="button"
+                onClick={() => onChange(val)}
+                className={`px-3 py-2 transition-colors ${value === val ? 'bg-sky-600 text-white font-medium' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+            >
+                {label}
+            </button>
+        ))}
+    </div>
+);
+
+const AnalyticsFilters = ({ filters, onChange, onApply, onReset, loading, availableSources = [] }) => {
+    const set = (field, value) => onChange({ ...filters, [field]: value });
 
     return (
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="grid gap-4 md:grid-cols-4">
-                <label className="block">
-                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">From Date</span>
+            <div className="flex flex-wrap gap-4 items-end">
+
+                <div className="block">
+                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">From</span>
                     <input
                         type="date"
                         value={filters.fromDate}
-                        onChange={e => handleChange('fromDate', e.target.value)}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                        onChange={e => set('fromDate', e.target.value)}
+                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
                     />
-                </label>
+                </div>
 
-                <label className="block">
-                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">To Date</span>
+                <div className="block">
+                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">To</span>
                     <input
                         type="date"
                         value={filters.toDate}
-                        onChange={e => handleChange('toDate', e.target.value)}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                        onChange={e => set('toDate', e.target.value)}
+                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
                     />
-                </label>
+                </div>
 
-                <label className="block">
+                <div className="block">
                     <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Source</span>
-                    <select
-                        value={filters.source}
-                        onChange={e => handleChange('source', e.target.value)}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
-                    >
-                        <option value="">All sources</option>
-                        <option value="search">search</option>
-                        <option value="agent">agent</option>
-                    </select>
-                </label>
+                    <MultiSelectDropdown
+                        label="All sources"
+                        options={availableSources}
+                        selected={Array.isArray(filters.source) ? filters.source : []}
+                        onChange={val => set('source', val)}
+                    />
+                </div>
+
+                <div className="block">
+                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Language</span>
+                    <SegmentedButtons
+                        options={[['', 'Both'], ['hindi', 'Hindi'], ['gujarati', 'Gujarati']]}
+                        value={filters.language}
+                        onChange={val => set('language', val)}
+                    />
+                </div>
+
+                <div className="block">
+                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Results</span>
+                    <div className="flex items-center gap-1.5">
+                        <input
+                            type="number"
+                            min={0}
+                            value={filters.minHits}
+                            onChange={e => set('minHits', Math.max(0, Number(e.target.value)))}
+                            className="w-20 rounded-lg border border-slate-300 px-2 py-2 text-sm text-slate-700 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                            placeholder="Min"
+                        />
+                        <span className="text-xs text-slate-400">–</span>
+                        <input
+                            type="number"
+                            min={0}
+                            value={filters.maxHits}
+                            onChange={e => set('maxHits', Math.max(0, Number(e.target.value)))}
+                            className="w-20 rounded-lg border border-slate-300 px-2 py-2 text-sm text-slate-700 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                            placeholder="Max"
+                        />
+                    </div>
+                </div>
 
                 <div className="flex items-end gap-2">
                     <button
@@ -60,6 +101,7 @@ const AnalyticsFilters = ({ filters, onChange, onApply, onReset, loading }) => {
                         Reset
                     </button>
                 </div>
+
             </div>
         </div>
     );

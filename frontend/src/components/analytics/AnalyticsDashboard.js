@@ -14,13 +14,16 @@ const formatDateInput = (date) => {
 
 const createDefaultFilters = () => {
     const today = new Date();
-    const start = new Date(today);
-    start.setDate(today.getDate() - 6);
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
 
     return {
-        fromDate: formatDateInput(start),
+        fromDate: formatDateInput(yesterday),
         toDate: formatDateInput(today),
-        source: '',
+        source: ['search', 'agent'],
+        language: '',
+        minHits: 0,
+        maxHits: 1000,
     };
 };
 
@@ -81,8 +84,10 @@ const AnalyticsDashboard = ({ token, onSessionExpired }) => {
     };
 
     const summary = useMemo(() => {
-        const sourceLabel = appliedFilters.source ? `${appliedFilters.source} only` : 'all sources';
-        return `${appliedFilters.fromDate} to ${appliedFilters.toDate} · ${sourceLabel}`;
+        const src = appliedFilters.source;
+        const sourceLabel = (!src || src.length === 0) ? 'all sources' : src.join(', ');
+        const langLabel = appliedFilters.language ? ` · ${appliedFilters.language}` : '';
+        return `${appliedFilters.fromDate} to ${appliedFilters.toDate} · ${sourceLabel}${langLabel}`;
     }, [appliedFilters]);
 
     const statCards = useMemo(
@@ -106,6 +111,7 @@ const AnalyticsDashboard = ({ token, onSessionExpired }) => {
                 onApply={handleApply}
                 onReset={handleReset}
                 loading={loading}
+                availableSources={analytics?.sources || ['search', 'agent']}
             />
 
             {error && <p className="text-sm text-red-600">{error}</p>}

@@ -41,8 +41,11 @@ def _parse_metrics(logs_dir: str) -> List[dict]:
                     (ts, source, query_id, _client_ip, query, search_mode,
                      reranked, language, categories, page_size, page,
                      latency_ms, ttfb_ms, total_hits) = parts
-                    if source not in ("search", "agent"):
-                        continue  # skip old-format lines
+                    # Skip lines whose source looks like the old schema (no numeric latency)
+                    try:
+                        float(latency_ms)
+                    except ValueError:
+                        continue
                     try:
                         rows.append({
                             "timestamp": ts,
@@ -104,16 +107,19 @@ async def get_analytics(
     authorization: Optional[str] = Header(None),
     from_date: Optional[str] = Query(None, description="Start date YYYY-MM-DD (inclusive)"),
     to_date: Optional[str] = Query(None, description="End date YYYY-MM-DD (inclusive)"),
-    source: Optional[str] = Query(None, description="Filter: search | agent (omit for all)"),
+    source: Optional[str] = Query(None, description="Comma-separated sources to include (omit for all)"),
+    language: Optional[str] = Query(None, description="Filter by language code, e.g. 'hi' or 'gu' (omit for all)"),
+    min_hits: Optional[int] = Query(None, description="Minimum total_hits (inclusive)"),
+    max_hits: Optional[int] = Query(None, description="Maximum total_hits (inclusive)"),
 ):
     """
     Return query metrics aggregated from metrics.log.
-    Supports date-range and source filtering.
+    Supports date-range, source, and language filtering.
+    Returns `sources` — all distinct source values seen in the logs (unfiltered).
     """
     _require_auth(authorization)
 
-    if source and source not in ("search", "agent"):
-        raise HTTPException(status_code=400, detail="source must be 'search' or 'agent'")
+    selected_sources = {s.strip() for s in source.split(",") if s.strip()} if source else set()
 
     start_date = _parse_date(from_date, "from_date")
     end_date = _parse_date(to_date, "to_date")
@@ -122,6 +128,9 @@ async def get_analytics(
 
     logs_dir = os.environ.get("LOGS_DIR", "logs")
     all_rows = await asyncio.to_thread(_parse_metrics, logs_dir)
+
+    # Collect all distinct sources before filtering (for the UI toggle)
+    all_sources = sorted({r["source"] for r in all_rows})
 
     # Apply filters
     rows = []
@@ -134,7 +143,17 @@ async def get_analytics(
             continue
         if end_date and row_date > end_date:
             continue
-        if source and r["source"] != source:
+        if selected_sources and r["source"] not in selected_sources:
+            continue
+        if language:
+            # Normalise: 'hindi'/'hi' → 'hindi', 'gujarati'/'gu' → 'gujarati'
+            _LANG_MAP = {"hi": "hindi", "gu": "gujarati"}
+            row_lang = _LANG_MAP.get(r["language"], r["language"])
+            if row_lang != language:
+                continue
+        if min_hits is not None and (r["total_hits"] is None or r["total_hits"] < min_hits):
+            continue
+        if max_hits is not None and (r["total_hits"] is None or r["total_hits"] > max_hits):
             continue
         rows.append(r)
 
@@ -163,6 +182,7 @@ async def get_analytics(
     _QUERY_CAP = 5000
     return {
         "total": len(rows),
+        "sources": all_sources,
         "latency": _stats(latencies),
         "ttfb": _stats(ttfbs),
         "by_day": by_day_list,

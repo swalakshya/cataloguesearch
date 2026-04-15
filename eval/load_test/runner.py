@@ -176,7 +176,7 @@ class LoadTestRunner:
 
         t0 = time.monotonic()
         try:
-            async with session.post(url, json=payload, timeout=timeout) as resp:
+            async with session.post(url, json=payload, timeout=timeout, headers={"X-Query-Source": "loadtest"}) as resp:
                 resp.raise_for_status()
                 # Use readline() — aiohttp's async for iterates chunks not lines
                 while True:

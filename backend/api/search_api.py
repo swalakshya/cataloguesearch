@@ -332,6 +332,7 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
         request.headers.get("x-forwarded-for", "").split(",")[0].strip() or
         (getattr(request.client, 'host', 'unknown') if request.client else 'unknown')
     )
+    query_source = request.headers.get("x-query-source", "unknown")
 
     log_handle.info(f"Received search request: query_id={query_id}, keywords='{keywords}', "
                     f"exact_match={exact_match}, exclude_words={exclude_words}, "
@@ -471,7 +472,7 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
         escaped_categories = str(categories).replace(',', ';').replace('"', "'")
         pravachan_cfg = search_types.get("Pravachan", {})
         log_handle.metrics(
-            f"search,{get_query_id()},{client_ip},{escaped_query},{search_type},{enable_reranking},"
+            f"{query_source},{get_query_id()},{client_ip},{escaped_query},{search_type},{enable_reranking},"
             f"{language},{escaped_categories},{pravachan_cfg.get('page_size', 20)},"
             f"{pravachan_cfg.get('page_number', 1)},{latency_ms},{ttfb_ms if ttfb_ms is not None else '-'},{total_hits}"
         )
