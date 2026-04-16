@@ -144,6 +144,7 @@ const AppContent = () => {
         if (path === '/usage-guide') return 'usage-guide';
         if (path === '/search-index') return 'search-index';
         if (path === '/eval') return 'eval';
+        if (path === '/aibot') return 'aibot';
         return 'home'; // Default to 'home' for root path
     });
     
@@ -162,6 +163,9 @@ const AppContent = () => {
             setCurrentPageState('search-index');
         } else if (path === '/eval') {
             setCurrentPageState('eval');
+        } else if (path === '/aibot') {
+            setCurrentPageState('aibot');
+            setHomeMode('chat');
         } else if (path === '/') {
             setCurrentPageState('home');
         }
@@ -275,7 +279,7 @@ const AppContent = () => {
     const PAGE_SIZE = 20;
     const llmProvider = (process.env.REACT_APP_LLM_PROVIDER || '').trim();
     const [llmAvailable, setLlmAvailable] = useState(false);
-    const [homeMode, setHomeMode] = useState('search');
+    const [homeMode, setHomeMode] = useState(() => location.pathname === '/aibot' ? 'chat' : 'search');
     const isChatMode = homeMode === 'chat';
     const chatEnabled = isChatMode;
     const showAnswerButton = llmAvailable && isChatMode;
@@ -283,6 +287,23 @@ const AppContent = () => {
     useEffect(() => {
         api.checkLlmHealth().then(setLlmAvailable);
     }, []);
+
+    useEffect(() => {
+        if (currentPage === 'home') {
+            document.title = 'Swa Lakshya (स्व-लक्ष्य)';
+            return;
+        }
+        const overrides = {
+            'aibot':        'AI Bot',
+            'search-index': 'Content',
+            'usage-guide':  'Usage Guide',
+            'whats-new':    "What's New",
+            'developer':    'Developer APIs',
+        };
+        const label = overrides[currentPage] ||
+            currentPage.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        document.title = `Swalakshya · ${label}`;
+    }, [currentPage]);
 
     useEffect(() => {
         api.getAppConfig().then(cfg => {
@@ -760,7 +781,7 @@ const AppContent = () => {
 
     const paginatedSimilarResults = getPaginatedResults(similarDocumentsData?.results, similarDocsPage);
 
-    const showSearchInterface = currentPage === 'home';
+    const showSearchInterface = currentPage === 'home' || (currentPage === 'aibot' && llmAvailable);
 
     const cleanAnswerText = (answerText) => {
         if (!answerText) return '';
@@ -994,24 +1015,21 @@ const AppContent = () => {
                 <div className="max-w-[1080px] mx-auto">
                     <Header currentPage={currentPage} />
 
+                    {currentPage === 'aibot' && !llmAvailable && (
+                        <main>
+                            <div className="text-center py-16">
+                                <p className="text-slate-500 text-lg">AI Service is unavailable right now.</p>
+                            </div>
+                        </main>
+                    )}
+
                     {showSearchInterface && (
                         <main>
-                            {llmAvailable && !isChatMode && (
-                                <div className="flex items-center justify-between bg-lime-50 border border-lime-200 rounded-lg px-4 py-2.5 mb-4 text-sm">
-                                    <span className="text-lime-800">✨ AI Chat (beta) is available.</span>
-                                    <button
-                                        onClick={() => setHomeMode('chat')}
-                                        className="ml-4 flex-shrink-0 bg-lime-600 hover:bg-lime-700 text-white text-xs font-semibold px-3 py-1.5 rounded-md transition-colors"
-                                    >
-                                        Try it
-                                    </button>
-                                </div>
-                            )}
 
                             {isChatMode && (
                                 <div className="flex items-center mb-4 text-sm">
                                     <button
-                                        onClick={() => setHomeMode('search')}
+                                        onClick={() => currentPage === 'aibot' ? navigate('/') : setHomeMode('search')}
                                         className="text-slate-500 hover:text-slate-700 flex items-center gap-1 transition-colors"
                                     >
                                         ← Back to Search
@@ -1501,6 +1519,7 @@ const AppContent = () => {
 
 // Admin route wrapper — persists session token in localStorage (survives tab close, expires after 1 day)
 function AdminRoute() {
+    React.useEffect(() => { document.title = 'Swalakshya · Admin'; }, []);
     const [token, setToken] = React.useState(() => localStorage.getItem('adminToken'));
     const handleAuth = (t) => { localStorage.setItem('adminToken', t); setToken(t); };
     const handleLogout = () => { localStorage.removeItem('adminToken'); setToken(null); };
@@ -1521,6 +1540,7 @@ export default function App() {
                 <Route path="/search-index" element={<AppContent />} />
                 <Route path="/eval" element={<AppContent />} />
                 <Route path="/developer" element={<AppContent />} />
+                <Route path="/aibot" element={<AppContent />} />
                 <Route path="/admin" element={<AdminRoute />} />
             </Routes>
         </Router>
