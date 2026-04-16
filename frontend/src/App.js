@@ -1312,7 +1312,7 @@ const AppContent = () => {
                                                                                 )}
                                                                                 {url && (
                                                                                     <a href={url} target="_blank" rel="noopener noreferrer"
-                                                                                        className="text-blue-600 hover:text-blue-800 font-medium flex items-center">
+                                                                                        className="inline-flex items-center gap-1 text-sm text-red-600 hover:text-red-700 bg-white border border-slate-300 rounded px-2 py-1 hover:border-red-300 transition-colors">
                                                                                         <PdfIcon />View PDF
                                                                                     </a>
                                                                                 )}
@@ -1546,7 +1546,7 @@ const AppContent = () => {
                                                                                                     )}
                                                                                                     {card.viewPdfUrl && (
                                                                                                         <a href={card.viewPdfUrl} target="_blank" rel="noopener noreferrer"
-                                                                                                            className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700 px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors">
+                                                                                                            className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700 bg-white border border-slate-300 rounded px-2 py-1 hover:border-red-300 transition-colors">
                                                                                                             <PdfIcon />View PDF
                                                                                                         </a>
                                                                                                     )}
