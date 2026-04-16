@@ -289,6 +289,23 @@ const AppContent = () => {
     }, []);
 
     useEffect(() => {
+        if (currentPage === 'home') {
+            document.title = 'Swa Lakshya (स्व-लक्ष्य)';
+            return;
+        }
+        const overrides = {
+            'aibot':        'AI Bot',
+            'search-index': 'Content',
+            'usage-guide':  'Usage Guide',
+            'whats-new':    "What's New",
+            'developer':    'Developer APIs',
+        };
+        const label = overrides[currentPage] ||
+            currentPage.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        document.title = `Swalakshya · ${label}`;
+    }, [currentPage]);
+
+    useEffect(() => {
         api.getAppConfig().then(cfg => {
             setDebugMode(cfg.debug_mode);
             setActiveCategories(cfg.active_categories);
@@ -1502,6 +1519,7 @@ const AppContent = () => {
 
 // Admin route wrapper — persists session token in localStorage (survives tab close, expires after 1 day)
 function AdminRoute() {
+    React.useEffect(() => { document.title = 'Swalakshya · Admin'; }, []);
     const [token, setToken] = React.useState(() => localStorage.getItem('adminToken'));
     const handleAuth = (t) => { localStorage.setItem('adminToken', t); setToken(t); };
     const handleLogout = () => { localStorage.removeItem('adminToken'); setToken(null); };
