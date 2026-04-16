@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { MenuIcon, CloseIcon } from './SharedComponents';
 
 // --- NAVIGATION & HEADER COMPONENTS ---
-export const Navigation = ({ currentPage, setCurrentPage, debugMode }) => {
+export const Navigation = ({ currentPage, setCurrentPage, debugMode, isChatMode, onNewChat }) => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const location = useLocation();
 
@@ -49,7 +49,7 @@ export const Navigation = ({ currentPage, setCurrentPage, debugMode }) => {
                     </div>
 
                     {/* Desktop Menu */}
-                    <div className="hidden md:flex space-x-1">
+                    <div className="hidden md:flex items-center space-x-1">
                         {menuItems.map((item) => (
                             <Link
                                 key={item.id}

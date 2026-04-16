@@ -424,7 +424,7 @@ const TransliterationInput = ({
                     onKeyDown={handleKeyDown}
                     placeholder={getDynamicPlaceholder()}
                     disabled={disabled}
-                    className={`w-full h-8 pl-8 pr-20 text-sm bg-white border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-slate-900 font-sans ${className}`}
+                    className={`w-full h-8 pl-8 pr-20 text-sm bg-white border border-slate-400 shadow-sm rounded focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-600 text-slate-900 font-sans ${className}`}
                 />
 
                 {/* Toggle Button */}

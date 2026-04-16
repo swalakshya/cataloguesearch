@@ -28,8 +28,49 @@ export const ExpandIcon = () => (
 );
 
 export const PdfIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 24 24" aria-hidden="true">
+        <path
+            fill="#fff"
+            d="M5 2h10.5L21 7.5V19a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3Z"
+        />
+        <path
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinejoin="round"
+            d="M5 2h10.5L21 7.5V19a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3Z"
+        />
+        <path
+            fill="#ffd6d6"
+            d="M15.5 2v5.5H21Z"
+        />
+        <path
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinejoin="round"
+            d="M15.5 2v5.5H21"
+        />
+        <path
+            d="M8.3 14.9c1.5-1.4 3.1-4.6 3.8-6.8c.15-.46.32-.68.52-.68c.42 0 .62.54.62 1.63c0 1.4-.36 3.23-1.04 5.03c2.06-.4 3.92-.28 4.9.34c.55.35.58.87.08 1.12c-.48.24-1.16.36-2.01.36c-1.29 0-2.87-.28-4.42-.79c-.56.95-1.15 1.8-1.74 2.46c-.63.72-1.26 1.08-1.88 1.08c-.64 0-1-.31-1-.84c0-.68.7-1.62 2.19-2.73Zm3.6-.56c-1.1-.41-2.01-.83-2.53-1.16c-.94.79-1.45 1.4-1.45 1.77c0 .12.07.18.2.18c.42 0 1.46-.95 2.74-2.49Zm.82-1.48c1.24.26 2.35.38 3.24.38c.62 0 .95-.06.95-.17c0-.18-.75-.42-1.93-.42c-.61 0-1.36.07-2.26.21Zm-.02-1.58c.33-1.02.5-1.98.5-2.74c0-.52-.04-.78-.12-.78c-.16 0-.52 1.11-1.19 3.37c.28.07.56.12.81.15Z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        />
+        <text
+            x="12"
+            y="20.05"
+            textAnchor="middle"
+            fontSize="4.8"
+            fontWeight="700"
+            letterSpacing="0.6"
+            fill="currentColor"
+            fontFamily="Arial, Helvetica, sans-serif"
+        >
+            PDF
+        </text>
     </svg>
 );
 
