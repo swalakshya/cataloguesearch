@@ -1449,7 +1449,7 @@ const AppContent = () => {
                                 </div>
                             )}
                             
-                            {homeMode && !isLoading && !searchData && !similarDocumentsData && (
+                            {homeMode && !isChatMode && !isLoading && !searchData && !similarDocumentsData && (
                                 <div className="mt-5">
                                     <p className="text-xs text-slate-400 uppercase tracking-wider mb-2.5 font-medium">Try searching for</p>
                                     <div className="flex flex-wrap gap-2">
