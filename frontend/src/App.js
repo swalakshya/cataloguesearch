@@ -151,6 +151,7 @@ const AppContent = () => {
     // Update state when URL changes (browser navigation)
     useEffect(() => {
         const path = location.pathname;
+        setHomeMode(path === '/aibot' ? 'chat' : 'search');
         if (path === '/about') {
             setCurrentPageState('about');
         } else if (path === '/feedback') {
@@ -165,7 +166,6 @@ const AppContent = () => {
             setCurrentPageState('eval');
         } else if (path === '/aibot') {
             setCurrentPageState('aibot');
-            setHomeMode('chat');
         } else if (path === '/') {
             setCurrentPageState('home');
         }
@@ -200,6 +200,8 @@ const AppContent = () => {
         setChatMessages([]);
         setChatInput('');
         setChatInputVisible(false);
+        resetTypingState();
+        clearPersistedChatSession();
         setHomeMode('search');
         if (chatSessionId) {
             api.closeChatSession(chatSessionId).catch(() => null);
@@ -220,6 +222,8 @@ const AppContent = () => {
             setChatMessages([]);
             setChatInput('');
             setChatInputVisible(false);
+            resetTypingState();
+            clearPersistedChatSession();
         }
         
         const routes = {
@@ -287,6 +291,20 @@ const AppContent = () => {
     const messagesEndRef = useRef(null);
     const isChatMode = homeMode === 'chat';
     const chatEnabled = isChatMode;
+
+    const resetTypingState = useCallback(() => {
+        Object.values(typingIntervalsRef.current).forEach(clearInterval);
+        typingIntervalsRef.current = {};
+        setDisplayedTexts({});
+    }, []);
+
+    const clearPersistedChatSession = useCallback(() => {
+        try {
+            localStorage.removeItem('llmChatSession');
+        } catch (error) {
+            console.warn('localStorage not available:', error);
+        }
+    }, []);
 
     useEffect(() => {
         api.checkLlmHealth().then(setLlmAvailable);
@@ -361,6 +379,14 @@ const AppContent = () => {
                 if (parsed?.sessionId) {
                     setChatSessionId(parsed.sessionId);
                     setChatMessages(parsed.messages || []);
+                    setDisplayedTexts(
+                        (parsed.messages || []).reduce((acc, msg, idx) => {
+                            if (msg?.role === 'assistant' && msg?.content) {
+                                acc[idx] = msg.content;
+                            }
+                            return acc;
+                        }, {})
+                    );
                 }
             }
         } catch (error) {
@@ -383,6 +409,14 @@ const AppContent = () => {
             console.warn('localStorage not available:', error);
         }
     }, [chatEnabled, chatSessionId, chatMessages]);
+
+    const getChatSessionPayload = useCallback(() => {
+        const languageCode = language === 'gujarati' ? 'gu' : 'hi';
+        return {
+            language: languageCode,
+            ...(llmProvider ? { provider: llmProvider } : {})
+        };
+    }, [language, llmProvider]);
 
     // Update metadata when language or contentTypes selection changes
     useEffect(() => {
@@ -529,6 +563,8 @@ const AppContent = () => {
         setChatMessages([]);
         setChatInput('');
         setChatInputVisible(false);
+        resetTypingState();
+        clearPersistedChatSession();
         if (chatSessionId) {
             api.closeChatSession(chatSessionId).catch(() => null);
             setChatSessionId(null);
@@ -548,7 +584,7 @@ const AppContent = () => {
         setSearchData(data);
         setLoadingCategories(new Set());
         setIsLoading(false);
-    }, [query, buildSearchPayload]);
+    }, [activeCategories, buildSearchPayload, chatSessionId, clearPersistedChatSession, query, resetTypingState]);
 
     async function handleChatSend(sessionId, message) {
         if (!message.trim()) {
@@ -560,11 +596,31 @@ const AppContent = () => {
         setChatInput('');
         setChatInputVisible(false);
         try {
-            const data = await api.sendChatMessage(sessionId, {
-                role: 'user',
-                content: message,
-                filters: buildLlmFilters()
-            });
+            let data;
+            try {
+                data = await api.sendChatMessage(sessionId, {
+                    role: 'user',
+                    content: message,
+                    filters: buildLlmFilters()
+                });
+            } catch (error) {
+                if (error?.detail !== 'session_not_found') {
+                    throw error;
+                }
+
+                clearPersistedChatSession();
+                resetTypingState();
+                setChatSessionId(null);
+                setChatMessages([{ role: 'user', content: message }, { role: 'assistant', pending: true }]);
+
+                const freshSession = await api.createChatSession(getChatSessionPayload());
+                setChatSessionId(freshSession.session_id);
+                data = await api.sendChatMessage(freshSession.session_id, {
+                    role: 'user',
+                    content: message,
+                    filters: buildLlmFilters()
+                });
+            }
             setChatMessages(prev => {
                 const updated = [...prev];
                 const idx = updated.findIndex(item => item.role === 'assistant' && item.pending);
@@ -590,8 +646,15 @@ const AppContent = () => {
                 ];
             });
         } catch (error) {
-            setLlmError('Could not continue chat. Please try again.');
-            setChatMessages(prev => prev.filter(item => !(item.role === 'assistant' && item.pending)));
+            if (error?.detail === 'session_not_found') {
+                clearPersistedChatSession();
+                setChatSessionId(null);
+                setChatMessages([]);
+                setLlmError('The previous chat session expired. Please send your question again.');
+            } else {
+                setLlmError('Could not continue chat. Please try again.');
+                setChatMessages(prev => prev.filter(item => !(item.role === 'assistant' && item.pending)));
+            }
         } finally {
             setLlmLoading(false);
         }
@@ -603,12 +666,10 @@ const AppContent = () => {
         setChatMessages([]);
         setChatInput('');
         setChatInputVisible(false);
-        const languageCode = language === 'gujarati' ? 'gu' : 'hi';
+        resetTypingState();
+        clearPersistedChatSession();
         try {
-            const session = await api.createChatSession({
-                language: languageCode,
-                ...(llmProvider ? { provider: llmProvider } : {})
-            });
+            const session = await api.createChatSession(getChatSessionPayload());
             setChatSessionId(session.session_id);
             await handleChatSend(session.session_id, firstQuestion);
         } catch (error) {
@@ -664,10 +725,9 @@ const AppContent = () => {
         setChatInput('');
         setChatInputVisible(false);
         setLlmError(null);
-        Object.values(typingIntervalsRef.current).forEach(clearInterval);
-        typingIntervalsRef.current = {};
-        setDisplayedTexts({});
-    }, [chatSessionId]);
+        resetTypingState();
+        clearPersistedChatSession();
+    }, [chatSessionId, clearPersistedChatSession, resetTypingState]);
 
     const handleNewChat = useCallback(async () => {
         await handleEndChat();
@@ -1364,8 +1424,15 @@ const AppContent = () => {
                                     {chatMessages.length === 0 && !llmLoading && (
                                         <div className="flex flex-col items-center justify-center py-16">
                                             <SearchableContentWidget />
-                                            <div className="w-full max-w-2xl mt-10">
-                                                <div className="flex items-center gap-2">
+                                            <div className="w-full max-w-5xl mt-10">
+                                                <div className="flex items-center gap-2 rounded-2xl border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3">
+                                                    <button
+                                                        onClick={handleNewChat}
+                                                        title="New Chat"
+                                                        className="h-8 w-8 flex items-center justify-center rounded-full border border-sky-300 bg-sky-100 text-sky-700 hover:bg-sky-200 hover:border-sky-400 transition-colors text-xl font-bold leading-none shrink-0"
+                                                    >
+                                                        +
+                                                    </button>
                                                     <div className="flex-grow">
                                                         <SearchBar
                                                             query={query}
@@ -1377,16 +1444,19 @@ const AppContent = () => {
                                                     <button
                                                         onClick={() => query.trim() && handleChatStart(query)}
                                                         disabled={!query.trim()}
-                                                        className="bg-lime-500 text-slate-900 font-semibold h-8 px-4 rounded text-sm hover:bg-lime-600 transition duration-200 disabled:bg-slate-300 flex items-center whitespace-nowrap"
+                                                        className="bg-sky-600 text-white h-8 w-8 rounded-full border border-sky-700 hover:bg-sky-700 hover:border-sky-800 transition duration-200 disabled:bg-slate-300 disabled:border-slate-300 flex items-center justify-center shrink-0"
+                                                        aria-label="Send"
                                                     >
-                                                        Ask
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
+                                                        </svg>
                                                     </button>
                                                 </div>
                                                 <div className="flex justify-end mt-2">
                                                     <SearchOptions language={language} setLanguage={setLanguage} />
                                                 </div>
                                             </div>
-                                            <div className="mt-10 w-full max-w-2xl">
+                                            <div className="mt-10 w-full max-w-5xl">
                                                 <p className="text-xs text-slate-400 uppercase tracking-wider mb-3 font-medium text-center">Try asking</p>
                                                 <div className="flex flex-wrap gap-2 justify-center">
                                                     {suggestedQueries.map(term => (
@@ -1402,9 +1472,9 @@ const AppContent = () => {
 
                                     {/* Active chat state */}
                                     {(chatMessages.length > 0 || llmLoading) && (
-                                        <div className="flex flex-col max-w-5xl mx-auto w-full">
+                                        <div className="flex flex-col max-w-5xl mx-auto w-full min-h-[calc(100vh-240px)]">
                                             {/* Messages */}
-                                            <div className="py-4 space-y-6">
+                                            <div className="flex-1 py-4 space-y-6">
                                                 {chatMessages.map((msg, idx) => (
                                                     <div key={`${msg.role}-${idx}`}>
                                                         {msg.role === 'user' ? (
@@ -1497,7 +1567,7 @@ const AppContent = () => {
                                             </div>
 
                                             {/* Sticky bottom input */}
-                                            <div className="sticky bottom-4 bg-transparent pt-3 pb-4 shrink-0">
+                                            <div className="sticky bottom-4 mt-auto bg-transparent pt-3 pb-4 shrink-0">
                                                 <div className="flex items-center gap-2 rounded-2xl border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3">
                                                     <button
                                                         onClick={handleNewChat}

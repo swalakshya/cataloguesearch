@@ -212,7 +212,19 @@ export const api = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(requestPayload),
             });
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            if (!response.ok) {
+                let detail = null;
+                try {
+                    const body = await response.json();
+                    detail = body?.detail || null;
+                } catch {
+                    detail = null;
+                }
+                const error = new Error(detail || `HTTP error! status: ${response.status}`);
+                error.status = response.status;
+                error.detail = detail;
+                throw error;
+            }
             return await response.json();
         } catch (error) {
             console.error("API Error: Could not send chat message", error);
