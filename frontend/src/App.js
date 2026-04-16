@@ -1568,7 +1568,7 @@ const AppContent = () => {
                                             </div>
 
                                             {/* Sticky bottom input */}
-                                            <div className="sticky bottom-4 mt-auto bg-transparent pt-3 pb-4 shrink-0">
+                                            <div className="sticky bottom-0 mt-auto pt-3 pb-4 shrink-0" style={{ backgroundColor: '#f0f4f9' }}>
                                                 <div className="flex items-center gap-2 rounded-2xl border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3">
                                                     <button
                                                         onClick={handleNewChat}
@@ -1597,6 +1597,12 @@ const AppContent = () => {
                                                             </svg>
                                                         )}
                                                     </button>
+                                                </div>
+                                                <div className="flex items-start gap-2.5 px-3.5 py-2.5 mt-2 bg-amber-50 border border-amber-200 rounded text-amber-800 text-xs leading-relaxed">
+                                                    <svg className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                                    </svg>
+                                                    <span>Swalakshya AI Bot uses AI to generate answers, which may sometimes be inaccurate. Always refer to the <strong>original scriptures and references</strong> attached to each answer to study authentic content and stay true to Jinvaani. Use this bot as a starting point, not as a definitive source.</span>
                                                 </div>
                                             </div>
                                         </div>
