@@ -168,18 +168,16 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
     const granthFilterCount = activeFilters.filter(f => f.key === 'Name').length;
 
     const getContentTypeText = () => {
-        if (contentTypes.pravachans && contentTypes.granths) {
-            return 'Both';
-        } else if (contentTypes.pravachans) {
-            return 'Pravachans only';
-        } else if (contentTypes.granths) {
-            return 'Granths only';
-        }
-        return 'None selected';
+        const parts = [];
+        if (contentTypes.pravachans) parts.push('Pravachans');
+        if (contentTypes.granths) parts.push('Granths');
+        if (contentTypes.books) parts.push('Books');
+        if (parts.length === 0) return 'None selected';
+        return parts.join(' + ');
     };
 
     const getSummaryText = () => {
-        const hasContentTypeFilter = !contentTypes.pravachans || !contentTypes.granths;
+        const hasContentTypeFilter = !contentTypes.pravachans || !contentTypes.granths || contentTypes.books;
         const hasYearFilter = startYear || endYear;
         const totalActiveFilters = granthFilterCount + (hasContentTypeFilter ? 1 : 0) + (hasYearFilter ? 1 : 0);
 
@@ -207,16 +205,16 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
             </button>
 
             {/* Active Filters */}
-            {(granthFilterCount > 0 || (!contentTypes.pravachans || !contentTypes.granths) || startYear || endYear) && (
+            {(granthFilterCount > 0 || (!contentTypes.pravachans || !contentTypes.granths || contentTypes.books) || startYear || endYear) && (
                 <div className="flex flex-wrap gap-1.5 items-center">
                     <span className="font-semibold text-slate-600 text-sm">Active:</span>
 
-                    {/* Content Type Chip (only if not "Both") */}
-                    {(!contentTypes.pravachans || !contentTypes.granths) && (
+                    {/* Content Type Chip (only if not default: pravachans+granths, no books) */}
+                    {(!contentTypes.pravachans || !contentTypes.granths || contentTypes.books) && (
                         <div className="bg-purple-100 text-purple-800 px-2 py-1 rounded-full flex items-center gap-2 text-sm font-medium">
                             <span>{getContentTypeText()}</span>
                             <button
-                                onClick={() => setContentTypes({ pravachans: true, granths: true })}
+                                onClick={() => setContentTypes({ pravachans: true, granths: true, books: false })}
                                 className="text-purple-600 hover:text-purple-800 font-bold"
                             >
                                 &times;

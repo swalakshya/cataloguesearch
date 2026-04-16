@@ -94,15 +94,7 @@ body {
 }
 
 .llm-answer-scroll {
-  max-height: 60vh;
-  overflow-y: auto;
   padding-right: 0.25rem;
-}
-
-@media (max-width: 768px) {
-  .llm-answer-scroll {
-    max-height: 55vh;
-  }
 }
 
 .llm-bold-separator {

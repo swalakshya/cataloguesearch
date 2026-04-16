@@ -194,6 +194,7 @@ const AppContent = () => {
         setShowTipsModal(false);
         setLlmAnswer(null);
         setLlmReferences([]);
+        setLlmCitations([]);
         setLlmError(null);
         setLlmLoading(false);
         setChatMessages([]);
@@ -270,6 +271,7 @@ const AppContent = () => {
     const [showTipsModal, setShowTipsModal] = useState(false);
     const [llmAnswer, setLlmAnswer] = useState(null);
     const [llmReferences, setLlmReferences] = useState([]);
+    const [llmCitations, setLlmCitations] = useState([]);
     const [llmError, setLlmError] = useState(null);
     const [llmLoading, setLlmLoading] = useState(false);
     const [chatSessionId, setChatSessionId] = useState(null);
@@ -454,6 +456,7 @@ const AppContent = () => {
         const types = [];
         if (contentTypes.pravachans) types.push('Pravachan');
         if (contentTypes.granths) types.push('Granth');
+        if (contentTypes.books) types.push('Books');
         if (types.length) filters.content_type = types;
 
         if (startYear) filters.year_from = Number(startYear);
@@ -490,6 +493,7 @@ const AppContent = () => {
         setSearchData(null);
         setLlmAnswer(null);
         setLlmReferences([]);
+        setLlmCitations([]);
         setLlmError(null);
         setChatMessages([]);
         setChatInput('');
@@ -537,7 +541,8 @@ const AppContent = () => {
                     updated[idx] = {
                         role: 'assistant',
                         content: data.answer || '',
-                        references: data.references || []
+                        references: data.references || [],
+                        citations: data.citations || []
                     };
                     return updated;
                 }
@@ -546,7 +551,8 @@ const AppContent = () => {
                     {
                         role: 'assistant',
                         content: data.answer || '',
-                        references: data.references || []
+                        references: data.references || [],
+                        citations: data.citations || []
                     }
                 ];
             });
@@ -607,6 +613,7 @@ const AppContent = () => {
             });
             setLlmAnswer(data.answer || '');
             setLlmReferences(data.references || []);
+            setLlmCitations(data.citations || []);
             await api.closeChatSession(session.session_id).catch(() => null);
         } catch (error) {
             setLlmError('Could not generate answer. Please try again.');
@@ -1159,19 +1166,30 @@ const AppContent = () => {
                                                     <div className="space-y-2">
                                                         {llmReferences.map((ref, idx) => {
                                                             const { text, url } = parseReference(ref);
+                                                            const citation = llmCitations.find(c => c.reference === ref);
                                                             return (
                                                                 <div key={`${ref}-${idx}`} className="flex items-center justify-between gap-3 text-sm text-slate-700">
                                                                     <span className="flex-1">{text || ref}</span>
-                                                                    {url && (
-                                                                        <a
-                                                                            href={url}
-                                                                            target="_blank"
-                                                                            rel="noopener noreferrer"
-                                                                            className="text-blue-600 hover:text-blue-800 font-medium flex items-center whitespace-nowrap"
-                                                                        >
-                                                                            <PdfIcon />View PDF
-                                                                        </a>
-                                                                    )}
+                                                                    <div className="flex items-center gap-2 whitespace-nowrap">
+                                                                        {citation && (
+                                                                            <button
+                                                                                onClick={() => handleExpand(citation.chunk_id)}
+                                                                                className="text-slate-500 hover:text-slate-800 font-medium underline underline-offset-2"
+                                                                            >
+                                                                                View text
+                                                                            </button>
+                                                                        )}
+                                                                        {url && (
+                                                                            <a
+                                                                                href={url}
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                                className="text-blue-600 hover:text-blue-800 font-medium flex items-center"
+                                                                            >
+                                                                                <PdfIcon />View PDF
+                                                                            </a>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                             );
                                                         })}
@@ -1222,19 +1240,30 @@ const AppContent = () => {
                                                         <div className="space-y-2">
                                                             {msg.references.map((ref, refIdx) => {
                                                                 const { text, url } = parseReference(ref);
+                                                                const citation = (msg.citations || []).find(c => c.reference === ref);
                                                                 return (
                                                                     <div key={`${ref}-${refIdx}`} className="flex items-center justify-between gap-3 text-sm text-slate-700">
                                                                         <span className="flex-1">{text || ref}</span>
-                                                                        {url && (
-                                                                            <a
-                                                                                href={url}
-                                                                                target="_blank"
-                                                                                rel="noopener noreferrer"
-                                                                                className="text-blue-600 hover:text-blue-800 font-medium flex items-center whitespace-nowrap"
-                                                                            >
-                                                                                <PdfIcon />View PDF
-                                                                            </a>
-                                                                        )}
+                                                                        <div className="flex items-center gap-2 whitespace-nowrap">
+                                                                            {citation && (
+                                                                                <button
+                                                                                    onClick={() => handleExpand(citation.chunk_id)}
+                                                                                    className="text-slate-500 hover:text-slate-800 font-medium underline underline-offset-2"
+                                                                                >
+                                                                                    View text
+                                                                                </button>
+                                                                            )}
+                                                                            {url && (
+                                                                                <a
+                                                                                    href={url}
+                                                                                    target="_blank"
+                                                                                    rel="noopener noreferrer"
+                                                                                    className="text-blue-600 hover:text-blue-800 font-medium flex items-center"
+                                                                                >
+                                                                                    <PdfIcon />View PDF
+                                                                                </a>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
                                                                 );
                                                             })}
@@ -1513,6 +1542,7 @@ const AppContent = () => {
                     </svg>
                 </button>
             )}
+
         </div>
     );
 };
