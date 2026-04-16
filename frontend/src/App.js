@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { GoogleReCaptchaProvider } from 'react-google-recaptcha-v3';
 
@@ -609,9 +610,11 @@ const AppContent = () => {
                 }
 
                 clearPersistedChatSession();
-                resetTypingState();
-                setChatSessionId(null);
-                setChatMessages([{ role: 'user', content: message }, { role: 'assistant', pending: true }]);
+                flushSync(() => {
+                    resetTypingState();
+                    setChatSessionId(null);
+                    setChatMessages([{ role: 'user', content: message }, { role: 'assistant', pending: true }]);
+                });
 
                 const freshSession = await api.createChatSession(getChatSessionPayload());
                 setChatSessionId(freshSession.session_id);
@@ -1441,6 +1444,7 @@ const AppContent = () => {
                                                             language={language}
                                                         />
                                                     </div>
+                                                    <SearchOptions language={language} setLanguage={setLanguage} inline />
                                                     <button
                                                         onClick={() => query.trim() && handleChatStart(query)}
                                                         disabled={!query.trim()}
@@ -1451,9 +1455,6 @@ const AppContent = () => {
                                                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
                                                         </svg>
                                                     </button>
-                                                </div>
-                                                <div className="flex justify-end mt-2">
-                                                    <SearchOptions language={language} setLanguage={setLanguage} />
                                                 </div>
                                             </div>
                                             <div className="mt-10 w-full max-w-5xl">

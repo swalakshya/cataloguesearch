@@ -61,6 +61,15 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
     const [granthMode, setGranthMode] = useState('all'); // 'all' or 'specific'
     const [selectedGranths, setSelectedGranths] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const defaultContentTypes = {
+        pravachans: activeCategories.includes('Pravachan'),
+        granths: activeCategories.includes('Granth'),
+        books: activeCategories.includes('Books'),
+    };
+    const hasNonDefaultContentTypes =
+        contentTypes.pravachans !== defaultContentTypes.pravachans ||
+        contentTypes.granths !== defaultContentTypes.granths ||
+        contentTypes.books !== defaultContentTypes.books;
 
     // Extract available items (Name values) from metadata structure
     const getAvailableGranths = () => {
@@ -150,8 +159,7 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
     const handleClearAll = () => {
         setGranthMode('all');
         setSelectedGranths([]);
-        const hasBooks = activeCategories.includes('Books');
-        setContentTypes({ pravachans: true, granths: true, books: hasBooks });
+        setContentTypes(defaultContentTypes);
         setSearchTerm('');
         setStartYear(null);
         setEndYear(null);
@@ -177,7 +185,7 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
     };
 
     const getSummaryText = () => {
-        const hasContentTypeFilter = !contentTypes.pravachans || !contentTypes.granths || contentTypes.books;
+        const hasContentTypeFilter = hasNonDefaultContentTypes;
         const hasYearFilter = startYear || endYear;
         const totalActiveFilters = granthFilterCount + (hasContentTypeFilter ? 1 : 0) + (hasYearFilter ? 1 : 0);
 
@@ -205,16 +213,16 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
             </button>
 
             {/* Active Filters */}
-            {(granthFilterCount > 0 || (!contentTypes.pravachans || !contentTypes.granths || contentTypes.books) || startYear || endYear) && (
+            {(granthFilterCount > 0 || hasNonDefaultContentTypes || startYear || endYear) && (
                 <div className="flex flex-wrap gap-1.5 items-center">
                     <span className="font-semibold text-slate-600 text-sm">Active:</span>
 
-                    {/* Content Type Chip (only if not default: pravachans+granths, no books) */}
-                    {(!contentTypes.pravachans || !contentTypes.granths || contentTypes.books) && (
+                    {/* Content Type Chip (only if not at configured default) */}
+                    {hasNonDefaultContentTypes && (
                         <div className="bg-purple-100 text-purple-800 px-2 py-1 rounded-full flex items-center gap-2 text-sm font-medium">
                             <span>{getContentTypeText()}</span>
                             <button
-                                onClick={() => setContentTypes({ pravachans: true, granths: true, books: false })}
+                                onClick={() => setContentTypes(defaultContentTypes)}
                                 className="text-purple-600 hover:text-purple-800 font-bold"
                             >
                                 &times;
@@ -647,25 +655,33 @@ export const AdvancedSearch = ({ textSearch, setTextSearch, exactMatch, setExact
     );
 };
 
-export const SearchOptions = ({ language, setLanguage }) => {
+export const SearchOptions = ({ language, setLanguage, inline = false }) => {
+    const toggle = (
+        <div style={{ backgroundColor: 'var(--bg-surface, #f5f5f5)' }} className="flex items-center p-0.5 bg-neutral-100 rounded w-fit">
+            {[{ value: 'hindi', label: 'हिन्दी' }, { value: 'gujarati', label: 'ગુજરાતી' }].map(lang => (
+                <button
+                    key={lang.value}
+                    onClick={() => setLanguage(lang.value)}
+                    className={`px-3 py-0.5 text-sm font-medium rounded transition-all duration-150 ${
+                        language === lang.value
+                            ? 'bg-sky-600 text-white shadow-sm'
+                            : 'text-slate-400 hover:text-slate-600'
+                    }`}
+                >
+                    {lang.label}
+                </button>
+            ))}
+        </div>
+    );
+
+    if (inline) {
+        return <div className="shrink-0">{toggle}</div>;
+    }
+
     return (
         <div className="space-y-2">
             <p className="text-xs text-slate-900 font-semibold uppercase tracking-wide">Language</p>
-            <div style={{ backgroundColor: 'var(--bg-surface, #f5f5f5)' }} className="flex items-center p-0.5 bg-neutral-100 rounded w-fit">
-                {[{ value: 'hindi', label: 'हिन्दी' }, { value: 'gujarati', label: 'ગુજરાતી' }].map(lang => (
-                    <button
-                        key={lang.value}
-                        onClick={() => setLanguage(lang.value)}
-                        className={`px-3 py-0.5 text-sm font-medium rounded transition-all duration-150 ${
-                            language === lang.value
-                                ? 'bg-sky-600 text-white shadow-sm'
-                                : 'text-slate-400 hover:text-slate-600'
-                        }`}
-                    >
-                        {lang.label}
-                    </button>
-                ))}
-            </div>
+            {toggle}
         </div>
     );
 };
