@@ -23,6 +23,7 @@ import { Spinner, ChevronUpIcon, ChevronDownIcon, ExpandIcon, PdfIcon } from './
 // Import API service
 import { api } from './services/api';
 import { getRandomSuggestedQueriesByLanguage } from './utils/suggestedQueries';
+import { copyToClipboard } from './utils/shareUtils';
 
 // --- TIPS MODAL COMPONENT ---
 const TipsModal = ({ onClose }) => {
@@ -130,6 +131,41 @@ const TipsModal = ({ onClose }) => {
     );
 };
 
+
+// --- COPY ANSWER BUTTON ---
+const CopyAnswerButton = ({ text }) => {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = async () => {
+        const success = await copyToClipboard(text);
+        if (success) {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        }
+    };
+
+    return (
+        <button
+            onClick={handleCopy}
+            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 bg-white border border-slate-200 hover:border-slate-300 rounded px-2 py-1 transition-colors"
+            title="Copy answer"
+        >
+            {copied ? (
+                <>
+                    <svg className="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="text-green-600">Copied</span>
+                </>
+            ) : (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <rect x="8" y="8" width="12" height="14" rx="2" strokeWidth={2} />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2h2" />
+                </svg>
+            )}
+        </button>
+    );
+};
 
 // --- MAIN APP COMPONENT ---
 const AppContent = () => {
@@ -1498,6 +1534,11 @@ const AppContent = () => {
                                                                             dangerouslySetInnerHTML={{ __html: formatAnswerHtml(
                                                                                 displayedTexts[idx] !== undefined ? displayedTexts[idx] : msg.content || ''
                                                                             )}} />
+                                                                        {displayedTexts[idx] === msg.content && msg.content && (
+                                                                            <div className="mt-3 flex justify-end">
+                                                                                <CopyAnswerButton text={cleanAnswerText(msg.content)} />
+                                                                            </div>
+                                                                        )}
                                                                         {displayedTexts[idx] === msg.content && msg.follow_up_questions && msg.follow_up_questions.length > 0 && (
                                                                             <div className="mt-6 rounded-xl border border-sky-200 bg-sky-100 p-4">
                                                                                 <p className="text-xs font-bold uppercase tracking-wide text-sky-800 mb-2.5">
