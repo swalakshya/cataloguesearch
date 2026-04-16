@@ -1115,13 +1115,37 @@ const AppContent = () => {
     const getCitationCategoryMeta = (category) => {
         switch (category) {
             case 'Pravachan':
-                return { emoji: '🎙️' };
+                return {
+                    emoji: '🎙️',
+                    label: 'Pravachan',
+                    cardClassName: 'bg-white border-sky-200',
+                    badgeClassName: 'bg-sky-50 text-sky-700 border-sky-200',
+                    numberClassName: 'bg-sky-50 text-sky-700'
+                };
             case 'Granth':
-                return { emoji: '📜' };
+                return {
+                    emoji: '📜',
+                    label: 'Granth',
+                    cardClassName: 'bg-white border-rose-200',
+                    badgeClassName: 'bg-rose-50 text-rose-700 border-rose-200',
+                    numberClassName: 'bg-rose-50 text-rose-700'
+                };
             case 'Books':
-                return { emoji: '📚' };
+                return {
+                    emoji: '📚',
+                    label: 'Books',
+                    cardClassName: 'bg-white border-emerald-200',
+                    badgeClassName: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                    numberClassName: 'bg-emerald-50 text-emerald-700'
+                };
             default:
-                return { emoji: '📄' };
+                return {
+                    emoji: '📄',
+                    label: 'Reference',
+                    cardClassName: 'bg-slate-50 border-slate-200',
+                    badgeClassName: 'bg-slate-100 text-slate-700 border-slate-200',
+                    numberClassName: 'bg-slate-200 text-slate-600'
+                };
         }
     };
 
@@ -1154,7 +1178,7 @@ const AppContent = () => {
         const speaker = citation?.pravachankar || citation?.Pravachankar;
 
         const detailParts = [];
-        if (citation?.series) detailParts.push(`Series ${citation.series}`);
+        if (citation?.series) detailParts.push(citation.series);
         if (citation?.volume !== undefined && citation?.volume !== null && citation?.volume !== '') {
             detailParts.push(`Volume ${citation.volume}`);
         }
@@ -1175,6 +1199,10 @@ const AppContent = () => {
         return {
             title,
             lines,
+            categoryLabel: categoryMeta.label,
+            cardClassName: categoryMeta.cardClassName,
+            badgeClassName: categoryMeta.badgeClassName,
+            numberClassName: categoryMeta.numberClassName,
             readChunkId: citation?.chunk_id || null,
             viewPdfUrl: citation?.file_url || fallback.url || null
         };
@@ -1463,7 +1491,7 @@ const AppContent = () => {
                                     {chatMessages.length === 0 && !llmLoading && (
                                         <div className="flex flex-col items-center justify-center py-16">
                                             <SearchableContentWidget />
-                                            <div className="w-full max-w-5xl mt-10">
+                                            <div className="w-full max-w-4xl mt-10">
                                                 <div className="flex items-center gap-2 rounded-2xl border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3">
                                                     <button
                                                         onClick={handleNewChat}
@@ -1493,7 +1521,7 @@ const AppContent = () => {
                                                     </button>
                                                 </div>
                                             </div>
-                                            <div className="mt-10 w-full max-w-5xl">
+                                            <div className="mt-10 w-full max-w-4xl">
                                                 <p className="text-xs text-slate-400 uppercase tracking-wider mb-3 font-medium text-center">Try asking</p>
                                                 <div className="flex flex-wrap gap-2 justify-center">
                                                     {suggestedQueries.map(term => (
@@ -1509,7 +1537,7 @@ const AppContent = () => {
 
                                     {/* Active chat state */}
                                     {(chatMessages.length > 0 || llmLoading) && (
-                                        <div className="flex flex-col max-w-5xl mx-auto w-full min-h-[calc(100vh-240px)]">
+                                        <div className="flex flex-col max-w-4xl mx-auto w-full min-h-[calc(100vh-240px)]">
                                             {/* Messages */}
                                             <div className="flex-1 py-4 space-y-6">
                                                 {chatMessages.map((msg, idx) => (
@@ -1530,7 +1558,7 @@ const AppContent = () => {
                                                                     </div>
                                                                 ) : (
                                                                     <>
-                                                                        <div className="text-slate-800 leading-relaxed text-base"
+                                                                        <div className="text-slate-900 leading-relaxed text-base"
                                                                             dangerouslySetInnerHTML={{ __html: formatAnswerHtml(
                                                                                 displayedTexts[idx] !== undefined ? displayedTexts[idx] : msg.content || ''
                                                                             )}} />
@@ -1540,7 +1568,7 @@ const AppContent = () => {
                                                                             </div>
                                                                         )}
                                                                         {displayedTexts[idx] === msg.content && msg.follow_up_questions && msg.follow_up_questions.length > 0 && (
-                                                                            <div className="mt-6 rounded-xl border border-sky-200 bg-sky-100 p-4">
+                                                                            <div className="mt-6 rounded-xl border border-sky-100 bg-sky-50 p-4">
                                                                                 <p className="text-xs font-bold uppercase tracking-wide text-sky-800 mb-2.5">
                                                                                     💡 Suggested Follow up questions
                                                                                 </p>
@@ -1559,18 +1587,23 @@ const AppContent = () => {
                                                                             </div>
                                                                         )}
                                                                         {displayedTexts[idx] === msg.content && msg.references && msg.references.length > 0 && (
-                                                                            <div className="mt-4 rounded-xl border border-sky-200 bg-sky-100 p-4">
+                                                                            <div className="mt-4 rounded-xl border border-sky-100 bg-sky-50 p-4">
                                                                                 <h4 className="text-xs font-bold uppercase tracking-wide text-sky-800 mb-3">📖 References</h4>
                                                                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                                                                                     {msg.references.map((ref, refIdx) => {
                                                                                         const citation = (msg.citations || []).find(c => c.reference === ref) || msg.citations?.[refIdx];
                                                                                         const card = getAibotReferenceCardData(citation, ref);
                                                                                         return (
-                                                                                            <div key={`${ref}-${refIdx}`} className="flex flex-col justify-between bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm">
+                                                                                            <div key={`${ref}-${refIdx}`} className={`flex flex-col justify-between border rounded-lg p-3 text-sm ${card.cardClassName}`}>
                                                                                                 <div className="mb-3">
-                                                                                                    <span className="inline-block bg-slate-200 text-slate-600 text-xs font-bold rounded px-1.5 py-0.5 mb-1">{refIdx + 1}</span>
-                                                                                                    <p className="font-bold text-slate-800 leading-snug">{card.title}</p>
-                                                                                                    <div className="mt-2 space-y-1 text-slate-700 leading-snug">
+                                                                                                    <div className="mb-2 flex items-start justify-between gap-2">
+                                                                                                        <span className={`inline-block text-xs font-bold rounded px-1.5 py-0.5 ${card.numberClassName}`}>{refIdx + 1}</span>
+                                                                                                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.06em] ${card.badgeClassName}`}>
+                                                                                                            {card.categoryLabel}
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                    <p className="font-bold text-slate-900 leading-snug">{card.title}</p>
+                                                                                                    <div className="mt-2 space-y-1 text-slate-800 leading-snug">
                                                                                                         {card.lines.map((line, lineIdx) => (
                                                                                                             <p key={`${refIdx}-${lineIdx}`} className="break-words">
                                                                                                                 {line}
