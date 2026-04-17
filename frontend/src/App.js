@@ -631,17 +631,48 @@ const AppContent = () => {
         }
         setLlmLoading(true);
         setLlmError(null);
-        setChatMessages(prev => [...prev, { role: 'user', content: message }, { role: 'assistant', pending: true }]);
+        setChatMessages(prev => [
+            ...prev,
+            { role: 'user', content: message },
+            {
+                role: 'assistant',
+                pending: true,
+                stage: 'understanding',
+                stageLabel: 'Understanding your question'
+            }
+        ]);
         setChatInput('');
         setChatInputVisible(false);
+
+        const sendStructuredMessage = async (targetSessionId) => api.sendChatMessageStream(
+            targetSessionId,
+            {
+                role: 'user',
+                content: message,
+                response_format: 'structured',
+                filters: buildLlmFilters()
+            },
+            (event) => {
+                if (event?.type !== 'stage') return;
+                setChatMessages(prev => {
+                    const updated = [...prev];
+                    const idx = updated.findIndex(item => item.role === 'assistant' && item.pending);
+                    if (idx !== -1) {
+                        updated[idx] = {
+                            ...updated[idx],
+                            stage: event.stage || updated[idx].stage,
+                            stageLabel: event.label || updated[idx].stageLabel
+                        };
+                    }
+                    return updated;
+                });
+            }
+        );
+
         try {
             let data;
             try {
-                data = await api.sendChatMessage(sessionId, {
-                    role: 'user',
-                    content: message,
-                    filters: buildLlmFilters()
-                });
+                data = await sendStructuredMessage(sessionId);
             } catch (error) {
                 if (error?.detail !== 'session_not_found') {
                     throw error;
@@ -651,16 +682,20 @@ const AppContent = () => {
                 flushSync(() => {
                     resetTypingState();
                     setChatSessionId(null);
-                    setChatMessages([{ role: 'user', content: message }, { role: 'assistant', pending: true }]);
+                    setChatMessages([
+                        { role: 'user', content: message },
+                        {
+                            role: 'assistant',
+                            pending: true,
+                            stage: 'understanding',
+                            stageLabel: 'Understanding your question'
+                        }
+                    ]);
                 });
 
                 const freshSession = await api.createChatSession(getChatSessionPayload());
                 setChatSessionId(freshSession.session_id);
-                data = await api.sendChatMessage(freshSession.session_id, {
-                    role: 'user',
-                    content: message,
-                    filters: buildLlmFilters()
-                });
+                data = await sendStructuredMessage(freshSession.session_id);
             }
             setChatMessages(prev => {
                 const updated = [...prev];
@@ -744,6 +779,7 @@ const AppContent = () => {
             const data = await api.sendChatMessage(session.session_id, {
                 role: 'user',
                 content: query,
+                response_format: 'structured',
                 filters: buildLlmFilters()
             });
             setLlmAnswer(data.answer || '');
@@ -1579,9 +1615,14 @@ const AppContent = () => {
                                                             <div className="aibot-assistant-enter pt-2">
                                                                 <div className="flex-1">
                                                                 {msg.pending ? (
-                                                                    <div className="flex items-center text-sm text-slate-500 gap-2">
+                                                                    <div className="flex items-center text-sm text-slate-600 gap-2">
                                                                         <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-lime-500"></div>
-                                                                        Looking through the scriptures...
+                                                                        <span>{msg.stageLabel || 'Preparing answer'}</span>
+                                                                        <span className="flex items-center text-lime-600" aria-hidden="true">
+                                                                            <span className="inline-block animate-bounce">.</span>
+                                                                            <span className="inline-block animate-bounce" style={{ animationDelay: '0.15s' }}>.</span>
+                                                                            <span className="inline-block animate-bounce" style={{ animationDelay: '0.3s' }}>.</span>
+                                                                        </span>
                                                                     </div>
                                                                 ) : (
                                                                     <>

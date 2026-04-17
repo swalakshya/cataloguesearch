@@ -232,6 +232,61 @@ export const api = {
         }
     },
 
+    sendChatMessageStream: async (sessionId, requestPayload, onEvent) => {
+        try {
+            const response = await fetch(`${LLM_API_BASE_URL}/v1/chat/sessions/${sessionId}/messages/stream`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestPayload),
+            });
+            if (!response.ok) {
+                let detail = null;
+                try {
+                    const body = await response.json();
+                    detail = body?.detail || null;
+                } catch {
+                    detail = null;
+                }
+                const error = new Error(detail || `HTTP error! status: ${response.status}`);
+                error.status = response.status;
+                error.detail = detail;
+                throw error;
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let finalPayload = null;
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    const payload = JSON.parse(line.slice(6));
+                    if (payload.type === 'stage') {
+                        onEvent?.(payload);
+                    } else if (payload.type === 'final') {
+                        finalPayload = payload.data;
+                    } else if (payload.type === 'error') {
+                        const error = new Error(payload.detail || 'message_failed');
+                        error.status = payload.status;
+                        error.detail = payload.detail;
+                        throw error;
+                    }
+                }
+            }
+
+            return finalPayload;
+        } catch (error) {
+            console.error("API Error: Could not stream chat message", error);
+            throw error;
+        }
+    },
+
     closeChatSession: async (sessionId) => {
         try {
             const response = await fetch(`${LLM_API_BASE_URL}/v1/chat/sessions/${sessionId}`, {
