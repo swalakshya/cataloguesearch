@@ -433,6 +433,7 @@ const AppContent = () => {
     const [llmReferences, setLlmReferences] = useState([]);
     const [llmCitations, setLlmCitations] = useState([]);
     const [llmError, setLlmError] = useState(null);
+    const [chatNotice, setChatNotice] = useState(null);
     const [llmLoading, setLlmLoading] = useState(false);
     const [chatSessionId, setChatSessionId] = useState(null);
     const [chatMessages, setChatMessages] = useState([]);
@@ -816,6 +817,8 @@ const AppContent = () => {
                         }
                     ]);
                 });
+                setChatNotice('Previous session expired. Starting a new session…');
+                setTimeout(() => setChatNotice(null), 4000);
 
                 const freshSession = await api.createChatSession(getChatSessionPayload());
                 setChatSessionId(freshSession.session_id);
@@ -1884,6 +1887,11 @@ const AppContent = () => {
 
                                             {/* Sticky bottom input */}
                                             <div className="sticky bottom-0 mt-auto pt-3 pb-4 shrink-0" style={{ backgroundColor: '#f0f4f9' }}>
+                                                {chatNotice && (
+                                                    <div className="flex justify-center mb-2">
+                                                        <span className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-3 py-1 animate-fade-in">{chatNotice}</span>
+                                                    </div>
+                                                )}
                                                 <div className="rounded-2xl border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3 transition-colors focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100">
                                                     <div className="flex items-center gap-2">
                                                         <div className="relative shrink-0 group">
