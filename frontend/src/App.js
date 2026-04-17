@@ -319,6 +319,7 @@ const AppContent = () => {
     const [chatMessages, setChatMessages] = useState([]);
     const [chatInput, setChatInput] = useState('');
     const [chatInputVisible, setChatInputVisible] = useState(false);
+    const [expandedAnswers, setExpandedAnswers] = useState({});
     const PAGE_SIZE = 20;
     const llmProvider = (process.env.REACT_APP_LLM_PROVIDER || '').trim();
     const [llmAvailable, setLlmAvailable] = useState(false);
@@ -333,6 +334,7 @@ const AppContent = () => {
         Object.values(typingIntervalsRef.current).forEach(clearInterval);
         typingIntervalsRef.current = {};
         setDisplayedTexts({});
+        setExpandedAnswers({});
     }, []);
 
     const clearPersistedChatSession = useCallback(() => {
@@ -938,6 +940,12 @@ const AppContent = () => {
         return trimmed.trim();
     };
 
+    const shouldCollapseAnswer = (answerText) => {
+        const cleaned = cleanAnswerText(answerText);
+        const lineCount = cleaned.split('\n').filter(Boolean).length;
+        return cleaned.length > 650 || lineCount > 7;
+    };
+
     const formatAnswerHtml = (answerText) => {
         if (!answerText) return '';
         let sanitizedAnswer = cleanAnswerText(answerText);
@@ -986,14 +994,14 @@ const AppContent = () => {
             return `__CODE_${codeParts.length - 1}__`;
         });
 
-        // Step 6: Extract > quote lines (WhatsApp-style citations); trailing (ref) becomes an italic subscript
+        // Step 6: Extract > quote lines (WhatsApp-style citations); trailing (ref) stays inside the quote box
         // Leading whitespace before > is stripped so indented quote lines still match
         sanitizedAnswer = sanitizedAnswer.replace(/^\s*>\s*(.+)$/gm, (match, content) => {
             const refMatch = content.match(/^([\s\S]+?)\s*(\([^)]+\))\s*$/);
             if (refMatch) {
                 quoteParts.push(refMatch[1]);
                 citationParts.push(refMatch[2]);
-                return `__QUOT_${quoteParts.length - 1}__ __CITE_${citationParts.length - 1}__`;
+                return `__QUOTCITE_${quoteParts.length - 1}_${citationParts.length - 1}__`;
             }
             quoteParts.push(content);
             return `__QUOT_${quoteParts.length - 1}__`;
@@ -1016,7 +1024,7 @@ const AppContent = () => {
         });
 
         // Step 9: Extract parenthesised text for smaller rendering.
-        // Runs after all other tokenizations so (ref) from citations is already gone (__CITE__ token).
+        // Runs after all other tokenizations so (ref) from citations is already gone (__QUOTCITE__ token).
         // __PAREN__ is placed first in the replacement chain so any inner tokens still get resolved.
         text = text.replace(/\(([^)\n]+)\)/g, (match, content) => {
             parenParts.push(content);
@@ -1046,7 +1054,7 @@ const AppContent = () => {
                     segments.push('');
                 }
                 // Small-gap line before citation blocks (grey quote lines)
-                if (/^__QUOT_\d+__/.test(trimmed)) {
+                if (/^__QUOT(?:CITE)?_\d+/.test(trimmed)) {
                     segments.push('<span style="display:block;height:0.3rem"></span>');
                 }
             }
@@ -1073,9 +1081,14 @@ const AppContent = () => {
             const content = italicParts[Number(idx)] || '';
             return `<em>${escapeHtml(content)}</em>`;
         });
+        html = html.replace(/__QUOTCITE_(\d+)_(\d+)__/g, (match, quoteIdx, citeIdx) => {
+            const content = quoteParts[Number(quoteIdx)] || '';
+            const citation = citationParts[Number(citeIdx)] || '';
+            return `<span class="llm-quote-block">${escapeHtml(content)}<span class="llm-quote-citation">${escapeHtml(citation)}</span></span>`;
+        });
         html = html.replace(/__QUOT_(\d+)__/g, (match, idx) => {
             const content = quoteParts[Number(idx)] || '';
-            return `<span style="background-color:#f1f5f9;border-left:3px solid #94a3b8;padding:0.25em 0.5em;display:inline-block;font-style:italic;border-radius:0 4px 4px 0">${escapeHtml(content)}</span>`;
+            return `<span class="llm-quote-block">${escapeHtml(content)}</span>`;
         });
         html = html.replace(/__CITE_(\d+)__/g, (match, idx) => {
             const content = citationParts[Number(idx)] || '';
@@ -1495,14 +1508,19 @@ const AppContent = () => {
                                                     <SearchableContentWidget />
                                                 </div>
                                                 <div className="w-full">
-                                                    <div className="flex items-center gap-2 rounded-2xl border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3">
-                                                        <button
-                                                            onClick={handleNewChat}
-                                                            title="New Chat"
-                                                            className="h-8 w-8 flex items-center justify-center rounded-full border border-sky-300 bg-sky-100 text-sky-700 hover:bg-sky-200 hover:border-sky-400 transition-colors text-xl font-bold leading-none shrink-0"
-                                                        >
-                                                            +
-                                                        </button>
+                                                    <div className="flex items-center gap-2 rounded-2xl border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3 transition-colors focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100">
+                                                        <div className="relative shrink-0 group">
+                                                            <button
+                                                                onClick={handleNewChat}
+                                                                title="New Chat"
+                                                                className="h-8 w-8 flex items-center justify-center rounded-full border border-sky-300 bg-sky-100 text-sky-700 hover:bg-sky-200 hover:border-sky-400 transition-colors text-xl font-bold leading-none"
+                                                            >
+                                                                +
+                                                            </button>
+                                                            <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 hidden -translate-x-1/2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 shadow-sm opacity-0 transition-opacity duration-150 group-hover:opacity-100 md:block">
+                                                                New chat
+                                                            </span>
+                                                        </div>
                                                         <div className="flex-grow">
                                                             <SearchBar
                                                                 query={query}
@@ -1511,7 +1529,9 @@ const AppContent = () => {
                                                                 language={language}
                                                             />
                                                         </div>
-                                                        <SearchOptions language={language} setLanguage={setLanguage} inline />
+                                                        <div className="hidden md:block shrink-0">
+                                                            <SearchOptions language={language} setLanguage={setLanguage} inline />
+                                                        </div>
                                                         <button
                                                             onClick={() => query.trim() && handleChatStart(query)}
                                                             disabled={!query.trim()}
@@ -1522,6 +1542,9 @@ const AppContent = () => {
                                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
                                                             </svg>
                                                         </button>
+                                                    </div>
+                                                    <div className="mt-3 flex justify-center md:hidden">
+                                                        <SearchOptions language={language} setLanguage={setLanguage} inline />
                                                     </div>
                                                 </div>
                                                 <div className="w-full pt-1">
@@ -1553,8 +1576,8 @@ const AppContent = () => {
                                                                 </div>
                                                             </div>
                                                         ) : (
-                                                            <div>
-                                                                <div className="text-sm font-bold mb-3 uppercase tracking-[0.12em] text-slate-900">Answer</div>
+                                                            <div className="aibot-assistant-enter">
+                                                                <div className="flex-1">
                                                                 {msg.pending ? (
                                                                     <div className="flex items-center text-sm text-slate-500 gap-2">
                                                                         <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-lime-500"></div>
@@ -1562,17 +1585,37 @@ const AppContent = () => {
                                                                     </div>
                                                                 ) : (
                                                                     <>
-                                                                        <div className="text-slate-900 leading-relaxed text-base"
-                                                                            dangerouslySetInnerHTML={{ __html: formatAnswerHtml(
-                                                                                displayedTexts[idx] !== undefined ? displayedTexts[idx] : msg.content || ''
-                                                                            )}} />
+                                                                        <div className="flex items-start justify-between gap-3 mb-3 max-w-3xl">
+                                                                            <div>
+                                                                                <div className="text-sm font-bold uppercase tracking-[0.12em] text-slate-900">Answer</div>
+                                                                                {msg.citations && msg.citations.length > 0 && (
+                                                                                    <p className="mt-1 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                                                                                        Grounded in attached references
+                                                                                    </p>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="max-w-3xl">
+                                                                            <div className={`text-slate-900 leading-relaxed text-base ${displayedTexts[idx] === msg.content && shouldCollapseAnswer(msg.content) && expandedAnswers[idx] === false ? 'max-h-72 overflow-hidden' : ''}`}
+                                                                                dangerouslySetInnerHTML={{ __html: formatAnswerHtml(
+                                                                                    displayedTexts[idx] !== undefined ? displayedTexts[idx] : msg.content || ''
+                                                                                )}} />
+                                                                            {displayedTexts[idx] === msg.content && shouldCollapseAnswer(msg.content) && (
+                                                                                <button
+                                                                                    onClick={() => setExpandedAnswers(prev => ({ ...prev, [idx]: prev[idx] === false }))}
+                                                                                    className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-sky-700 hover:text-sky-800 transition-colors"
+                                                                                >
+                                                                                    {expandedAnswers[idx] === false ? 'Show more' : 'Show less'}
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
                                                                         {displayedTexts[idx] === msg.content && msg.content && (
-                                                                            <div className="mt-3 flex justify-end">
+                                                                            <div className="mt-4 w-full flex justify-end">
                                                                                 <CopyAnswerButton text={cleanAnswerText(msg.content)} />
                                                                             </div>
                                                                         )}
                                                                         {displayedTexts[idx] === msg.content && msg.follow_up_questions && msg.follow_up_questions.length > 0 && (
-                                                                            <div className="mt-6 rounded-xl border border-sky-100 bg-sky-50 p-4">
+                                                                            <div className="mt-6 w-full rounded-xl border border-sky-200 bg-sky-50 p-4">
                                                                                 <p className="text-xs font-bold uppercase tracking-wide text-sky-800 mb-2.5">
                                                                                     💡 Suggested Follow up questions
                                                                                 </p>
@@ -1591,14 +1634,34 @@ const AppContent = () => {
                                                                             </div>
                                                                         )}
                                                                         {displayedTexts[idx] === msg.content && msg.references && msg.references.length > 0 && (
-                                                                            <div className="mt-4 rounded-xl border border-sky-100 bg-sky-50 p-4">
+                                                                            <div className="mt-4 w-full rounded-xl border border-sky-200 bg-sky-50 p-4">
                                                                                 <h4 className="text-xs font-bold uppercase tracking-wide text-sky-800 mb-3">📖 References</h4>
                                                                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                                                                                     {msg.references.map((ref, refIdx) => {
                                                                                         const citation = (msg.citations || []).find(c => c.reference === ref) || msg.citations?.[refIdx];
                                                                                         const card = getAibotReferenceCardData(citation, ref);
+                                                                                        const handleCardActivate = () => {
+                                                                                            if (card.readChunkId) {
+                                                                                                handleExpand(card.readChunkId);
+                                                                                            } else if (card.viewPdfUrl) {
+                                                                                                window.open(card.viewPdfUrl, '_blank', 'noopener,noreferrer');
+                                                                                            }
+                                                                                        };
+                                                                                        const isCardInteractive = Boolean(card.readChunkId || card.viewPdfUrl);
                                                                                         return (
-                                                                                            <div key={`${ref}-${refIdx}`} className={`flex flex-col justify-between border rounded-lg p-3 text-sm ${card.cardClassName}`}>
+                                                                                            <div
+                                                                                                key={`${ref}-${refIdx}`}
+                                                                                                onClick={isCardInteractive ? handleCardActivate : undefined}
+                                                                                                onKeyDown={isCardInteractive ? (event) => {
+                                                                                                    if (event.key === 'Enter' || event.key === ' ') {
+                                                                                                        event.preventDefault();
+                                                                                                        handleCardActivate();
+                                                                                                    }
+                                                                                                } : undefined}
+                                                                                                role={isCardInteractive ? 'button' : undefined}
+                                                                                                tabIndex={isCardInteractive ? 0 : undefined}
+                                                                                                className={`flex flex-col justify-between border rounded-lg p-3 text-sm transition-shadow ${card.cardClassName} ${isCardInteractive ? 'cursor-pointer hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-200' : ''}`}
+                                                                                            >
                                                                                                 <div className="mb-3">
                                                                                                     <div className="mb-2 flex items-start justify-between gap-2">
                                                                                                         <span className={`inline-block text-xs font-bold rounded px-1.5 py-0.5 ${card.numberClassName}`}>{refIdx + 1}</span>
@@ -1617,13 +1680,17 @@ const AppContent = () => {
                                                                                                 </div>
                                                                                                 <div className="flex items-center gap-2">
                                                                                                     {card.readChunkId && (
-                                                                                                        <button onClick={() => handleExpand(card.readChunkId)}
+                                                                                                        <button onClick={(event) => {
+                                                                                                            event.stopPropagation();
+                                                                                                            handleExpand(card.readChunkId);
+                                                                                                        }}
                                                                                                             className="flex items-center gap-1 text-xs text-slate-600 hover:text-slate-900 bg-white border border-slate-300 rounded px-2 py-1 transition-colors">
                                                                                                             Expand
                                                                                                         </button>
                                                                                                     )}
                                                                                                     {card.viewPdfUrl && (
                                                                                                         <a href={card.viewPdfUrl} target="_blank" rel="noopener noreferrer"
+                                                                                                            onClick={(event) => event.stopPropagation()}
                                                                                                             className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700 bg-white border border-slate-300 rounded px-2 py-1 hover:border-red-300 transition-colors">
                                                                                                             <PdfIcon />View PDF
                                                                                                         </a>
@@ -1637,6 +1704,7 @@ const AppContent = () => {
                                                                         )}
                                                                     </>
                                                                 )}
+                                                                </div>
                                                             </div>
                                                         )}
                                                     </div>
@@ -1647,14 +1715,19 @@ const AppContent = () => {
 
                                             {/* Sticky bottom input */}
                                             <div className="sticky bottom-0 mt-auto pt-3 pb-4 shrink-0" style={{ backgroundColor: '#f0f4f9' }}>
-                                                <div className="flex items-center gap-2 rounded-2xl border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3">
-                                                    <button
-                                                        onClick={handleNewChat}
-                                                        title="New Chat"
-                                                        className="h-8 w-8 flex items-center justify-center rounded-full border border-sky-300 bg-sky-100 text-sky-700 hover:bg-sky-200 hover:border-sky-400 transition-colors text-xl font-bold leading-none shrink-0"
-                                                    >
-                                                        +
-                                                    </button>
+                                                <div className="flex items-center gap-2 rounded-2xl border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3 transition-colors focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100">
+                                                    <div className="relative shrink-0 group">
+                                                        <button
+                                                            onClick={handleNewChat}
+                                                            title="New Chat"
+                                                            className="h-8 w-8 flex items-center justify-center rounded-full border border-sky-300 bg-sky-100 text-sky-700 hover:bg-sky-200 hover:border-sky-400 transition-colors text-xl font-bold leading-none"
+                                                        >
+                                                            +
+                                                        </button>
+                                                        <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 hidden -translate-x-1/2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 shadow-sm opacity-0 transition-opacity duration-150 group-hover:opacity-100 md:block">
+                                                            New chat
+                                                        </span>
+                                                    </div>
                                                     <div className="flex-grow">
                                                         <SearchBar
                                                             query={chatInput}
