@@ -1535,7 +1535,7 @@ const AppContent = () => {
                                                         <button
                                                             onClick={() => query.trim() && handleChatStart(query)}
                                                             disabled={!query.trim()}
-                                                            className="bg-sky-600 text-white h-8 w-8 rounded-full border border-sky-700 hover:bg-sky-700 hover:border-sky-800 transition duration-200 disabled:bg-slate-300 disabled:border-slate-300 flex items-center justify-center shrink-0"
+                                                            className="bg-sky-600 text-white h-8 w-8 rounded-full border border-sky-700 hover:bg-sky-700 hover:border-sky-800 transition duration-200 disabled:bg-slate-200 disabled:text-slate-400 disabled:border-slate-300 flex items-center justify-center shrink-0"
                                                             aria-label="Send"
                                                         >
                                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
@@ -1571,28 +1571,23 @@ const AppContent = () => {
                                                     <div key={`${msg.role}-${idx}`}>
                                                         {msg.role === 'user' ? (
                                                             <div className="flex justify-end">
-                                                                <div className="bg-sky-600 shadow-sm rounded-2xl rounded-tr-sm px-4 py-3 max-w-[80%] text-white text-base">
+                                                                <div className="bg-sky-600 shadow-sm rounded-2xl rounded-tr-sm px-4 py-2.5 max-w-[72%] text-white text-base">
                                                                     {msg.content}
                                                                 </div>
                                                             </div>
                                                         ) : (
-                                                            <div className="aibot-assistant-enter">
+                                                            <div className="aibot-assistant-enter pt-2">
                                                                 <div className="flex-1">
                                                                 {msg.pending ? (
                                                                     <div className="flex items-center text-sm text-slate-500 gap-2">
                                                                         <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-lime-500"></div>
-                                                                        Generating...
+                                                                        Looking through the scriptures...
                                                                     </div>
                                                                 ) : (
                                                                     <>
                                                                         <div className="flex items-start justify-between gap-3 mb-3 max-w-3xl">
                                                                             <div>
                                                                                 <div className="text-sm font-bold uppercase tracking-[0.12em] text-slate-900">Answer</div>
-                                                                                {msg.citations && msg.citations.length > 0 && (
-                                                                                    <p className="mt-1 text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                                                                                        Grounded in attached references
-                                                                                    </p>
-                                                                                )}
                                                                             </div>
                                                                         </div>
                                                                         <div className="max-w-3xl">
@@ -1615,7 +1610,7 @@ const AppContent = () => {
                                                                             </div>
                                                                         )}
                                                                         {displayedTexts[idx] === msg.content && msg.follow_up_questions && msg.follow_up_questions.length > 0 && (
-                                                                            <div className="mt-6 w-full rounded-xl border border-sky-200 bg-sky-50 p-4">
+                                                                            <div className="mt-8 w-full rounded-xl border border-sky-200 bg-sky-50 p-4">
                                                                                 <p className="text-xs font-bold uppercase tracking-wide text-sky-800 mb-2.5">
                                                                                     💡 Suggested Follow up questions
                                                                                 </p>
@@ -1634,9 +1629,9 @@ const AppContent = () => {
                                                                             </div>
                                                                         )}
                                                                         {displayedTexts[idx] === msg.content && msg.references && msg.references.length > 0 && (
-                                                                            <div className="mt-4 w-full rounded-xl border border-sky-200 bg-sky-50 p-4">
+                                                                            <div className="mt-5 w-full rounded-xl border border-sky-200 bg-sky-50 p-4">
                                                                                 <h4 className="text-xs font-bold uppercase tracking-wide text-sky-800 mb-3">📖 References</h4>
-                                                                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                                                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                                                                                     {msg.references.map((ref, refIdx) => {
                                                                                         const citation = (msg.citations || []).find(c => c.reference === ref) || msg.citations?.[refIdx];
                                                                                         const card = getAibotReferenceCardData(citation, ref);
@@ -1739,7 +1734,7 @@ const AppContent = () => {
                                                     <button
                                                         onClick={() => handleChatSend(chatSessionId, chatInput)}
                                                         disabled={llmLoading || !chatInput.trim()}
-                                                        className="bg-sky-600 text-white h-8 w-8 rounded-full border border-sky-700 hover:bg-sky-700 hover:border-sky-800 transition duration-200 disabled:bg-slate-300 disabled:border-slate-300 flex items-center justify-center shrink-0"
+                                                        className="bg-sky-600 text-white h-8 w-8 rounded-full border border-sky-700 hover:bg-sky-700 hover:border-sky-800 transition duration-200 disabled:bg-slate-200 disabled:text-slate-400 disabled:border-slate-300 flex items-center justify-center shrink-0"
                                                         aria-label="Send"
                                                     >
                                                         {llmLoading ? <Spinner /> : (
@@ -1749,7 +1744,7 @@ const AppContent = () => {
                                                         )}
                                                     </button>
                                                 </div>
-                                                <div className="flex items-start gap-2.5 px-3.5 py-2.5 mt-2 bg-amber-50 border border-amber-200 rounded text-amber-800 text-xs leading-relaxed">
+                                                <div className="flex items-start gap-2.5 px-3.5 py-2.5 mt-2 bg-amber-50/80 border border-amber-200 rounded text-amber-800 text-[11px] leading-relaxed">
                                                     <svg className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
                                                     </svg>
