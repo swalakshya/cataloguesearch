@@ -1490,46 +1490,50 @@ const AppContent = () => {
                                     {/* Empty state — centered search bar */}
                                     {chatMessages.length === 0 && !llmLoading && (
                                         <div className="flex flex-col items-center justify-center py-16">
-                                            <SearchableContentWidget />
-                                            <div className="w-full max-w-4xl mt-10">
-                                                <div className="flex items-center gap-2 rounded-2xl border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3">
-                                                    <button
-                                                        onClick={handleNewChat}
-                                                        title="New Chat"
-                                                        className="h-8 w-8 flex items-center justify-center rounded-full border border-sky-300 bg-sky-100 text-sky-700 hover:bg-sky-200 hover:border-sky-400 transition-colors text-xl font-bold leading-none shrink-0"
-                                                    >
-                                                        +
-                                                    </button>
-                                                    <div className="flex-grow">
-                                                        <SearchBar
-                                                            query={query}
-                                                            setQuery={setQuery}
-                                                            onSearch={() => query.trim() && handleChatStart(query)}
-                                                            language={language}
-                                                        />
-                                                    </div>
-                                                    <SearchOptions language={language} setLanguage={setLanguage} inline />
-                                                    <button
-                                                        onClick={() => query.trim() && handleChatStart(query)}
-                                                        disabled={!query.trim()}
-                                                        className="bg-sky-600 text-white h-8 w-8 rounded-full border border-sky-700 hover:bg-sky-700 hover:border-sky-800 transition duration-200 disabled:bg-slate-300 disabled:border-slate-300 flex items-center justify-center shrink-0"
-                                                        aria-label="Send"
-                                                    >
-                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
-                                                        </svg>
-                                                    </button>
+                                            <div className="w-full max-w-4xl space-y-6">
+                                                <div className="w-full">
+                                                    <SearchableContentWidget />
                                                 </div>
-                                            </div>
-                                            <div className="mt-10 w-full max-w-4xl">
-                                                <p className="text-xs text-slate-400 uppercase tracking-wider mb-3 font-medium text-center">Try asking</p>
-                                                <div className="flex flex-wrap gap-2 justify-center">
-                                                    {suggestedQueries.map(term => (
-                                                        <button key={term} onClick={() => handleChatStart(term)}
-                                                            className="px-3 py-1 text-sm bg-white border border-slate-200 rounded text-slate-600 hover:border-lime-300 hover:text-lime-700 hover:bg-lime-50 transition-colors">
-                                                            {term}
+                                                <div className="w-full">
+                                                    <div className="flex items-center gap-2 rounded-2xl border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3">
+                                                        <button
+                                                            onClick={handleNewChat}
+                                                            title="New Chat"
+                                                            className="h-8 w-8 flex items-center justify-center rounded-full border border-sky-300 bg-sky-100 text-sky-700 hover:bg-sky-200 hover:border-sky-400 transition-colors text-xl font-bold leading-none shrink-0"
+                                                        >
+                                                            +
                                                         </button>
-                                                    ))}
+                                                        <div className="flex-grow">
+                                                            <SearchBar
+                                                                query={query}
+                                                                setQuery={setQuery}
+                                                                onSearch={() => query.trim() && handleChatStart(query)}
+                                                                language={language}
+                                                            />
+                                                        </div>
+                                                        <SearchOptions language={language} setLanguage={setLanguage} inline />
+                                                        <button
+                                                            onClick={() => query.trim() && handleChatStart(query)}
+                                                            disabled={!query.trim()}
+                                                            className="bg-sky-600 text-white h-8 w-8 rounded-full border border-sky-700 hover:bg-sky-700 hover:border-sky-800 transition duration-200 disabled:bg-slate-300 disabled:border-slate-300 flex items-center justify-center shrink-0"
+                                                            aria-label="Send"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div className="w-full pt-1">
+                                                    <p className="text-xs text-slate-400 uppercase tracking-wider mb-3 font-medium text-center">Try asking</p>
+                                                    <div className="flex flex-wrap gap-2 justify-center">
+                                                        {suggestedQueries.map(term => (
+                                                            <button key={term} onClick={() => handleChatStart(term)}
+                                                                className="px-3 py-1 text-sm bg-white border border-slate-200 rounded text-slate-600 hover:border-lime-300 hover:text-lime-700 hover:bg-lime-50 transition-colors">
+                                                                {term}
+                                                            </button>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -1544,7 +1548,7 @@ const AppContent = () => {
                                                     <div key={`${msg.role}-${idx}`}>
                                                         {msg.role === 'user' ? (
                                                             <div className="flex justify-end">
-                                                                <div className="bg-sky-700 shadow-sm rounded-2xl rounded-tr-sm px-4 py-3 max-w-[80%] text-white text-base">
+                                                                <div className="bg-sky-600 shadow-sm rounded-2xl rounded-tr-sm px-4 py-3 max-w-[80%] text-white text-base">
                                                                     {msg.content}
                                                                 </div>
                                                             </div>
