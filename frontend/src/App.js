@@ -167,6 +167,123 @@ const CopyAnswerButton = ({ text }) => {
     );
 };
 
+// --- CHAT FILTERS COMPONENT ---
+const CATEGORY_EMOJI = { Pravachan: '🎙️', Granth: '📜', Books: '📚' };
+
+const ChatFilters = ({ activeCategories, debugMode, chatContentTypes, setChatContentTypes, chatShastras, setChatShastras, allMetadata, language, dropUp = false }) => {
+    const [shastraOpen, setShastraOpen] = useState(false);
+    const dropdownRef = useRef(null);
+
+    useEffect(() => {
+        if (!shastraOpen) return;
+        const handle = (e) => { if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setShastraOpen(false); };
+        document.addEventListener('mousedown', handle);
+        return () => document.removeEventListener('mousedown', handle);
+    }, [shastraOpen]);
+
+    const shastraOptions = useMemo(() => {
+        const names = new Set();
+        chatContentTypes.forEach(cat => {
+            const catMeta = allMetadata[cat]?.[language];
+            if (catMeta?.Name) catMeta.Name.forEach(n => names.add(n));
+        });
+        return [...names].sort();
+    }, [chatContentTypes, allMetadata, language]);
+
+    useEffect(() => {
+        const valid = new Set(shastraOptions);
+        const filtered = chatShastras.filter(s => valid.has(s));
+        if (filtered.length !== chatShastras.length) setChatShastras(filtered);
+    }, [shastraOptions]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const visibleCategories = [
+        ...activeCategories,
+        ...(debugMode && !activeCategories.includes('Books') ? ['Books'] : [])
+    ];
+
+    const toggleCategory = (cat) => {
+        setChatContentTypes(prev => {
+            if (prev.includes(cat)) {
+                if (prev.length === 1) return prev;
+                return prev.filter(c => c !== cat);
+            }
+            return [...prev, cat];
+        });
+    };
+
+    const toggleShastra = (name) => {
+        setChatShastras(prev =>
+            prev.includes(name) ? prev.filter(s => s !== name) : [...prev, name]
+        );
+    };
+
+    const shastraLabel = chatShastras.length === 0
+        ? 'All Shastras'
+        : chatShastras.length === 1
+            ? chatShastras[0]
+            : `${chatShastras.length} Shastras`;
+
+    return (
+        <div className="flex items-center gap-1.5 flex-wrap">
+            {visibleCategories.map(cat => {
+                const active = chatContentTypes.includes(cat);
+                return (
+                    <button
+                        key={cat}
+                        onClick={() => toggleCategory(cat)}
+                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors ${
+                            active ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-500 border-slate-300 hover:border-slate-400'
+                        }`}
+                    >
+                        <span>{CATEGORY_EMOJI[cat]}</span>
+                        <span>{cat}</span>
+                    </button>
+                );
+            })}
+            {shastraOptions.length > 0 && (
+                <div className="relative" ref={dropdownRef}>
+                    <button
+                        onClick={() => setShastraOpen(v => !v)}
+                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors ${
+                            chatShastras.length > 0 ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-500 border-slate-300 hover:border-slate-400'
+                        }`}
+                    >
+                        <span className="max-w-[160px] truncate">{shastraLabel}</span>
+                        <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={dropUp ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'} />
+                        </svg>
+                    </button>
+                    {shastraOpen && (
+                        <div className={`absolute ${dropUp ? 'bottom-full mb-1' : 'top-full mt-1'} left-0 z-50 bg-white border border-slate-200 rounded-lg shadow-lg w-64 max-h-60 overflow-y-auto`}>
+                            {chatShastras.length > 0 && (
+                                <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between">
+                                    <span className="text-xs text-slate-500">{chatShastras.length} selected</span>
+                                    <button onClick={() => setChatShastras([])} className="text-xs text-sky-600 hover:text-sky-800 font-medium">Clear all</button>
+                                </div>
+                            )}
+                            {shastraOptions.map(name => {
+                                const selected = chatShastras.includes(name);
+                                return (
+                                    <button
+                                        key={name}
+                                        onClick={() => toggleShastra(name)}
+                                        className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-50 transition-colors flex items-center gap-2 ${selected ? 'text-sky-700' : 'text-slate-700'}`}
+                                    >
+                                        <span className={`w-3.5 h-3.5 flex-shrink-0 rounded border flex items-center justify-center ${selected ? 'bg-sky-600 border-sky-600' : 'border-slate-300'}`}>
+                                            {selected && <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
+                                        </span>
+                                        <span>{name}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
 // --- MAIN APP COMPONENT ---
 const AppContent = () => {
     const location = useLocation();
@@ -239,6 +356,8 @@ const AppContent = () => {
         setChatInputVisible(false);
         resetTypingState();
         clearPersistedChatSession();
+        setChatContentTypes([...activeCategories]);
+        setChatShastras([]);
         setHomeMode('search');
         if (chatSessionId) {
             api.closeChatSession(chatSessionId).catch(() => null);
@@ -319,6 +438,8 @@ const AppContent = () => {
     const [chatMessages, setChatMessages] = useState([]);
     const [chatInput, setChatInput] = useState('');
     const [chatInputVisible, setChatInputVisible] = useState(false);
+    const [chatContentTypes, setChatContentTypes] = useState(['Pravachan', 'Granth']);
+    const [chatShastras, setChatShastras] = useState([]);
     const [expandedAnswers, setExpandedAnswers] = useState({});
     const PAGE_SIZE = 20;
     const llmProvider = (process.env.REACT_APP_LLM_PROVIDER || '').trim();
@@ -355,7 +476,7 @@ const AppContent = () => {
             if (msg.role === 'assistant' && !msg.pending && msg.content &&
                 displayedTexts[idx] === undefined && !typingIntervalsRef.current[idx]) {
                 let charIdx = 0;
-                const fullText = msg.content;
+                const fullText = cleanAnswerText(msg.content);
                 typingIntervalsRef.current[idx] = setInterval(() => {
                     charIdx += 4;
                     if (charIdx >= fullText.length) {
@@ -395,6 +516,7 @@ const AppContent = () => {
         api.getAppConfig().then(cfg => {
             setDebugMode(cfg.debug_mode);
             setActiveCategories(cfg.active_categories);
+            setChatContentTypes([...cfg.active_categories]);
             if (cfg.active_categories.includes('Books')) {
                 setContentTypes(prev => ({ ...prev, books: true }));
             }
@@ -421,7 +543,7 @@ const AppContent = () => {
                     setDisplayedTexts(
                         (parsed.messages || []).reduce((acc, msg, idx) => {
                             if (msg?.role === 'assistant' && msg?.content) {
-                                acc[idx] = msg.content;
+                                acc[idx] = cleanAnswerText(msg.content);
                             }
                             return acc;
                         }, {})
@@ -553,9 +675,9 @@ const AppContent = () => {
 
     function buildLlmFilters() {
         const filters = {};
-        // In chat mode, use all active categories (driven by debugMode, not manual filter selection)
+        // In chat mode, use user's chat filter selection
         const types = isChatMode
-            ? [...activeCategories]
+            ? [...chatContentTypes]
             : [
                 ...(contentTypes.pravachans ? ['Pravachan'] : []),
                 ...(contentTypes.granths ? ['Granth'] : []),
@@ -584,6 +706,8 @@ const AppContent = () => {
                 filters.contributor = value;
             }
         });
+
+        if (isChatMode && chatShastras.length > 0) filters.granth = chatShastras;
 
         return filters;
     }
@@ -1544,43 +1668,52 @@ const AppContent = () => {
                                                     <SearchableContentWidget />
                                                 </div>
                                                 <div className="w-full">
-                                                    <div className="flex items-center gap-2 rounded-2xl border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3 transition-colors focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100">
-                                                        <div className="relative shrink-0 group">
+                                                    <div className="rounded-2xl border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3 transition-colors focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="relative shrink-0 group">
+                                                                <button
+                                                                    onClick={handleNewChat}
+                                                                    title="New Chat"
+                                                                    className="h-8 w-8 flex items-center justify-center rounded-full border border-sky-300 bg-sky-100 text-sky-700 hover:bg-sky-200 hover:border-sky-400 transition-colors"
+                                                                >
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                                                </button>
+                                                                <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 hidden -translate-x-1/2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 shadow-sm opacity-0 transition-opacity duration-150 group-hover:opacity-100 md:block">
+                                                                    New chat
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex-grow">
+                                                                <SearchBar
+                                                                    query={query}
+                                                                    setQuery={setQuery}
+                                                                    onSearch={() => query.trim() && handleChatStart(query)}
+                                                                    language={language}
+                                                                />
+                                                            </div>
                                                             <button
-                                                                onClick={handleNewChat}
-                                                                title="New Chat"
-                                                                className="h-8 w-8 flex items-center justify-center rounded-full border border-sky-300 bg-sky-100 text-sky-700 hover:bg-sky-200 hover:border-sky-400 transition-colors text-xl font-bold leading-none"
+                                                                onClick={() => query.trim() && handleChatStart(query)}
+                                                                disabled={!query.trim()}
+                                                                className="bg-sky-600 text-white h-8 w-8 rounded-full border border-sky-700 hover:bg-sky-700 hover:border-sky-800 transition duration-200 disabled:bg-slate-200 disabled:text-slate-400 disabled:border-slate-300 flex items-center justify-center shrink-0"
+                                                                aria-label="Send"
                                                             >
-                                                                +
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
+                                                                </svg>
                                                             </button>
-                                                            <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 hidden -translate-x-1/2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 shadow-sm opacity-0 transition-opacity duration-150 group-hover:opacity-100 md:block">
-                                                                New chat
-                                                            </span>
                                                         </div>
-                                                        <div className="flex-grow">
-                                                            <SearchBar
-                                                                query={query}
-                                                                setQuery={setQuery}
-                                                                onSearch={() => query.trim() && handleChatStart(query)}
+                                                        <div className="mt-1.5 border-t border-slate-100 pt-1.5 flex items-center gap-2 pl-10">
+                                                            <ChatFilters
+                                                                activeCategories={activeCategories}
+                                                                debugMode={debugMode}
+                                                                chatContentTypes={chatContentTypes}
+                                                                setChatContentTypes={setChatContentTypes}
+                                                                chatShastras={chatShastras}
+                                                                setChatShastras={setChatShastras}
+                                                                allMetadata={allMetadata}
                                                                 language={language}
+                                                                dropUp={false}
                                                             />
                                                         </div>
-                                                        <div className="hidden md:block shrink-0">
-                                                            <SearchOptions language={language} setLanguage={setLanguage} inline />
-                                                        </div>
-                                                        <button
-                                                            onClick={() => query.trim() && handleChatStart(query)}
-                                                            disabled={!query.trim()}
-                                                            className="bg-sky-600 text-white h-8 w-8 rounded-full border border-sky-700 hover:bg-sky-700 hover:border-sky-800 transition duration-200 disabled:bg-slate-200 disabled:text-slate-400 disabled:border-slate-300 flex items-center justify-center shrink-0"
-                                                            aria-label="Send"
-                                                        >
-                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
-                                                            </svg>
-                                                        </button>
-                                                    </div>
-                                                    <div className="mt-3 flex justify-center md:hidden">
-                                                        <SearchOptions language={language} setLanguage={setLanguage} inline />
                                                     </div>
                                                 </div>
                                                 <div className="w-full pt-1">
@@ -1632,11 +1765,11 @@ const AppContent = () => {
                                                                             </div>
                                                                         </div>
                                                                         <div className="max-w-3xl">
-                                                                            <div className={`text-slate-900 leading-relaxed text-base ${displayedTexts[idx] === msg.content && shouldCollapseAnswer(msg.content) && expandedAnswers[idx] === false ? 'max-h-72 overflow-hidden' : ''}`}
+                                                                            <div className={`text-slate-900 leading-relaxed text-base ${displayedTexts[idx] === cleanAnswerText(msg.content) && shouldCollapseAnswer(msg.content) && expandedAnswers[idx] === false ? 'max-h-72 overflow-hidden' : ''}`}
                                                                                 dangerouslySetInnerHTML={{ __html: formatAnswerHtml(
                                                                                     displayedTexts[idx] !== undefined ? displayedTexts[idx] : msg.content || ''
                                                                                 )}} />
-                                                                            {displayedTexts[idx] === msg.content && shouldCollapseAnswer(msg.content) && (
+                                                                            {displayedTexts[idx] === cleanAnswerText(msg.content) && shouldCollapseAnswer(msg.content) && (
                                                                                 <button
                                                                                     onClick={() => setExpandedAnswers(prev => ({ ...prev, [idx]: prev[idx] === false }))}
                                                                                     className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-sky-700 hover:text-sky-800 transition-colors"
@@ -1645,12 +1778,12 @@ const AppContent = () => {
                                                                                 </button>
                                                                             )}
                                                                         </div>
-                                                                        {displayedTexts[idx] === msg.content && msg.content && (
+                                                                        {displayedTexts[idx] === cleanAnswerText(msg.content) && msg.content && (
                                                                             <div className="mt-4 w-full flex justify-end">
                                                                                 <CopyAnswerButton text={cleanAnswerText(msg.content)} />
                                                                             </div>
                                                                         )}
-                                                                        {displayedTexts[idx] === msg.content && msg.follow_up_questions && msg.follow_up_questions.length > 0 && (
+                                                                        {displayedTexts[idx] === cleanAnswerText(msg.content) && msg.follow_up_questions && msg.follow_up_questions.length > 0 && (
                                                                             <div className="mt-8 w-full rounded-xl border border-sky-200 bg-sky-50 p-4">
                                                                                 <p className="text-xs font-bold uppercase tracking-wide text-sky-800 mb-2.5">
                                                                                     💡 Suggested Follow up questions
@@ -1669,7 +1802,7 @@ const AppContent = () => {
                                                                                 </div>
                                                                             </div>
                                                                         )}
-                                                                        {displayedTexts[idx] === msg.content && msg.references && msg.references.length > 0 && (
+                                                                        {displayedTexts[idx] === cleanAnswerText(msg.content) && msg.references && msg.references.length > 0 && (
                                                                             <div className="mt-5 w-full rounded-xl border border-sky-200 bg-sky-50 p-4">
                                                                                 <h4 className="text-xs font-bold uppercase tracking-wide text-sky-800 mb-3">📖 References</h4>
                                                                                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -1751,39 +1884,55 @@ const AppContent = () => {
 
                                             {/* Sticky bottom input */}
                                             <div className="sticky bottom-0 mt-auto pt-3 pb-4 shrink-0" style={{ backgroundColor: '#f0f4f9' }}>
-                                                <div className="flex items-center gap-2 rounded-2xl border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3 transition-colors focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100">
-                                                    <div className="relative shrink-0 group">
+                                                <div className="rounded-2xl border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3 transition-colors focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="relative shrink-0 group">
+                                                            <button
+                                                                onClick={handleNewChat}
+                                                                title="New Chat"
+                                                                className="h-8 w-8 flex items-center justify-center rounded-full border border-sky-300 bg-sky-100 text-sky-700 hover:bg-sky-200 hover:border-sky-400 transition-colors"
+                                                            >
+                                                                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                                            </button>
+                                                            <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 hidden -translate-x-1/2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 shadow-sm opacity-0 transition-opacity duration-150 group-hover:opacity-100 md:block">
+                                                                New chat
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex-grow">
+                                                            <SearchBar
+                                                                query={chatInput}
+                                                                setQuery={setChatInput}
+                                                                onSearch={() => chatInput.trim() && !llmLoading && handleChatSend(chatSessionId, chatInput)}
+                                                                language={language}
+                                                                disabled={llmLoading}
+                                                            />
+                                                        </div>
                                                         <button
-                                                            onClick={handleNewChat}
-                                                            title="New Chat"
-                                                            className="h-8 w-8 flex items-center justify-center rounded-full border border-sky-300 bg-sky-100 text-sky-700 hover:bg-sky-200 hover:border-sky-400 transition-colors text-xl font-bold leading-none"
+                                                            onClick={() => handleChatSend(chatSessionId, chatInput)}
+                                                            disabled={llmLoading || !chatInput.trim()}
+                                                            className="bg-sky-600 text-white h-8 w-8 rounded-full border border-sky-700 hover:bg-sky-700 hover:border-sky-800 transition duration-200 disabled:bg-slate-200 disabled:text-slate-400 disabled:border-slate-300 flex items-center justify-center shrink-0"
+                                                            aria-label="Send"
                                                         >
-                                                            +
+                                                            {llmLoading ? <Spinner /> : (
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
+                                                                </svg>
+                                                            )}
                                                         </button>
-                                                        <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 hidden -translate-x-1/2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 shadow-sm opacity-0 transition-opacity duration-150 group-hover:opacity-100 md:block">
-                                                            New chat
-                                                        </span>
                                                     </div>
-                                                    <div className="flex-grow">
-                                                        <SearchBar
-                                                            query={chatInput}
-                                                            setQuery={setChatInput}
-                                                            onSearch={() => chatInput.trim() && !llmLoading && handleChatSend(chatSessionId, chatInput)}
+                                                    <div className="mt-1.5 border-t border-slate-100 pt-1.5 flex items-center gap-2 pl-10">
+                                                        <ChatFilters
+                                                            activeCategories={activeCategories}
+                                                            debugMode={debugMode}
+                                                            chatContentTypes={chatContentTypes}
+                                                            setChatContentTypes={setChatContentTypes}
+                                                            chatShastras={chatShastras}
+                                                            setChatShastras={setChatShastras}
+                                                            allMetadata={allMetadata}
                                                             language={language}
+                                                            dropUp={true}
                                                         />
                                                     </div>
-                                                    <button
-                                                        onClick={() => handleChatSend(chatSessionId, chatInput)}
-                                                        disabled={llmLoading || !chatInput.trim()}
-                                                        className="bg-sky-600 text-white h-8 w-8 rounded-full border border-sky-700 hover:bg-sky-700 hover:border-sky-800 transition duration-200 disabled:bg-slate-200 disabled:text-slate-400 disabled:border-slate-300 flex items-center justify-center shrink-0"
-                                                        aria-label="Send"
-                                                    >
-                                                        {llmLoading ? <Spinner /> : (
-                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
-                                                            </svg>
-                                                        )}
-                                                    </button>
                                                 </div>
                                                 <div className="flex items-start gap-2.5 px-3.5 py-2.5 mt-2 bg-amber-50/80 border border-amber-200 rounded text-amber-800 text-[11px] leading-relaxed">
                                                     <svg className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
