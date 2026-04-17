@@ -231,7 +231,7 @@ const ChatFilters = ({ activeCategories, debugMode, chatContentTypes, setChatCon
                     <button
                         key={cat}
                         onClick={() => toggleCategory(cat)}
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors ${
+                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-medium border transition-colors ${
                             active ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-500 border-slate-300 hover:border-slate-400'
                         }`}
                     >
@@ -244,7 +244,7 @@ const ChatFilters = ({ activeCategories, debugMode, chatContentTypes, setChatCon
                 <div className="relative" ref={dropdownRef}>
                     <button
                         onClick={() => setShastraOpen(v => !v)}
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors ${
+                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-medium border transition-colors ${
                             chatShastras.length > 0 ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-500 border-slate-300 hover:border-slate-400'
                         }`}
                     >
@@ -254,7 +254,7 @@ const ChatFilters = ({ activeCategories, debugMode, chatContentTypes, setChatCon
                         </svg>
                     </button>
                     {shastraOpen && (
-                        <div className={`absolute ${dropUp ? 'bottom-full mb-1' : 'top-full mt-1'} left-0 z-50 bg-white border border-slate-200 rounded-lg shadow-lg w-64 max-h-60 overflow-y-auto`}>
+                        <div className={`absolute ${dropUp ? 'bottom-full mb-1' : 'top-full mt-1'} left-0 z-50 bg-white border border-slate-200 rounded shadow-lg w-64 max-h-60 overflow-y-auto`}>
                             {chatShastras.length > 0 && (
                                 <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between">
                                     <span className="text-xs text-slate-500">{chatShastras.length} selected</span>
@@ -283,6 +283,18 @@ const ChatFilters = ({ activeCategories, debugMode, chatContentTypes, setChatCon
         </div>
     );
 };
+
+// --- USER IDENTITY ---
+function getOrCreateUserId() {
+    const key = 'swalakshya_user_id';
+    let id = localStorage.getItem(key);
+    if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem(key, id);
+    }
+    return id;
+}
+const USER_ID = getOrCreateUserId();
 
 // --- MAIN APP COMPONENT ---
 const AppContent = () => {
@@ -576,6 +588,7 @@ const AppContent = () => {
         const languageCode = language === 'gujarati' ? 'gu' : 'hi';
         return {
             language: languageCode,
+            user_id: USER_ID,
             ...(llmProvider ? { provider: llmProvider } : {})
         };
     }, [language, llmProvider]);
@@ -900,6 +913,7 @@ const AppContent = () => {
         try {
             const sessionPayload = {
                 language: languageCode,
+                user_id: USER_ID,
                 ...(llmProvider ? { provider: llmProvider } : {})
             };
             const session = await api.createChatSession(sessionPayload);
@@ -1671,7 +1685,7 @@ const AppContent = () => {
                                                     <SearchableContentWidget />
                                                 </div>
                                                 <div className="w-full">
-                                                    <div className="rounded-2xl border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3 transition-colors focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100">
+                                                    <div className="rounded-lg border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3 transition-colors focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100">
                                                         <div className="flex items-center gap-2">
                                                             <div className="relative shrink-0 group">
                                                                 <button
@@ -1743,7 +1757,7 @@ const AppContent = () => {
                                                     <div key={`${msg.role}-${idx}`}>
                                                         {msg.role === 'user' ? (
                                                             <div className="flex justify-end">
-                                                                <div className="bg-sky-600 shadow-sm rounded-2xl rounded-tr-sm px-4 py-2.5 max-w-[72%] text-white text-base">
+                                                                <div className="bg-sky-600 shadow-sm rounded-lg rounded-tr-none px-4 py-2.5 max-w-[72%] text-white text-base">
                                                                     {msg.content}
                                                                 </div>
                                                             </div>
@@ -1787,7 +1801,7 @@ const AppContent = () => {
                                                                             </div>
                                                                         )}
                                                                         {displayedTexts[idx] === cleanAnswerText(msg.content) && msg.follow_up_questions && msg.follow_up_questions.length > 0 && (
-                                                                            <div className="mt-8 w-full rounded-xl border border-sky-200 bg-sky-50 p-4">
+                                                                            <div className="mt-8 w-full rounded-md border border-sky-200 bg-sky-50 p-4">
                                                                                 <p className="text-xs font-bold uppercase tracking-wide text-sky-800 mb-2.5">
                                                                                     💡 Suggested Follow up questions
                                                                                 </p>
@@ -1806,7 +1820,7 @@ const AppContent = () => {
                                                                             </div>
                                                                         )}
                                                                         {displayedTexts[idx] === cleanAnswerText(msg.content) && msg.references && msg.references.length > 0 && (
-                                                                            <div className="mt-5 w-full rounded-xl border border-sky-200 bg-sky-50 p-4">
+                                                                            <div className="mt-5 w-full rounded-md border border-sky-200 bg-sky-50 p-4">
                                                                                 <h4 className="text-xs font-bold uppercase tracking-wide text-sky-800 mb-3">📖 References</h4>
                                                                                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                                                                                     {msg.references.map((ref, refIdx) => {
@@ -1832,12 +1846,12 @@ const AppContent = () => {
                                                                                                 } : undefined}
                                                                                                 role={isCardInteractive ? 'button' : undefined}
                                                                                                 tabIndex={isCardInteractive ? 0 : undefined}
-                                                                                                className={`flex flex-col justify-between border rounded-lg p-3 text-sm transition-shadow ${card.cardClassName} ${isCardInteractive ? 'cursor-pointer hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-200' : ''}`}
+                                                                                                className={`flex flex-col justify-between border rounded p-3 text-sm transition-shadow ${card.cardClassName} ${isCardInteractive ? 'cursor-pointer hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-200' : ''}`}
                                                                                             >
                                                                                                 <div className="mb-3">
                                                                                                     <div className="mb-2 flex items-start justify-between gap-2">
                                                                                                         <span className={`inline-block text-xs font-bold rounded px-1.5 py-0.5 ${card.numberClassName}`}>{refIdx + 1}</span>
-                                                                                                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.06em] ${card.badgeClassName}`}>
+                                                                                                        <span className={`inline-flex items-center rounded border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.06em] ${card.badgeClassName}`}>
                                                                                                             {card.categoryLabel}
                                                                                                         </span>
                                                                                                     </div>
@@ -1889,10 +1903,10 @@ const AppContent = () => {
                                             <div className="sticky bottom-0 mt-auto pt-3 pb-4 shrink-0" style={{ backgroundColor: '#f0f4f9' }}>
                                                 {chatNotice && (
                                                     <div className="flex justify-center mb-2">
-                                                        <span className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-3 py-1 animate-fade-in">{chatNotice}</span>
+                                                        <span className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-1 animate-fade-in">{chatNotice}</span>
                                                     </div>
                                                 )}
-                                                <div className="rounded-2xl border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3 transition-colors focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100">
+                                                <div className="rounded-lg border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3 transition-colors focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100">
                                                     <div className="flex items-center gap-2">
                                                         <div className="relative shrink-0 group">
                                                             <button
