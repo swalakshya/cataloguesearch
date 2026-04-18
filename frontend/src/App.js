@@ -1130,10 +1130,7 @@ const AppContent = () => {
 
     const cleanAnswerText = (answerText) => {
         if (!answerText) return '';
-        // Strip any leading asterisks around the References/संदर्भ keyword before matching
-        const refIdx = answerText.search(/\n?\**\s*(?:References\b|संदर्भ)/i);
-        const trimmed = refIdx >= 0 ? answerText.slice(0, refIdx) : answerText;
-        return trimmed.trim();
+        return answerText.trim();
     };
 
     const shouldCollapseAnswer = (answerText) => {
