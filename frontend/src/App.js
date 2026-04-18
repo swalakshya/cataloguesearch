@@ -459,6 +459,7 @@ const AppContent = () => {
     const [llmAvailable, setLlmAvailable] = useState(false);
     const [homeMode, setHomeMode] = useState(() => location.pathname === '/aibot' ? 'chat' : 'search');
     const [displayedTexts, setDisplayedTexts] = useState({});
+    const [chunkTextsCache, setChunkTextsCache] = useState({});
     const typingIntervalsRef = useRef({});
     const messagesEndRef = useRef(null);
     const isChatMode = homeMode === 'chat';
@@ -861,6 +862,24 @@ const AppContent = () => {
                     }
                 ];
             });
+
+            // Fetch text content for any inline chunk quote references in the answer
+            const chunkIdMatches = [...(data.answer || '').matchAll(/^\s*>\s*\{\{([^}]+)\}\}\s*$/gm)];
+            if (chunkIdMatches.length > 0) {
+                const uniqueIds = [...new Set(chunkIdMatches.map(m => m[1]))];
+                const toFetch = uniqueIds.filter(id => !chunkTextsCache[id]);
+                if (toFetch.length > 0) {
+                    Promise.all(toFetch.map(id => api.getChunk(id, language))).then(results => {
+                        const fetched = {};
+                        results.forEach((res, i) => {
+                            if (res?.text_content) fetched[toFetch[i]] = res;
+                        });
+                        if (Object.keys(fetched).length > 0) {
+                            setChunkTextsCache(prev => ({ ...prev, ...fetched }));
+                        }
+                    });
+                }
+            }
         } catch (error) {
             if (error?.detail === 'session_not_found') {
                 clearPersistedChatSession();
@@ -1285,6 +1304,40 @@ const AppContent = () => {
         html = html.replace(/@@BREAK@@/g, '<br/>');
 
         return html;
+    };
+
+    const buildInlineQuoteLabel = (citation) => {
+        if (!citation) return '';
+        const parts = [citation.granth];
+        if (citation.category === 'Pravachan') {
+            if (citation.series) parts.push(citation.series);
+            if (citation.volume != null && citation.volume !== '') parts.push(`Vol ${citation.volume}`);
+        } else {
+            // Granth / Books: author + verse locators
+            if (citation.author) parts.push(citation.author);
+            const verseLocators = [
+                citation.gatha   && `Gatha ${citation.gatha}`,
+                citation.shlok   && `Shlok ${citation.shlok}`,
+                citation.kalash  && `Kalash ${citation.kalash}`,
+                // citations use "dohra", chunk_labels use "doha" — handle both
+                (citation.dohra || citation.doha) && `Doha ${citation.dohra || citation.doha}`,
+                citation.sutra   && `Sutra ${citation.sutra}`,
+            ].filter(Boolean);
+            parts.push(...verseLocators);
+        }
+        if (citation.page_number != null && citation.page_number !== '') parts.push(`पृष्ठ ${citation.page_number}`);
+        return parts.filter(Boolean).join(', ');
+    };
+
+    const resolveChunkQuotes = (text, citations, chunkTexts) => {
+        if (!text || !chunkTexts) return text;
+        return text.replace(/^(\s*>\s*)\{\{([^}]+)\}\}\s*$/gm, (match, prefix, chunkId) => {
+            const chunkData = chunkTexts[chunkId];
+            if (!chunkData?.text_content) return match;
+            const citationFromResponse = (citations || []).find(c => c.chunk_id === chunkId);
+            const label = buildInlineQuoteLabel(citationFromResponse || chunkData);
+            return `${prefix}${chunkData.text_content}${label ? ` (${label})` : ''}`;
+        });
     };
 
     const parseReference = (ref) => {
@@ -1784,7 +1837,11 @@ const AppContent = () => {
                                                                         <div className="max-w-3xl">
                                                                             <div className={`text-slate-900 leading-relaxed text-base ${displayedTexts[idx] === cleanAnswerText(msg.content) && shouldCollapseAnswer(msg.content) && expandedAnswers[idx] === false ? 'max-h-72 overflow-hidden' : ''}`}
                                                                                 dangerouslySetInnerHTML={{ __html: formatAnswerHtml(
-                                                                                    displayedTexts[idx] !== undefined ? displayedTexts[idx] : msg.content || ''
+                                                                                    resolveChunkQuotes(
+                                                                                        displayedTexts[idx] !== undefined ? displayedTexts[idx] : msg.content || '',
+                                                                                        msg.citations,
+                                                                                        chunkTextsCache
+                                                                                    )
                                                                                 )}} />
                                                                             {displayedTexts[idx] === cleanAnswerText(msg.content) && shouldCollapseAnswer(msg.content) && (
                                                                                 <button

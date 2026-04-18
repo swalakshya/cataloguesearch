@@ -136,6 +136,17 @@ export const api = {
         }
     },
 
+    getChunk: async (chunkId, language = 'hi') => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/chunk/${encodeURIComponent(chunkId)}?language=${language}`);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            console.error("API Error: Could not fetch chunk", error);
+            return null;
+        }
+    },
+
     getGranthVerse: async (originalFilename, verseSeqNum) => {
         try {
             const encodedFilename = encodeURIComponent(originalFilename);
