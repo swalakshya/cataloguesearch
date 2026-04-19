@@ -107,6 +107,7 @@ def _chunk_from_hit(hit: Dict[str, Any], language: str) -> Dict[str, Any]:
         "gatha": chunk_labels.get("gatha"),
         "kalash": chunk_labels.get("kalash"),
         "shlok": chunk_labels.get("shlok"),
+        "series": metadata.get("Series"),
         "volume": metadata.get("volume"),
         "series_start_date": metadata.get("series_start_date"),
         "series_end_date": metadata.get("series_end_date"),
@@ -115,10 +116,7 @@ def _chunk_from_hit(hit: Dict[str, Any], language: str) -> Dict[str, Any]:
         "score": score,
     }
     if "Kanji" in metadata.get("Pravachankar", {}):
-        if language == "gu":
-            result["Pravachankar"] = "પૂજ્ય ગુરુદેવશ્રી કાનજી સ્વામી, સોનગઢ"
-        else:
-            result["Pravachankar"] = "पूज्य गुरुदेवश्री कानजी स्वामी"
+        result["Pravachankar"] = "Pujya Gurudev Shri Kanji Swami"
     return result
 
 

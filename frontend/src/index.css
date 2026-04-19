@@ -94,15 +94,7 @@ body {
 }
 
 .llm-answer-scroll {
-  max-height: 60vh;
-  overflow-y: auto;
   padding-right: 0.25rem;
-}
-
-@media (max-width: 768px) {
-  .llm-answer-scroll {
-    max-height: 55vh;
-  }
 }
 
 .llm-bold-separator {
@@ -120,3 +112,38 @@ body {
   color: #1e293b;
 }
 
+.llm-quote-block {
+  display: block;
+  margin: 0.2rem 0;
+  padding: 0.75rem 0.9rem;
+  border-left: 2px solid #78716c;
+  border-radius: 0.4rem;
+  background: linear-gradient(180deg, #fffdf7 0%, #faf7ef 100%);
+  color: #1f2937;
+  font-style: italic;
+  box-shadow: inset 0 0 0 1px #e7e0d1;
+}
+
+.llm-quote-citation {
+  display: block;
+  margin-top: 0.45rem;
+  text-align: right;
+  font-size: 0.72em;
+  color: #57534e;
+  font-style: italic;
+}
+
+@keyframes aibotAnswerEnter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.aibot-assistant-enter {
+  animation: aibotAnswerEnter 180ms ease-out;
+}

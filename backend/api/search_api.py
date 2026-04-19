@@ -513,6 +513,54 @@ async def get_similar_documents(request: Request, doc_id: str, language: str = Q
         log_handle.exception(f"An error occurred while finding similar documents: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
 
+@app.get("/api/chunk/{chunk_id}", response_model=Dict[str, Any])
+async def get_chunk(request: Request, chunk_id: str, language: str = Query("hi", enum=["hi", "gu", "en"])):
+    """
+    Fetches a single chunk by its chunk_id. Returns only the current chunk with no neighbours.
+    """
+    try:
+        config = request.app.state.config
+        client = get_opensearch_client(config)
+        log_handle.info(f"Received request for chunk_id: {chunk_id}")
+        try:
+            doc = client.get(index=config.OPENSEARCH_INDEX_NAME, id=chunk_id)
+        except Exception:
+            raise HTTPException(status_code=404, detail="Chunk not found")
+        source = doc.get("_source", {})
+        metadata = source.get("metadata", {})
+        chunk_labels = source.get("chunk_labels", {})
+        text_field = "text_content_hindi" if language != "gu" else "text_content_gujarati"
+        author = (
+            metadata.get("Author")
+            or metadata.get("Tikakaar")
+            or metadata.get("Teekakar")
+            or metadata.get("Bhasha Vachanika")
+            or ""
+        )
+        result = {
+            "chunk_id": chunk_id,
+            "text_content": source.get(text_field, ""),
+            "page_number": source.get("page_number"),
+            "language": source.get("language", language),
+            "granth": metadata.get("Name", ""),
+            "category": metadata.get("category", ""),
+            "series": metadata.get("Series", ""),
+            "volume": metadata.get("volume"),
+            "author": author,
+            "gatha": chunk_labels.get("gatha"),
+            "shlok": chunk_labels.get("shlok"),
+            "kalash": chunk_labels.get("kalash"),
+            "doha": chunk_labels.get("doha"),
+            "sutra": chunk_labels.get("sutra"),
+        }
+        return JSONResponse(content=result, status_code=200)
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_handle.exception(f"An error occurred while fetching chunk: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
+
+
 @app.get("/api/context/{chunk_id}", response_model=Dict[str, Any])
 async def get_context(request: Request, chunk_id: str, language: str = Query("hi", enum=["hi", "gu", "en"])):
     """

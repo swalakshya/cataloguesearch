@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { GoogleReCaptchaProvider } from 'react-google-recaptcha-v3';
 
@@ -22,6 +23,7 @@ import { Spinner, ChevronUpIcon, ChevronDownIcon, ExpandIcon, PdfIcon } from './
 // Import API service
 import { api } from './services/api';
 import { getRandomSuggestedQueriesByLanguage } from './utils/suggestedQueries';
+import { copyToClipboard } from './utils/shareUtils';
 
 // --- TIPS MODAL COMPONENT ---
 const TipsModal = ({ onClose }) => {
@@ -130,6 +132,170 @@ const TipsModal = ({ onClose }) => {
 };
 
 
+// --- COPY ANSWER BUTTON ---
+const CopyAnswerButton = ({ text }) => {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = async () => {
+        const success = await copyToClipboard(text);
+        if (success) {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        }
+    };
+
+    return (
+        <button
+            onClick={handleCopy}
+            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 bg-white border border-slate-200 hover:border-slate-300 rounded px-2 py-1 transition-colors"
+            title="Copy answer"
+        >
+            {copied ? (
+                <>
+                    <svg className="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="text-green-600">Copied</span>
+                </>
+            ) : (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <rect x="8" y="8" width="12" height="14" rx="2" strokeWidth={2} />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2h2" />
+                </svg>
+            )}
+        </button>
+    );
+};
+
+// --- CHAT FILTERS COMPONENT ---
+const CATEGORY_EMOJI = { Pravachan: '🎙️', Granth: '📜', Books: '📚' };
+
+const ChatFilters = ({ activeCategories, debugMode, chatContentTypes, setChatContentTypes, chatShastras, setChatShastras, allMetadata, language, dropUp = false }) => {
+    const [shastraOpen, setShastraOpen] = useState(false);
+    const dropdownRef = useRef(null);
+
+    useEffect(() => {
+        if (!shastraOpen) return;
+        const handle = (e) => { if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setShastraOpen(false); };
+        document.addEventListener('mousedown', handle);
+        return () => document.removeEventListener('mousedown', handle);
+    }, [shastraOpen]);
+
+    const shastraOptions = useMemo(() => {
+        const names = new Set();
+        chatContentTypes.forEach(cat => {
+            const catMeta = allMetadata[cat]?.[language];
+            if (catMeta?.Name) catMeta.Name.forEach(n => names.add(n));
+        });
+        return [...names].sort();
+    }, [chatContentTypes, allMetadata, language]);
+
+    useEffect(() => {
+        const valid = new Set(shastraOptions);
+        const filtered = chatShastras.filter(s => valid.has(s));
+        if (filtered.length !== chatShastras.length) setChatShastras(filtered);
+    }, [shastraOptions]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const visibleCategories = [
+        ...activeCategories,
+        ...(debugMode && !activeCategories.includes('Books') ? ['Books'] : [])
+    ];
+
+    const toggleCategory = (cat) => {
+        setChatContentTypes(prev => {
+            if (prev.includes(cat)) {
+                if (prev.length === 1) return prev;
+                return prev.filter(c => c !== cat);
+            }
+            return [...prev, cat];
+        });
+    };
+
+    const toggleShastra = (name) => {
+        setChatShastras(prev =>
+            prev.includes(name) ? prev.filter(s => s !== name) : [...prev, name]
+        );
+    };
+
+    const shastraLabel = chatShastras.length === 0
+        ? 'All Shastras'
+        : chatShastras.length === 1
+            ? chatShastras[0]
+            : `${chatShastras.length} Shastras`;
+
+    return (
+        <div className="flex items-center gap-1.5 flex-wrap">
+            {visibleCategories.map(cat => {
+                const active = chatContentTypes.includes(cat);
+                return (
+                    <button
+                        key={cat}
+                        onClick={() => toggleCategory(cat)}
+                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-medium border transition-colors ${
+                            active ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-500 border-slate-300 hover:border-slate-400'
+                        }`}
+                    >
+                        <span>{CATEGORY_EMOJI[cat]}</span>
+                        <span>{cat}</span>
+                    </button>
+                );
+            })}
+            {shastraOptions.length > 0 && (
+                <div className="relative" ref={dropdownRef}>
+                    <button
+                        onClick={() => setShastraOpen(v => !v)}
+                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-medium border transition-colors ${
+                            chatShastras.length > 0 ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-500 border-slate-300 hover:border-slate-400'
+                        }`}
+                    >
+                        <span className="max-w-[160px] truncate">{shastraLabel}</span>
+                        <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={dropUp ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'} />
+                        </svg>
+                    </button>
+                    {shastraOpen && (
+                        <div className={`absolute ${dropUp ? 'bottom-full mb-1' : 'top-full mt-1'} left-0 z-50 bg-white border border-slate-200 rounded shadow-lg w-64 max-h-60 overflow-y-auto`}>
+                            {chatShastras.length > 0 && (
+                                <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between">
+                                    <span className="text-xs text-slate-500">{chatShastras.length} selected</span>
+                                    <button onClick={() => setChatShastras([])} className="text-xs text-sky-600 hover:text-sky-800 font-medium">Clear all</button>
+                                </div>
+                            )}
+                            {shastraOptions.map(name => {
+                                const selected = chatShastras.includes(name);
+                                return (
+                                    <button
+                                        key={name}
+                                        onClick={() => toggleShastra(name)}
+                                        className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-50 transition-colors flex items-center gap-2 ${selected ? 'text-sky-700' : 'text-slate-700'}`}
+                                    >
+                                        <span className={`w-3.5 h-3.5 flex-shrink-0 rounded border flex items-center justify-center ${selected ? 'bg-sky-600 border-sky-600' : 'border-slate-300'}`}>
+                                            {selected && <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
+                                        </span>
+                                        <span>{name}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+// --- USER IDENTITY ---
+function getOrCreateUserId() {
+    const key = 'swalakshya_user_id';
+    let id = localStorage.getItem(key);
+    if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem(key, id);
+    }
+    return id;
+}
+const USER_ID = getOrCreateUserId();
+
 // --- MAIN APP COMPONENT ---
 const AppContent = () => {
     const location = useLocation();
@@ -151,6 +317,7 @@ const AppContent = () => {
     // Update state when URL changes (browser navigation)
     useEffect(() => {
         const path = location.pathname;
+        setHomeMode(path === '/aibot' ? 'chat' : 'search');
         if (path === '/about') {
             setCurrentPageState('about');
         } else if (path === '/feedback') {
@@ -165,7 +332,6 @@ const AppContent = () => {
             setCurrentPageState('eval');
         } else if (path === '/aibot') {
             setCurrentPageState('aibot');
-            setHomeMode('chat');
         } else if (path === '/') {
             setCurrentPageState('home');
         }
@@ -194,11 +360,16 @@ const AppContent = () => {
         setShowTipsModal(false);
         setLlmAnswer(null);
         setLlmReferences([]);
+        setLlmCitations([]);
         setLlmError(null);
         setLlmLoading(false);
         setChatMessages([]);
         setChatInput('');
         setChatInputVisible(false);
+        resetTypingState();
+        clearPersistedChatSession();
+        setChatContentTypes([...activeCategories]);
+        setChatShastras([]);
         setHomeMode('search');
         if (chatSessionId) {
             api.closeChatSession(chatSessionId).catch(() => null);
@@ -219,6 +390,8 @@ const AppContent = () => {
             setChatMessages([]);
             setChatInput('');
             setChatInputVisible(false);
+            resetTypingState();
+            clearPersistedChatSession();
         }
         
         const routes = {
@@ -270,23 +443,71 @@ const AppContent = () => {
     const [showTipsModal, setShowTipsModal] = useState(false);
     const [llmAnswer, setLlmAnswer] = useState(null);
     const [llmReferences, setLlmReferences] = useState([]);
+    const [llmCitations, setLlmCitations] = useState([]);
     const [llmError, setLlmError] = useState(null);
+    const [chatNotice, setChatNotice] = useState(null);
     const [llmLoading, setLlmLoading] = useState(false);
     const [chatSessionId, setChatSessionId] = useState(null);
     const [chatMessages, setChatMessages] = useState([]);
     const [chatInput, setChatInput] = useState('');
     const [chatInputVisible, setChatInputVisible] = useState(false);
+    const [chatContentTypes, setChatContentTypes] = useState(['Pravachan', 'Granth']);
+    const [chatShastras, setChatShastras] = useState([]);
+    const [expandedAnswers, setExpandedAnswers] = useState({});
     const PAGE_SIZE = 20;
     const llmProvider = (process.env.REACT_APP_LLM_PROVIDER || '').trim();
     const [llmAvailable, setLlmAvailable] = useState(false);
     const [homeMode, setHomeMode] = useState(() => location.pathname === '/aibot' ? 'chat' : 'search');
+    const [displayedTexts, setDisplayedTexts] = useState({});
+    const [chunkTextsCache, setChunkTextsCache] = useState({});
+    const typingIntervalsRef = useRef({});
+    const messagesEndRef = useRef(null);
     const isChatMode = homeMode === 'chat';
     const chatEnabled = isChatMode;
-    const showAnswerButton = llmAvailable && isChatMode;
+
+    const resetTypingState = useCallback(() => {
+        Object.values(typingIntervalsRef.current).forEach(clearInterval);
+        typingIntervalsRef.current = {};
+        setDisplayedTexts({});
+        setExpandedAnswers({});
+    }, []);
+
+    const clearPersistedChatSession = useCallback(() => {
+        try {
+            localStorage.removeItem('llmChatSession');
+        } catch (error) {
+            console.warn('localStorage not available:', error);
+        }
+    }, []);
 
     useEffect(() => {
         api.checkLlmHealth().then(setLlmAvailable);
     }, []);
+
+    // Typing effect: reveal each new assistant message character by character
+    useEffect(() => {
+        chatMessages.forEach((msg, idx) => {
+            if (msg.role === 'assistant' && !msg.pending && msg.content &&
+                displayedTexts[idx] === undefined && !typingIntervalsRef.current[idx]) {
+                let charIdx = 0;
+                const fullText = cleanAnswerText(msg.content);
+                typingIntervalsRef.current[idx] = setInterval(() => {
+                    charIdx += 4;
+                    if (charIdx >= fullText.length) {
+                        charIdx = fullText.length;
+                        clearInterval(typingIntervalsRef.current[idx]);
+                        delete typingIntervalsRef.current[idx];
+                    }
+                    setDisplayedTexts(prev => ({ ...prev, [idx]: fullText.slice(0, charIdx) }));
+                }, 16);
+            }
+        });
+    }, [chatMessages]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Auto-scroll to bottom when messages or typed text updates
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [chatMessages, displayedTexts]);
 
     useEffect(() => {
         if (currentPage === 'home') {
@@ -309,6 +530,7 @@ const AppContent = () => {
         api.getAppConfig().then(cfg => {
             setDebugMode(cfg.debug_mode);
             setActiveCategories(cfg.active_categories);
+            setChatContentTypes([...cfg.active_categories]);
             if (cfg.active_categories.includes('Books')) {
                 setContentTypes(prev => ({ ...prev, books: true }));
             }
@@ -332,6 +554,14 @@ const AppContent = () => {
                 if (parsed?.sessionId) {
                     setChatSessionId(parsed.sessionId);
                     setChatMessages(parsed.messages || []);
+                    setDisplayedTexts(
+                        (parsed.messages || []).reduce((acc, msg, idx) => {
+                            if (msg?.role === 'assistant' && msg?.content) {
+                                acc[idx] = cleanAnswerText(msg.content);
+                            }
+                            return acc;
+                        }, {})
+                    );
                 }
             }
         } catch (error) {
@@ -354,6 +584,15 @@ const AppContent = () => {
             console.warn('localStorage not available:', error);
         }
     }, [chatEnabled, chatSessionId, chatMessages]);
+
+    const getChatSessionPayload = useCallback(() => {
+        const languageCode = language === 'gujarati' ? 'gu' : 'hi';
+        return {
+            language: languageCode,
+            user_id: USER_ID,
+            ...(llmProvider ? { provider: llmProvider } : {})
+        };
+    }, [language, llmProvider]);
 
     // Update metadata when language or contentTypes selection changes
     useEffect(() => {
@@ -451,9 +690,14 @@ const AppContent = () => {
 
     function buildLlmFilters() {
         const filters = {};
-        const types = [];
-        if (contentTypes.pravachans) types.push('Pravachan');
-        if (contentTypes.granths) types.push('Granth');
+        // In chat mode, use user's chat filter selection
+        const types = isChatMode
+            ? [...chatContentTypes]
+            : [
+                ...(contentTypes.pravachans ? ['Pravachan'] : []),
+                ...(contentTypes.granths ? ['Granth'] : []),
+                ...(contentTypes.books ? ['Books'] : []),
+              ];
         if (types.length) filters.content_type = types;
 
         if (startYear) filters.year_from = Number(startYear);
@@ -478,6 +722,8 @@ const AppContent = () => {
             }
         });
 
+        if (isChatMode && chatShastras.length > 0) filters.granth = chatShastras;
+
         return filters;
     }
 
@@ -490,10 +736,13 @@ const AppContent = () => {
         setSearchData(null);
         setLlmAnswer(null);
         setLlmReferences([]);
+        setLlmCitations([]);
         setLlmError(null);
         setChatMessages([]);
         setChatInput('');
         setChatInputVisible(false);
+        resetTypingState();
+        clearPersistedChatSession();
         if (chatSessionId) {
             api.closeChatSession(chatSessionId).catch(() => null);
             setChatSessionId(null);
@@ -513,7 +762,7 @@ const AppContent = () => {
         setSearchData(data);
         setLoadingCategories(new Set());
         setIsLoading(false);
-    }, [query, buildSearchPayload]);
+    }, [activeCategories, buildSearchPayload, chatSessionId, clearPersistedChatSession, query, resetTypingState]);
 
     async function handleChatSend(sessionId, message) {
         if (!message.trim()) {
@@ -521,15 +770,77 @@ const AppContent = () => {
         }
         setLlmLoading(true);
         setLlmError(null);
-        setChatMessages(prev => [...prev, { role: 'user', content: message }, { role: 'assistant', pending: true }]);
+        setChatMessages(prev => [
+            ...prev,
+            { role: 'user', content: message },
+            {
+                role: 'assistant',
+                pending: true,
+                stage: 'understanding',
+                stageLabel: 'Understanding your question'
+            }
+        ]);
         setChatInput('');
         setChatInputVisible(false);
-        try {
-            const data = await api.sendChatMessage(sessionId, {
+
+        const sendStructuredMessage = async (targetSessionId) => api.sendChatMessageStream(
+            targetSessionId,
+            {
                 role: 'user',
                 content: message,
+                response_format: 'structured',
                 filters: buildLlmFilters()
-            });
+            },
+            (event) => {
+                if (event?.type !== 'stage') return;
+                setChatMessages(prev => {
+                    const updated = [...prev];
+                    const idx = updated.findIndex(item => item.role === 'assistant' && item.pending);
+                    if (idx !== -1) {
+                        updated[idx] = {
+                            ...updated[idx],
+                            stage: event.stage || updated[idx].stage,
+                            stageLabel: event.label || updated[idx].stageLabel
+                        };
+                    }
+                    return updated;
+                });
+            }
+        );
+
+        try {
+            let data;
+            try {
+                data = await sendStructuredMessage(sessionId);
+            } catch (error) {
+                if (error?.detail !== 'session_not_found') {
+                    throw error;
+                }
+
+                clearPersistedChatSession();
+                flushSync(() => {
+                    resetTypingState();
+                    setChatSessionId(null);
+                    setChatMessages([
+                        { role: 'user', content: message },
+                        {
+                            role: 'assistant',
+                            pending: true,
+                            stage: 'understanding',
+                            stageLabel: 'Understanding your question'
+                        }
+                    ]);
+                });
+                setChatNotice('Previous session expired. Starting a new session…');
+                setTimeout(() => setChatNotice(null), 4000);
+
+                const freshSession = await api.createChatSession(getChatSessionPayload());
+                setChatSessionId(freshSession.session_id);
+                data = await sendStructuredMessage(freshSession.session_id);
+            }
+            if (!data) {
+                throw new Error('No response received from server.');
+            }
             setChatMessages(prev => {
                 const updated = [...prev];
                 const idx = updated.findIndex(item => item.role === 'assistant' && item.pending);
@@ -537,7 +848,9 @@ const AppContent = () => {
                     updated[idx] = {
                         role: 'assistant',
                         content: data.answer || '',
-                        references: data.references || []
+                        follow_up_questions: data.follow_up_questions || [],
+                        references: data.references || [],
+                        citations: data.citations || []
                     };
                     return updated;
                 }
@@ -546,13 +859,41 @@ const AppContent = () => {
                     {
                         role: 'assistant',
                         content: data.answer || '',
-                        references: data.references || []
+                        follow_up_questions: data.follow_up_questions || [],
+                        references: data.references || [],
+                        citations: data.citations || []
                     }
                 ];
             });
+
+            // Fetch text content for any inline chunk quote references in the answer
+            const chunkIdMatches = [...(data.answer || '').matchAll(/^\s*>\s*\{\{([^}]+)\}\}\s*$/gm)];
+            if (chunkIdMatches.length > 0) {
+                const uniqueIds = [...new Set(chunkIdMatches.map(m => m[1]))];
+                const toFetch = uniqueIds.filter(id => !chunkTextsCache[id]);
+                if (toFetch.length > 0) {
+                    const languageCode = language === 'gujarati' ? 'gu' : 'hi';
+                    Promise.all(toFetch.map(id => api.getChunk(id, languageCode))).then(results => {
+                        const fetched = {};
+                        results.forEach((res, i) => {
+                            if (res?.text_content) fetched[toFetch[i]] = res;
+                        });
+                        if (Object.keys(fetched).length > 0) {
+                            setChunkTextsCache(prev => ({ ...prev, ...fetched }));
+                        }
+                    });
+                }
+            }
         } catch (error) {
-            setLlmError('Could not continue chat. Please try again.');
-            setChatMessages(prev => prev.filter(item => !(item.role === 'assistant' && item.pending)));
+            if (error?.detail === 'session_not_found') {
+                clearPersistedChatSession();
+                setChatSessionId(null);
+                setChatMessages([]);
+                setLlmError('The previous chat session expired. Please send your question again.');
+            } else {
+                setLlmError('Could not continue chat. Please try again.');
+                setChatMessages(prev => prev.filter(item => !(item.role === 'assistant' && item.pending)));
+            }
         } finally {
             setLlmLoading(false);
         }
@@ -564,12 +905,10 @@ const AppContent = () => {
         setChatMessages([]);
         setChatInput('');
         setChatInputVisible(false);
-        const languageCode = language === 'gujarati' ? 'gu' : 'hi';
+        resetTypingState();
+        clearPersistedChatSession();
         try {
-            const session = await api.createChatSession({
-                language: languageCode,
-                ...(llmProvider ? { provider: llmProvider } : {})
-            });
+            const session = await api.createChatSession(getChatSessionPayload());
             setChatSessionId(session.session_id);
             await handleChatSend(session.session_id, firstQuestion);
         } catch (error) {
@@ -597,16 +936,19 @@ const AppContent = () => {
         try {
             const sessionPayload = {
                 language: languageCode,
+                user_id: USER_ID,
                 ...(llmProvider ? { provider: llmProvider } : {})
             };
             const session = await api.createChatSession(sessionPayload);
             const data = await api.sendChatMessage(session.session_id, {
                 role: 'user',
                 content: query,
+                response_format: 'structured',
                 filters: buildLlmFilters()
             });
             setLlmAnswer(data.answer || '');
             setLlmReferences(data.references || []);
+            setLlmCitations(data.citations || []);
             await api.closeChatSession(session.session_id).catch(() => null);
         } catch (error) {
             setLlmError('Could not generate answer. Please try again.');
@@ -624,7 +966,14 @@ const AppContent = () => {
         setChatInput('');
         setChatInputVisible(false);
         setLlmError(null);
-    }, [chatSessionId]);
+        resetTypingState();
+        clearPersistedChatSession();
+    }, [chatSessionId, clearPersistedChatSession, resetTypingState]);
+
+    const handleNewChat = useCallback(async () => {
+        await handleEndChat();
+        setQuery('');
+    }, [handleEndChat]);
 
     const handlePravachanSearch = useCallback(async (page = 1) => {
         if (!query.trim()) {
@@ -785,10 +1134,13 @@ const AppContent = () => {
 
     const cleanAnswerText = (answerText) => {
         if (!answerText) return '';
-        // Strip any leading asterisks around the References/संदर्भ keyword before matching
-        const refIdx = answerText.search(/\n?\**\s*(?:References\b|संदर्भ)/i);
-        const trimmed = refIdx >= 0 ? answerText.slice(0, refIdx) : answerText;
-        return trimmed.trim();
+        return answerText.trim();
+    };
+
+    const shouldCollapseAnswer = (answerText) => {
+        const cleaned = cleanAnswerText(answerText);
+        const lineCount = cleaned.split('\n').filter(Boolean).length;
+        return cleaned.length > 650 || lineCount > 7;
     };
 
     const formatAnswerHtml = (answerText) => {
@@ -839,14 +1191,14 @@ const AppContent = () => {
             return `__CODE_${codeParts.length - 1}__`;
         });
 
-        // Step 6: Extract > quote lines (WhatsApp-style citations); trailing (ref) becomes an italic subscript
+        // Step 6: Extract > quote lines (WhatsApp-style citations); trailing (ref) stays inside the quote box
         // Leading whitespace before > is stripped so indented quote lines still match
         sanitizedAnswer = sanitizedAnswer.replace(/^\s*>\s*(.+)$/gm, (match, content) => {
             const refMatch = content.match(/^([\s\S]+?)\s*(\([^)]+\))\s*$/);
             if (refMatch) {
                 quoteParts.push(refMatch[1]);
                 citationParts.push(refMatch[2]);
-                return `__QUOT_${quoteParts.length - 1}__ __CITE_${citationParts.length - 1}__`;
+                return `__QUOTCITE_${quoteParts.length - 1}_${citationParts.length - 1}__`;
             }
             quoteParts.push(content);
             return `__QUOT_${quoteParts.length - 1}__`;
@@ -869,7 +1221,7 @@ const AppContent = () => {
         });
 
         // Step 9: Extract parenthesised text for smaller rendering.
-        // Runs after all other tokenizations so (ref) from citations is already gone (__CITE__ token).
+        // Runs after all other tokenizations so (ref) from citations is already gone (__QUOTCITE__ token).
         // __PAREN__ is placed first in the replacement chain so any inner tokens still get resolved.
         text = text.replace(/\(([^)\n]+)\)/g, (match, content) => {
             parenParts.push(content);
@@ -899,7 +1251,7 @@ const AppContent = () => {
                     segments.push('');
                 }
                 // Small-gap line before citation blocks (grey quote lines)
-                if (/^__QUOT_\d+__/.test(trimmed)) {
+                if (/^__QUOT(?:CITE)?_\d+/.test(trimmed)) {
                     segments.push('<span style="display:block;height:0.3rem"></span>');
                 }
             }
@@ -926,9 +1278,14 @@ const AppContent = () => {
             const content = italicParts[Number(idx)] || '';
             return `<em>${escapeHtml(content)}</em>`;
         });
+        html = html.replace(/__QUOTCITE_(\d+)_(\d+)__/g, (match, quoteIdx, citeIdx) => {
+            const content = quoteParts[Number(quoteIdx)] || '';
+            const citation = citationParts[Number(citeIdx)] || '';
+            return `<span class="llm-quote-block">${escapeHtml(content)}<span class="llm-quote-citation">${escapeHtml(citation)}</span></span>`;
+        });
         html = html.replace(/__QUOT_(\d+)__/g, (match, idx) => {
             const content = quoteParts[Number(idx)] || '';
-            return `<span style="background-color:#f1f5f9;border-left:3px solid #94a3b8;padding:0.25em 0.5em;display:inline-block;font-style:italic;border-radius:0 4px 4px 0">${escapeHtml(content)}</span>`;
+            return `<span class="llm-quote-block">${escapeHtml(content)}</span>`;
         });
         html = html.replace(/__CITE_(\d+)__/g, (match, idx) => {
             const content = citationParts[Number(idx)] || '';
@@ -950,6 +1307,40 @@ const AppContent = () => {
         return html;
     };
 
+    const buildInlineQuoteLabel = (citation) => {
+        if (!citation) return '';
+        const parts = [citation.granth];
+        if (citation.category === 'Pravachan') {
+            if (citation.series) parts.push(citation.series);
+            if (citation.volume != null && citation.volume !== '') parts.push(`Vol ${citation.volume}`);
+        } else {
+            // Granth / Books: author + verse locators
+            if (citation.author) parts.push(citation.author);
+            const verseLocators = [
+                citation.gatha   && `Gatha ${citation.gatha}`,
+                citation.shlok   && `Shlok ${citation.shlok}`,
+                citation.kalash  && `Kalash ${citation.kalash}`,
+                // citations use "dohra", chunk_labels use "doha" — handle both
+                (citation.dohra || citation.doha) && `Doha ${citation.dohra || citation.doha}`,
+                citation.sutra   && `Sutra ${citation.sutra}`,
+            ].filter(Boolean);
+            parts.push(...verseLocators);
+        }
+        if (citation.page_number != null && citation.page_number !== '') parts.push(`पृष्ठ ${citation.page_number}`);
+        return parts.filter(Boolean).join(', ');
+    };
+
+    const resolveChunkQuotes = (text, citations, chunkTexts) => {
+        if (!text || !chunkTexts) return text;
+        return text.replace(/^(\s*>\s*)\{\{([^}]+)\}\}\s*$/gm, (match, prefix, chunkId) => {
+            const chunkData = chunkTexts[chunkId];
+            if (!chunkData?.text_content) return match;
+            const citationFromResponse = (citations || []).find(c => c.chunk_id === chunkId);
+            const label = buildInlineQuoteLabel(citationFromResponse || chunkData);
+            return `${prefix}${chunkData.text_content}${label ? ` (${label})` : ''}`;
+        });
+    };
+
     const parseReference = (ref) => {
         const withoutFileUrl = ref.replace(/file_url\s*:\s*/i, '').trim();
         const urlMatch = withoutFileUrl.match(/https?:\/\/\S+/);
@@ -962,6 +1353,102 @@ const AppContent = () => {
         return {
             text,
             url: urlMatch ? urlMatch[0] : null
+        };
+    };
+
+    const getCitationCategoryMeta = (category) => {
+        switch (category) {
+            case 'Pravachan':
+                return {
+                    emoji: '🎙️',
+                    label: 'Pravachan',
+                    cardClassName: 'bg-white border-sky-200',
+                    badgeClassName: 'bg-sky-50 text-sky-700 border-sky-200',
+                    numberClassName: 'bg-sky-50 text-sky-700'
+                };
+            case 'Granth':
+                return {
+                    emoji: '📜',
+                    label: 'Granth',
+                    cardClassName: 'bg-white border-rose-200',
+                    badgeClassName: 'bg-rose-50 text-rose-700 border-rose-200',
+                    numberClassName: 'bg-rose-50 text-rose-700'
+                };
+            case 'Books':
+                return {
+                    emoji: '📚',
+                    label: 'Books',
+                    cardClassName: 'bg-white border-emerald-200',
+                    badgeClassName: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                    numberClassName: 'bg-emerald-50 text-emerald-700'
+                };
+            default:
+                return {
+                    emoji: '📄',
+                    label: 'Reference',
+                    cardClassName: 'bg-slate-50 border-slate-200',
+                    badgeClassName: 'bg-slate-100 text-slate-700 border-slate-200',
+                    numberClassName: 'bg-slate-200 text-slate-600'
+                };
+        }
+    };
+
+    const getCitationLocationLabel = (citation) => {
+        if (!citation) return '';
+
+        const locationParts = [
+            citation.verse_type && citation.verse_number !== undefined
+                ? `${citation.verse_type} ${citation.verse_number}`
+                : null,
+            citation.gatha !== undefined && citation.gatha !== null ? `Gatha ${citation.gatha}` : null,
+            citation.shlok !== undefined && citation.shlok !== null ? `Shlok ${citation.shlok}` : null,
+            citation.dohra !== undefined && citation.dohra !== null ? `Dohra ${citation.dohra}` : null,
+            citation.doha !== undefined && citation.doha !== null ? `Doha ${citation.doha}` : null,
+            citation.kalash !== undefined && citation.kalash !== null ? `Kalash ${citation.kalash}` : null,
+            citation.sutra !== undefined && citation.sutra !== null ? `Sutra ${citation.sutra}` : null,
+        ].filter(Boolean);
+
+        return locationParts.join(' · ');
+    };
+
+    const getAibotReferenceCardData = (citation, ref) => {
+        const fallback = parseReference(ref);
+        const categoryMeta = getCitationCategoryMeta(citation?.category);
+        const locationLabel = getCitationLocationLabel(citation);
+        const granthLineBase = citation?.granth || fallback.text || ref;
+        const title = locationLabel
+            ? `${categoryMeta.emoji} ${granthLineBase} (${locationLabel})`
+            : `${categoryMeta.emoji} ${granthLineBase}`;
+        const speaker = citation?.pravachankar || citation?.Pravachankar;
+
+        const detailParts = [];
+        if (citation?.series) detailParts.push(citation.series);
+        if (citation?.volume !== undefined && citation?.volume !== null && citation?.volume !== '') {
+            detailParts.push(`Volume ${citation.volume}`);
+        }
+        if (citation?.pravachan_number) detailParts.push(`Pravachan Number ${citation.pravachan_number}`);
+        if (citation?.page_number !== undefined && citation?.page_number !== null && citation?.page_number !== '') {
+            detailParts.push(`Page ${citation.page_number}`);
+        }
+
+        const lines = [];
+        if (citation?.category === 'Pravachan') {
+            if (speaker) lines.push(speaker);
+            if (detailParts.length) lines.push(detailParts.join(', '));
+        } else {
+            if (citation?.author) lines.push(citation.author);
+            if (detailParts.length) lines.push(detailParts.join(', '));
+        }
+
+        return {
+            title,
+            lines,
+            categoryLabel: categoryMeta.label,
+            cardClassName: categoryMeta.cardClassName,
+            badgeClassName: categoryMeta.badgeClassName,
+            numberClassName: categoryMeta.numberClassName,
+            readChunkId: citation?.chunk_id || null,
+            viewPdfUrl: citation?.file_url || fallback.url || null
         };
     };
 
@@ -1009,7 +1496,7 @@ const AppContent = () => {
                     DEBUG
                 </div>
             )}
-            <Navigation currentPage={currentPage} setCurrentPage={setCurrentPage} debugMode={debugMode} />
+            <Navigation currentPage={currentPage} setCurrentPage={setCurrentPage} debugMode={debugMode} isChatMode={isChatMode} onNewChat={handleNewChat} />
             
             <div className="container mx-auto p-4 md:p-5">
                 <div className="max-w-[1080px] mx-auto">
@@ -1026,77 +1513,48 @@ const AppContent = () => {
                     {showSearchInterface && (
                         <main>
 
-                            {isChatMode && (
-                                <div className="flex items-center mb-4 text-sm">
-                                    <button
-                                        onClick={() => currentPage === 'aibot' ? navigate('/') : setHomeMode('search')}
-                                        className="text-slate-500 hover:text-slate-700 flex items-center gap-1 transition-colors"
-                                    >
-                                        ← Back to Search
-                                    </button>
-                                    <span className="ml-3 bg-lime-100 text-lime-800 text-xs font-semibold px-2 py-0.5 rounded-full">Beta</span>
-                                </div>
-                            )}
-
+                            {/* ── SEARCH MODE ── */}
+                            {!isChatMode && (
+                                <>
                                     <SearchableContentWidget />
                                     <div style={{ backgroundColor: 'var(--bg-card)' }} className="bg-white p-3 rounded shadow-sm border border-slate-200 mb-4">
-                                        {/* Row 1: Search Bar and Button */}
                                         <div className="flex items-center gap-2">
                                             <div className="flex-grow">
                                                 <SearchBar
                                                     query={query}
                                                     setQuery={setQuery}
-                                                    onSearch={() => isChatMode ? handleAnswer() : handleSearch(1)}
+                                                    onSearch={() => handleSearch(1)}
                                                     language={language}
                                                 />
                                             </div>
-                                            {!isChatMode && (
-                                                <button
-                                                    onClick={() => handleSearch(1)}
-                                                    disabled={isLoading}
-                                                    className="bg-sky-600 text-white font-semibold h-8 px-4 rounded text-sm hover:bg-sky-700 active:bg-sky-800 transition duration-200 disabled:bg-slate-300 flex items-center justify-center whitespace-nowrap"
-                                                >
-                                                    {isLoading ? <Spinner /> : 'Search'}
-                                                </button>
-                                            )}
-                                            {showAnswerButton && (
-                                                <button
-                                                    onClick={handleAnswer}
-                                                    disabled={llmLoading}
-                                                    className="bg-lime-500 text-slate-900 font-semibold h-8 px-4 rounded text-sm hover:bg-lime-600 transition duration-200 disabled:bg-slate-300 flex items-center justify-center whitespace-nowrap"
-                                                >
-                                                    {llmLoading ? <Spinner /> : 'Ask'}
-                                                </button>
-                                            )}
+                                            <button
+                                                onClick={() => handleSearch(1)}
+                                                disabled={isLoading}
+                                                className="bg-sky-600 text-white font-semibold h-8 px-4 rounded text-sm hover:bg-sky-700 active:bg-sky-800 transition duration-200 disabled:bg-slate-300 flex items-center justify-center whitespace-nowrap"
+                                            >
+                                                {isLoading ? <Spinner /> : 'Search'}
+                                            </button>
                                         </div>
-
-                                {/* Row 2: Filters and Info */}
-                                <div className="flex items-center justify-between mt-3">
-                                    <div>
-                                        <button
-                                            onClick={() => setShowFilters(!showFilters)}
-                                            className="flex items-center text-sky-700 font-semibold hover:text-sky-800 text-sm whitespace-nowrap"
-                                        >
-                                            {showFilters ? <ChevronUpIcon /> : <ChevronDownIcon />}
-                                            {showFilters ? 'Hide Filters' : 'Show Filters'}
-                                        </button>
-                                    </div>
-                                    <div>
-                                        <button
-                                            onClick={() => setShowTipsModal(true)}
-                                            className="flex items-center text-sky-700 font-semibold hover:text-sky-800 text-sm"
-                                            aria-label="Show search tips"
-                                        >
-                                            <ExpandIcon />
-                                            Tips for writing good queries
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Filters section that shows/hides */}
+                                        <div className="flex items-center justify-between mt-3">
+                                            <button
+                                                onClick={() => setShowFilters(!showFilters)}
+                                                className="flex items-center text-sky-700 font-semibold hover:text-sky-800 text-sm whitespace-nowrap"
+                                            >
+                                                {showFilters ? <ChevronUpIcon /> : <ChevronDownIcon />}
+                                                {showFilters ? 'Hide Filters' : 'Show Filters'}
+                                            </button>
+                                            <button
+                                                onClick={() => setShowTipsModal(true)}
+                                                className="flex items-center text-sky-700 font-semibold hover:text-sky-800 text-sm"
+                                                aria-label="Show search tips"
+                                            >
+                                                <ExpandIcon />
+                                                Tips for writing good queries
+                                            </button>
+                                        </div>
                                         {showFilters && (
                                             <div className="mt-4 border-t border-slate-200 pt-4">
-                                                <div className={`grid grid-cols-1 ${isChatMode ? 'lg:grid-cols-2' : 'lg:grid-cols-3'} gap-5`}>
+                                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                                                     <MetadataFilters
                                                         metadata={allMetadata}
                                                         activeFilters={activeFilters}
@@ -1111,330 +1569,461 @@ const AppContent = () => {
                                                         setEndYear={setEndYear}
                                                         activeCategories={activeCategories}
                                                     />
-                                                    <SearchOptions
-                                                        language={language}
-                                                        setLanguage={setLanguage}
+                                                    <SearchOptions language={language} setLanguage={setLanguage} />
+                                                    <AdvancedSearch
+                                                        textSearch={textSearch}
+                                                        setTextSearch={setTextSearch}
+                                                        exactMatch={exactMatch}
+                                                        setExactMatch={setExactMatch}
+                                                        excludeWords={excludeWords}
+                                                        setExcludeWords={setExcludeWords}
                                                     />
-                                                    {!isChatMode && (
-                                                        <AdvancedSearch
-                                                            textSearch={textSearch}
-                                                            setTextSearch={setTextSearch}
-                                                            exactMatch={exactMatch}
-                                                            setExactMatch={setExactMatch}
-                                                            excludeWords={excludeWords}
-                                                            setExcludeWords={setExcludeWords}
-                                                        />
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {homeMode && llmAvailable && (llmAnswer || llmError || llmLoading) && (
+                                        <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 mb-4">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <h3 className="text-lg font-semibold text-slate-800">Answer</h3>
+                                                {llmLoading && (
+                                                    <div className="flex items-center text-sm text-slate-500">
+                                                        <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-lime-500 mr-2"></div>
+                                                        Generating...
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {llmError && <div className="text-red-600 text-sm">{llmError}</div>}
+                                            {(llmAnswer || llmReferences.length > 0) && (
+                                                <div className="llm-answer-scroll">
+                                                    {llmAnswer && (
+                                                        <div className="text-slate-800 leading-relaxed text-base"
+                                                            dangerouslySetInnerHTML={{ __html: formatAnswerHtml(llmAnswer) }} />
+                                                    )}
+                                                    {llmReferences.length > 0 && (
+                                                        <div className="mt-4 border-t border-slate-200 pt-3">
+                                                            <h4 className="text-sm font-semibold text-slate-600 uppercase tracking-wider mb-2">References</h4>
+                                                            <div className="space-y-2">
+                                                                {llmReferences.map((ref, idx) => {
+                                                                    const { text, url } = parseReference(ref);
+                                                                    const citation = llmCitations.find(c => c.reference === ref);
+                                                                    return (
+                                                                        <div key={`${ref}-${idx}`} className="flex items-center justify-between gap-3 text-sm text-slate-700">
+                                                                            <span className="flex-1">{text || ref}</span>
+                                                                            <div className="flex items-center gap-2 whitespace-nowrap">
+                                                                                {citation && (
+                                                                                    <button onClick={() => handleExpand(citation.chunk_id)}
+                                                                                        className="text-slate-500 hover:text-slate-800 font-medium underline underline-offset-2">
+                                                                                        View text
+                                                                                    </button>
+                                                                                )}
+                                                                                {url && (
+                                                                                    <a href={url} target="_blank" rel="noopener noreferrer"
+                                                                                        className="inline-flex items-center gap-1 text-sm text-red-600 hover:text-red-700 bg-white border border-slate-300 rounded px-2 py-1 hover:border-red-300 transition-colors">
+                                                                                        <PdfIcon />View PDF
+                                                                                    </a>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
                                                     )}
                                                 </div>
-                                            </div>
-                                        )}
-                                    </div>
-
-
-                            {homeMode && llmAvailable && !chatEnabled && (llmAnswer || llmError || llmLoading) && (
-                                <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 mb-4">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <h3 className="text-lg font-semibold text-slate-800">Answer</h3>
-                                        {llmLoading && (
-                                            <div className="flex items-center text-sm text-slate-500">
-                                                <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-lime-500 mr-2"></div>
-                                                Generating...
-                                            </div>
-                                        )}
-                                    </div>
-                                    {llmError && (
-                                        <div className="text-red-600 text-sm">{llmError}</div>
-                                    )}
-                                    {(llmAnswer || llmReferences.length > 0) && (
-                                        <div className="llm-answer-scroll">
-                                            {llmAnswer && (
-                                                <div
-                                                    className="text-slate-800 leading-relaxed text-base"
-                                                    dangerouslySetInnerHTML={{ __html: formatAnswerHtml(llmAnswer) }}
-                                                />
                                             )}
-                                            {llmReferences.length > 0 && (
-                                                <div className="mt-4 border-t border-slate-200 pt-3">
-                                                    <h4 className="text-sm font-semibold text-slate-600 uppercase tracking-wider mb-2">References</h4>
-                                                    <div className="space-y-2">
-                                                        {llmReferences.map((ref, idx) => {
-                                                            const { text, url } = parseReference(ref);
-                                                            return (
-                                                                <div key={`${ref}-${idx}`} className="flex items-center justify-between gap-3 text-sm text-slate-700">
-                                                                    <span className="flex-1">{text || ref}</span>
-                                                                    {url && (
-                                                                        <a
-                                                                            href={url}
-                                                                            target="_blank"
-                                                                            rel="noopener noreferrer"
-                                                                            className="text-blue-600 hover:text-blue-800 font-medium flex items-center whitespace-nowrap"
-                                                                        >
-                                                                            <PdfIcon />View PDF
-                                                                        </a>
-                                                                    )}
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
+                                        </div>
+                                    )}
+
+                                    {homeMode && (isLoading || searchData || similarDocumentsData) && (
+                                        <div className="mt-4">
+                                            <SuggestionsCard
+                                                suggestions={searchData?.suggestions}
+                                                originalQuery={query}
+                                                onSuggestionClick={handleSuggestionClick}
+                                                hasResults={loadingCategories.size > 0 || (searchData?.pravachan_results?.total_hits || 0) > 0 || (searchData?.granth_results?.total_hits || 0) > 0 || (searchData?.books_results?.total_hits || 0) > 0}
+                                            />
+                                            {searchData && query && (
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <p className="text-sm text-slate-900">
+                                                        <span className="font-semibold text-slate-900">
+                                                            {((searchData.pravachan_results?.total_hits || 0) + (searchData.granth_results?.total_hits || 0) + (searchData.books_results?.total_hits || 0)).toLocaleString()}
+                                                        </span> results for <span className="font-semibold text-slate-800">"{query}"</span>
+                                                    </p>
+                                                    <button onClick={toggleCompact}
+                                                        className="text-xs text-slate-700 hover:text-slate-900 flex items-center gap-1 transition-colors font-medium"
+                                                        title={compact ? 'Switch to comfortable view' : 'Switch to compact view'}>
+                                                        {compact ? (
+                                                            <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor"><rect y="2" width="16" height="2" rx="1"/><rect y="7" width="16" height="2" rx="1"/><rect y="12" width="16" height="2" rx="1"/></svg>
+                                                        ) : (
+                                                            <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor"><rect y="1" width="16" height="3" rx="1"/><rect y="6" width="16" height="3" rx="1"/><rect y="11" width="16" height="3" rx="1"/></svg>
+                                                        )}
+                                                        {compact ? 'Comfortable' : 'Compact'}
+                                                    </button>
                                                 </div>
                                             )}
+                                            <div className="flex items-start gap-2.5 px-3.5 py-2.5 mb-3 bg-amber-50 border border-amber-200 rounded text-amber-800 text-xs leading-relaxed">
+                                                <svg className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                                </svg>
+                                                <span><strong>Note:</strong> Text from Pravachans and Granths is extracted via OCR and results are ranked by AI — both may contain errors. For <strong>accurate reference</strong>, please use the <strong>original PDFs</strong> linked alongside each result.</span>
+                                            </div>
+                                            <div style={{ backgroundColor: 'var(--bg-card)' }} className="border border-slate-200 rounded shadow-sm overflow-hidden">
+                                                <Tabs activeTab={activeTab} setActiveTab={setActiveTab} searchData={searchData}
+                                                    similarDocumentsData={similarDocumentsData} onClearSimilar={handleClearSimilar}
+                                                    loadingCategories={loadingCategories} activeCategories={activeCategories} />
+                                                {activeTab === 'pravachan' && loadingCategories.has('Pravachan') && <SkeletonResultsList />}
+                                                {activeTab === 'pravachan' && searchData?.pravachan_results?.results.length > 0 && (
+                                                    <ResultsList results={searchData.pravachan_results.results} totalResults={searchData.pravachan_results.total_hits}
+                                                        pageSize={PAGE_SIZE} currentPage={pravachanPage} onPageChange={handlePageChange}
+                                                        resultType="pravachan" onFindSimilar={handleFindSimilar} onExpand={handleExpand}
+                                                        searchType={searchType} query={query} currentFilters={activeFilters} language={language} compact={compact} />
+                                                )}
+                                                {activeTab === 'granth' && loadingCategories.has('Granth') && <SkeletonResultsList />}
+                                                {activeTab === 'granth' && searchData?.granth_results?.results.length > 0 && (
+                                                    <ResultsList results={searchData.granth_results.results} totalResults={searchData.granth_results.total_hits}
+                                                        pageSize={PAGE_SIZE} currentPage={granthPage} onPageChange={handlePageChange}
+                                                        resultType="granth" onFindSimilar={handleFindSimilar} onExpand={handleExpand}
+                                                        onExpandGranth={handleExpandGranth} searchType={searchType} query={query}
+                                                        currentFilters={activeFilters} language={language} compact={compact} />
+                                                )}
+                                                {activeTab === 'books' && loadingCategories.has('Books') && <SkeletonResultsList />}
+                                                {activeTab === 'books' && searchData?.books_results?.results.length > 0 && (
+                                                    <ResultsList results={searchData.books_results.results} totalResults={searchData.books_results.total_hits}
+                                                        pageSize={PAGE_SIZE} currentPage={booksPage} onPageChange={handlePageChange}
+                                                        resultType="books" onFindSimilar={handleFindSimilar} onExpand={handleExpand}
+                                                        searchType={searchType} query={query} currentFilters={activeFilters} language={language} compact={compact} />
+                                                )}
+                                                {activeTab === 'similar' && (
+                                                    <div className="bg-white p-3 md:p-4">
+                                                        <SimilarSourceInfoCard sourceDoc={sourceDocForSimilarity} />
+                                                        {similarDocumentsData?.results.length > 0 ? (
+                                                            <ResultsList results={paginatedSimilarResults} totalResults={similarDocumentsData.total_results}
+                                                                pageSize={PAGE_SIZE} currentPage={similarDocsPage} onPageChange={handlePageChange}
+                                                                resultType="similar" onFindSimilar={handleFindSimilar} onExpand={handleExpand}
+                                                                searchType={searchType} query={query} currentFilters={activeFilters} compact={compact} language={language} />
+                                                        ) : (
+                                                            <div className="text-center py-8 text-sm text-slate-500">No similar documents found.</div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     )}
-                                </div>
+
+                                    {homeMode && !isLoading && !searchData && !similarDocumentsData && (
+                                        <div className="mt-5">
+                                            <p className="text-xs text-slate-400 uppercase tracking-wider mb-2.5 font-medium">Try searching for</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {suggestedQueries.map(term => (
+                                                    <button key={term} onClick={() => handleSuggestionClick(term)}
+                                                        className="px-3 py-1 text-sm bg-white border border-slate-200 rounded text-slate-600 hover:border-sky-300 hover:text-sky-700 hover:bg-sky-50 transition-colors">
+                                                        {term}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
                             )}
 
-                            {homeMode && llmAvailable && isChatMode && (chatMessages.length > 0 || llmError || llmLoading) && (
-                                <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 mb-4">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <h3 className="text-lg font-semibold text-slate-800">Answer</h3>
-                                        {llmLoading && (
-                                            <div className="flex items-center text-sm text-slate-500">
-                                                <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-lime-500 mr-2"></div>
-                                                Generating...
-                                            </div>
-                                        )}
-                                    </div>
-                                    {llmError && (
-                                        <div className="text-red-600 text-sm mb-3">{llmError}</div>
-                                    )}
-                                    <div className="llm-answer-scroll space-y-4">
-                                        {chatMessages.map((msg, idx) => (
-                                            <div key={`${msg.role}-${idx}`} className={msg.role === 'user' ? 'bg-neutral-50 p-3 rounded' : 'bg-white'}>
-                                                {msg.role === 'user' ? (
-                                                    <div className="text-slate-700 text-sm font-semibold">You</div>
-                                                ) : (
-                                                    <div className="text-slate-700 text-sm font-semibold">Answer</div>
-                                                )}
-                                                {msg.pending ? (
-                                                    <div className="flex items-center text-sm text-slate-500 mt-2">
-                                                        <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-lime-500 mr-2"></div>
-                                                        Generating answer...
-                                                    </div>
-                                                ) : (
-                                                    <div
-                                                        className="text-slate-800 leading-relaxed text-base mt-2"
-                                                        dangerouslySetInnerHTML={{ __html: formatAnswerHtml(msg.content || '') }}
-                                                    />
-                                                )}
-                                                {msg.references && msg.references.length > 0 && (
-                                                    <div className="mt-3 border-t border-slate-200 pt-3">
-                                                        <h4 className="text-sm font-semibold text-slate-600 uppercase tracking-wider mb-2">References</h4>
-                                                        <div className="space-y-2">
-                                                            {msg.references.map((ref, refIdx) => {
-                                                                const { text, url } = parseReference(ref);
-                                                                return (
-                                                                    <div key={`${ref}-${refIdx}`} className="flex items-center justify-between gap-3 text-sm text-slate-700">
-                                                                        <span className="flex-1">{text || ref}</span>
-                                                                        {url && (
-                                                                            <a
-                                                                                href={url}
-                                                                                target="_blank"
-                                                                                rel="noopener noreferrer"
-                                                                                className="text-blue-600 hover:text-blue-800 font-medium flex items-center whitespace-nowrap"
-                                                                            >
-                                                                                <PdfIcon />View PDF
-                                                                            </a>
-                                                                        )}
-                                                                    </div>
-                                                                );
-                                                            })}
+                            {/* ── CHAT MODE ── */}
+                            {isChatMode && llmAvailable && (
+                                <>
+                                    {/* Empty state — centered search bar */}
+                                    {chatMessages.length === 0 && !llmLoading && (
+                                        <div className="flex flex-col items-center justify-center py-16">
+                                            <div className="w-full max-w-4xl space-y-6">
+                                                <div className="w-full">
+                                                    <SearchableContentWidget />
+                                                </div>
+                                                <div className="w-full">
+                                                    <div className="rounded-lg border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3 transition-colors focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="relative shrink-0 group">
+                                                                <button
+                                                                    onClick={handleNewChat}
+                                                                    title="New Chat"
+                                                                    className="h-8 w-8 flex items-center justify-center rounded-full border border-sky-300 bg-sky-100 text-sky-700 hover:bg-sky-200 hover:border-sky-400 transition-colors"
+                                                                >
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                                                </button>
+                                                                <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 hidden -translate-x-1/2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 shadow-sm opacity-0 transition-opacity duration-150 group-hover:opacity-100 md:block">
+                                                                    New chat
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex-grow">
+                                                                <SearchBar
+                                                                    query={query}
+                                                                    setQuery={setQuery}
+                                                                    onSearch={() => query.trim() && handleChatStart(query)}
+                                                                    language={language}
+                                                                />
+                                                            </div>
+                                                            <button
+                                                                onClick={() => query.trim() && handleChatStart(query)}
+                                                                disabled={!query.trim()}
+                                                                className="bg-sky-600 text-white h-8 w-8 rounded-full border border-sky-700 hover:bg-sky-700 hover:border-sky-800 transition duration-200 disabled:bg-slate-200 disabled:text-slate-400 disabled:border-slate-300 flex items-center justify-center shrink-0"
+                                                                aria-label="Send"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
+                                                                </svg>
+                                                            </button>
+                                                        </div>
+                                                        <div className="mt-1.5 border-t border-slate-100 pt-1.5 flex items-center gap-2 pl-10">
+                                                            <ChatFilters
+                                                                activeCategories={activeCategories}
+                                                                debugMode={debugMode}
+                                                                chatContentTypes={chatContentTypes}
+                                                                setChatContentTypes={setChatContentTypes}
+                                                                chatShastras={chatShastras}
+                                                                setChatShastras={setChatShastras}
+                                                                allMetadata={allMetadata}
+                                                                language={language}
+                                                                dropUp={false}
+                                                            />
                                                         </div>
                                                     </div>
-                                                )}
+                                                </div>
+                                                <div className="w-full pt-1">
+                                                    <p className="text-xs text-slate-400 uppercase tracking-wider mb-3 font-medium text-center">Try asking</p>
+                                                    <div className="flex flex-wrap gap-2 justify-center">
+                                                        {suggestedQueries.map(term => (
+                                                            <button key={term} onClick={() => handleChatStart(term)}
+                                                                className="px-3 py-1 text-sm bg-white border border-slate-200 rounded text-slate-600 hover:border-lime-300 hover:text-lime-700 hover:bg-lime-50 transition-colors">
+                                                                {term}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
                                             </div>
-                                        ))}
-                                    </div>
-                                    <div className="mt-4 flex flex-wrap gap-2">
-                                        <button
-                                            onClick={() => setChatInputVisible(true)}
-                                            disabled={llmLoading}
-                                            className="bg-sky-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-sky-700 transition duration-200 disabled:bg-slate-300"
-                                        >
-                                            Ask more
-                                        </button>
-                                        <button
-                                            onClick={handleEndChat}
-                                            disabled={llmLoading}
-                                            className="bg-slate-200 text-slate-700 font-semibold py-2 px-4 rounded-md hover:bg-slate-300 transition duration-200 disabled:bg-slate-100"
-                                        >
-                                            End chat
-                                        </button>
-                                    </div>
-                                    {chatInputVisible && (
-                                        <div className="mt-4 flex items-center gap-2">
-                                            <input
-                                                type="text"
-                                                value={chatInput}
-                                                onChange={(e) => setChatInput(e.target.value)}
-                                                placeholder="Ask a follow-up question..."
-                                                className="flex-grow p-2 bg-white border border-slate-300 rounded text-slate-800 text-base focus:ring-1 focus:ring-sky-500"
-                                            />
-                                            <button
-                                                onClick={() => handleChatSend(chatSessionId, chatInput)}
-                                                disabled={llmLoading || !chatInput.trim()}
-                                                className="bg-lime-500 text-slate-900 font-semibold py-2 px-4 rounded-md hover:bg-lime-600 transition duration-200 disabled:bg-slate-300"
-                                            >
-                                                Send
-                                            </button>
                                         </div>
                                     )}
-                                </div>
-                            )}
-                            
-                            {homeMode && (isLoading || searchData || similarDocumentsData) && (
-                                <div className="mt-4">
-                                    <SuggestionsCard
-                                        suggestions={searchData?.suggestions}
-                                        originalQuery={query}
-                                        onSuggestionClick={handleSuggestionClick}
-                                        hasResults={loadingCategories.size > 0 || (searchData?.pravachan_results?.total_hits || 0) > 0 || (searchData?.granth_results?.total_hits || 0) > 0 || (searchData?.books_results?.total_hits || 0) > 0}
-                                    />
-                                    {/* Query echo + density toggle */}
-                                    {searchData && query && (
-                                        <div className="flex items-center justify-between mb-2">
-                                            <p className="text-sm text-slate-900">
-                                                <span className="font-semibold text-slate-900">
-                                                    {((searchData.pravachan_results?.total_hits || 0) + (searchData.granth_results?.total_hits || 0) + (searchData.books_results?.total_hits || 0)).toLocaleString()}
-                                                </span> results for <span className="font-semibold text-slate-800">"{query}"</span>
-                                            </p>
-                                            <button
-                                                onClick={toggleCompact}
-                                                className="text-xs text-slate-700 hover:text-slate-900 flex items-center gap-1 transition-colors font-medium"
-                                                title={compact ? 'Switch to comfortable view' : 'Switch to compact view'}
-                                            >
-                                                {compact ? (
-                                                    <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor"><rect y="2" width="16" height="2" rx="1"/><rect y="7" width="16" height="2" rx="1"/><rect y="12" width="16" height="2" rx="1"/></svg>
-                                                ) : (
-                                                    <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor"><rect y="1" width="16" height="3" rx="1"/><rect y="6" width="16" height="3" rx="1"/><rect y="11" width="16" height="3" rx="1"/></svg>
-                                                )}
-                                                {compact ? 'Comfortable' : 'Compact'}
-                                            </button>
-                                        </div>
-                                    )}
-                                    <div className="flex items-start gap-2.5 px-3.5 py-2.5 mb-3 bg-amber-50 border border-amber-200 rounded text-amber-800 text-xs leading-relaxed">
-                                        <svg className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                                        </svg>
-                                        <span>
-                                            <strong>Note:</strong> Text from Pravachans and Granths is extracted via OCR and results are ranked by AI — both may contain errors. For <strong>accurate reference</strong>, please use the <strong>original PDFs</strong> linked alongside each result.
-                                        </span>
-                                    </div>
-                                    <div style={{ backgroundColor: 'var(--bg-card)' }} className="border border-slate-200 rounded shadow-sm overflow-hidden">
-                                        <Tabs
-                                            activeTab={activeTab}
-                                            setActiveTab={setActiveTab}
-                                            searchData={searchData}
-                                            similarDocumentsData={similarDocumentsData}
-                                            onClearSimilar={handleClearSimilar}
-                                            loadingCategories={loadingCategories}
-                                            activeCategories={activeCategories}
-                                        />
-                                        {activeTab === 'pravachan' && loadingCategories.has('Pravachan') && (
-                                            <SkeletonResultsList />
-                                        )}
-                                        {activeTab === 'pravachan' && searchData?.pravachan_results?.results.length > 0 && (
-                                            <ResultsList
-                                                results={searchData.pravachan_results.results}
-                                                totalResults={searchData.pravachan_results.total_hits}
-                                                pageSize={PAGE_SIZE}
-                                                currentPage={pravachanPage}
-                                                onPageChange={handlePageChange}
-                                                resultType="pravachan"
-                                                onFindSimilar={handleFindSimilar}
-                                                onExpand={handleExpand}
-                                                searchType={searchType}
-                                                query={query}
-                                                currentFilters={activeFilters}
-                                                language={language}
-                                                compact={compact}
-                                            />
-                                        )}
-                                        {activeTab === 'granth' && loadingCategories.has('Granth') && (
-                                            <SkeletonResultsList />
-                                        )}
-                                        {activeTab === 'granth' && searchData?.granth_results?.results.length > 0 && (
-                                            <ResultsList
-                                                results={searchData.granth_results.results}
-                                                totalResults={searchData.granth_results.total_hits}
-                                                pageSize={PAGE_SIZE}
-                                                currentPage={granthPage}
-                                                onPageChange={handlePageChange}
-                                                resultType="granth"
-                                                onFindSimilar={handleFindSimilar}
-                                                onExpand={handleExpand}
-                                                onExpandGranth={handleExpandGranth}
-                                                searchType={searchType}
-                                                query={query}
-                                                currentFilters={activeFilters}
-                                                language={language}
-                                                compact={compact}
-                                            />
-                                        )}
-                                        {activeTab === 'books' && loadingCategories.has('Books') && (
-                                            <SkeletonResultsList />
-                                        )}
-                                        {activeTab === 'books' && searchData?.books_results?.results.length > 0 && (
-                                            <ResultsList
-                                                results={searchData.books_results.results}
-                                                totalResults={searchData.books_results.total_hits}
-                                                pageSize={PAGE_SIZE}
-                                                currentPage={booksPage}
-                                                onPageChange={handlePageChange}
-                                                resultType="books"
-                                                onFindSimilar={handleFindSimilar}
-                                                onExpand={handleExpand}
-                                                searchType={searchType}
-                                                query={query}
-                                                currentFilters={activeFilters}
-                                                language={language}
-                                                compact={compact}
-                                            />
-                                        )}
-                                        {activeTab === 'similar' && (
-                                            <div className="bg-white p-3 md:p-4">
-                                                <SimilarSourceInfoCard sourceDoc={sourceDocForSimilarity} />
-                                                {similarDocumentsData?.results.length > 0 ? (
-                                                    <ResultsList
-                                                        results={paginatedSimilarResults}
-                                                        totalResults={similarDocumentsData.total_results}
-                                                        pageSize={PAGE_SIZE}
-                                                        currentPage={similarDocsPage}
-                                                        onPageChange={handlePageChange}
-                                                        resultType="similar"
-                                                        onFindSimilar={handleFindSimilar}
-                                                        onExpand={handleExpand}
-                                                        searchType={searchType}
-                                                        query={query}
-                                                        currentFilters={activeFilters}
-                                                        compact={compact}
-                                                        language={language}
-                                                    />
-                                                ) : (
-                                                    <div className="text-center py-8 text-sm text-slate-500">
-                                                        No similar documents found.
+
+                                    {/* Active chat state */}
+                                    {(chatMessages.length > 0 || llmLoading) && (
+                                        <div className="flex flex-col max-w-4xl mx-auto w-full min-h-[calc(100vh-240px)]">
+                                            {/* Messages */}
+                                            <div className="flex-1 py-4 space-y-6">
+                                                {chatMessages.map((msg, idx) => (
+                                                    <div key={`${msg.role}-${idx}`}>
+                                                        {msg.role === 'user' ? (
+                                                            <div className="flex justify-end">
+                                                                <div className="bg-sky-600 shadow-sm rounded-lg rounded-tr-none px-4 py-2.5 max-w-[72%] text-white text-base">
+                                                                    {msg.content}
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="aibot-assistant-enter pt-2">
+                                                                <div className="flex-1">
+                                                                {msg.pending ? (
+                                                                    <div className="flex items-center text-sm text-slate-600 gap-2">
+                                                                        <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-lime-500"></div>
+                                                                        <span>{msg.stageLabel || 'Preparing answer'}</span>
+                                                                        <span className="flex items-center text-lime-600" aria-hidden="true">
+                                                                            <span className="inline-block animate-bounce">.</span>
+                                                                            <span className="inline-block animate-bounce" style={{ animationDelay: '0.15s' }}>.</span>
+                                                                            <span className="inline-block animate-bounce" style={{ animationDelay: '0.3s' }}>.</span>
+                                                                        </span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <>
+                                                                        <div className="flex items-start justify-between gap-3 mb-3 max-w-3xl">
+                                                                            <div>
+                                                                                <div className="text-sm font-bold uppercase tracking-[0.12em] text-slate-900">Answer</div>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="max-w-3xl">
+                                                                            <div className={`text-slate-900 leading-relaxed text-base ${displayedTexts[idx] === cleanAnswerText(msg.content) && shouldCollapseAnswer(msg.content) && expandedAnswers[idx] === false ? 'max-h-72 overflow-hidden' : ''}`}
+                                                                                dangerouslySetInnerHTML={{ __html: formatAnswerHtml(
+                                                                                    resolveChunkQuotes(
+                                                                                        displayedTexts[idx] !== undefined ? displayedTexts[idx] : msg.content || '',
+                                                                                        msg.citations,
+                                                                                        chunkTextsCache
+                                                                                    )
+                                                                                )}} />
+                                                                            {displayedTexts[idx] === cleanAnswerText(msg.content) && shouldCollapseAnswer(msg.content) && (
+                                                                                <button
+                                                                                    onClick={() => setExpandedAnswers(prev => ({ ...prev, [idx]: prev[idx] === false }))}
+                                                                                    className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-sky-700 hover:text-sky-800 transition-colors"
+                                                                                >
+                                                                                    {expandedAnswers[idx] === false ? 'Show more' : 'Show less'}
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
+                                                                        {displayedTexts[idx] === cleanAnswerText(msg.content) && msg.content && (
+                                                                            <div className="mt-4 w-full flex justify-end">
+                                                                                <CopyAnswerButton text={cleanAnswerText(msg.content)} />
+                                                                            </div>
+                                                                        )}
+                                                                        {displayedTexts[idx] === cleanAnswerText(msg.content) && msg.follow_up_questions && msg.follow_up_questions.length > 0 && (
+                                                                            <div className="mt-8 w-full rounded-md border border-sky-200 bg-sky-50 p-4">
+                                                                                <p className="text-xs font-bold uppercase tracking-wide text-sky-800 mb-2.5">
+                                                                                    💡 Suggested Follow up questions
+                                                                                </p>
+                                                                                <div className="flex flex-wrap gap-2">
+                                                                                    {msg.follow_up_questions.map((question, questionIdx) => (
+                                                                                        <button
+                                                                                            key={`${idx}-follow-up-${questionIdx}`}
+                                                                                            onClick={() => handleChatSend(chatSessionId, question)}
+                                                                                            disabled={llmLoading || !chatSessionId}
+                                                                                            className="px-3 py-1 text-sm bg-white border border-sky-200 rounded text-sky-900 hover:border-sky-300 hover:text-sky-950 hover:bg-sky-50 transition-colors disabled:bg-sky-50 disabled:text-slate-400 disabled:border-sky-100"
+                                                                                        >
+                                                                                            {question}
+                                                                                        </button>
+                                                                                    ))}
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                        {displayedTexts[idx] === cleanAnswerText(msg.content) && msg.references && msg.references.length > 0 && (
+                                                                            <div className="mt-5 w-full rounded-md border border-sky-200 bg-sky-50 p-4">
+                                                                                <h4 className="text-xs font-bold uppercase tracking-wide text-sky-800 mb-3">📖 References</h4>
+                                                                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                                                                                    {msg.references.map((ref, refIdx) => {
+                                                                                        const citation = (msg.citations || []).find(c => c.reference === ref) || msg.citations?.[refIdx];
+                                                                                        const card = getAibotReferenceCardData(citation, ref);
+                                                                                        const handleCardActivate = () => {
+                                                                                            if (card.readChunkId) {
+                                                                                                handleExpand(card.readChunkId);
+                                                                                            } else if (card.viewPdfUrl) {
+                                                                                                window.open(card.viewPdfUrl, '_blank', 'noopener,noreferrer');
+                                                                                            }
+                                                                                        };
+                                                                                        const isCardInteractive = Boolean(card.readChunkId || card.viewPdfUrl);
+                                                                                        return (
+                                                                                            <div
+                                                                                                key={`${ref}-${refIdx}`}
+                                                                                                onClick={isCardInteractive ? handleCardActivate : undefined}
+                                                                                                onKeyDown={isCardInteractive ? (event) => {
+                                                                                                    if (event.key === 'Enter' || event.key === ' ') {
+                                                                                                        event.preventDefault();
+                                                                                                        handleCardActivate();
+                                                                                                    }
+                                                                                                } : undefined}
+                                                                                                role={isCardInteractive ? 'button' : undefined}
+                                                                                                tabIndex={isCardInteractive ? 0 : undefined}
+                                                                                                className={`flex flex-col justify-between border rounded p-3 text-sm transition-shadow ${card.cardClassName} ${isCardInteractive ? 'cursor-pointer hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-200' : ''}`}
+                                                                                            >
+                                                                                                <div className="mb-3">
+                                                                                                    <div className="mb-2 flex items-start justify-between gap-2">
+                                                                                                        <span className={`inline-block text-xs font-bold rounded px-1.5 py-0.5 ${card.numberClassName}`}>{refIdx + 1}</span>
+                                                                                                        <span className={`inline-flex items-center rounded border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.06em] ${card.badgeClassName}`}>
+                                                                                                            {card.categoryLabel}
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                    <p className="font-bold text-slate-900 leading-snug">{card.title}</p>
+                                                                                                    <div className="mt-2 space-y-1 text-slate-800 leading-snug">
+                                                                                                        {card.lines.map((line, lineIdx) => (
+                                                                                                            <p key={`${refIdx}-${lineIdx}`} className="break-words">
+                                                                                                                {line}
+                                                                                                            </p>
+                                                                                                        ))}
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                                <div className="flex items-center gap-2">
+                                                                                                    {card.readChunkId && (
+                                                                                                        <button onClick={(event) => {
+                                                                                                            event.stopPropagation();
+                                                                                                            handleExpand(card.readChunkId);
+                                                                                                        }}
+                                                                                                            className="flex items-center gap-1 text-xs text-slate-600 hover:text-slate-900 bg-white border border-slate-300 rounded px-2 py-1 transition-colors">
+                                                                                                            Expand
+                                                                                                        </button>
+                                                                                                    )}
+                                                                                                    {card.viewPdfUrl && (
+                                                                                                        <a href={card.viewPdfUrl} target="_blank" rel="noopener noreferrer"
+                                                                                                            onClick={(event) => event.stopPropagation()}
+                                                                                                            className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700 bg-white border border-slate-300 rounded px-2 py-1 hover:border-red-300 transition-colors">
+                                                                                                            <PdfIcon />View PDF
+                                                                                                        </a>
+                                                                                                    )}
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        );
+                                                                                    })}
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                    </>
+                                                                )}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                                {llmError && <div className="text-red-600 text-sm">{llmError}</div>}
+                                                <div ref={messagesEndRef} />
+                                            </div>
+
+                                            {/* Sticky bottom input */}
+                                            <div className="sticky bottom-0 mt-auto pt-3 pb-4 shrink-0" style={{ backgroundColor: '#f0f4f9' }}>
+                                                {chatNotice && (
+                                                    <div className="flex justify-center mb-2">
+                                                        <span className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-1 animate-fade-in">{chatNotice}</span>
                                                     </div>
                                                 )}
+                                                <div className="rounded-lg border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3 transition-colors focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="relative shrink-0 group">
+                                                            <button
+                                                                onClick={handleNewChat}
+                                                                title="New Chat"
+                                                                className="h-8 w-8 flex items-center justify-center rounded-full border border-sky-300 bg-sky-100 text-sky-700 hover:bg-sky-200 hover:border-sky-400 transition-colors"
+                                                            >
+                                                                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                                            </button>
+                                                            <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 hidden -translate-x-1/2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 shadow-sm opacity-0 transition-opacity duration-150 group-hover:opacity-100 md:block">
+                                                                New chat
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex-grow">
+                                                            <SearchBar
+                                                                query={chatInput}
+                                                                setQuery={setChatInput}
+                                                                onSearch={() => chatInput.trim() && !llmLoading && handleChatSend(chatSessionId, chatInput)}
+                                                                language={language}
+                                                                disabled={llmLoading}
+                                                            />
+                                                        </div>
+                                                        <button
+                                                            onClick={() => handleChatSend(chatSessionId, chatInput)}
+                                                            disabled={llmLoading || !chatInput.trim()}
+                                                            className="bg-sky-600 text-white h-8 w-8 rounded-full border border-sky-700 hover:bg-sky-700 hover:border-sky-800 transition duration-200 disabled:bg-slate-200 disabled:text-slate-400 disabled:border-slate-300 flex items-center justify-center shrink-0"
+                                                            aria-label="Send"
+                                                        >
+                                                            {llmLoading ? <Spinner /> : (
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
+                                                                </svg>
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                    <div className="mt-1.5 border-t border-slate-100 pt-1.5 flex items-center gap-2 pl-10">
+                                                        <ChatFilters
+                                                            activeCategories={activeCategories}
+                                                            debugMode={debugMode}
+                                                            chatContentTypes={chatContentTypes}
+                                                            setChatContentTypes={setChatContentTypes}
+                                                            chatShastras={chatShastras}
+                                                            setChatShastras={setChatShastras}
+                                                            allMetadata={allMetadata}
+                                                            language={language}
+                                                            dropUp={true}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-start gap-2.5 px-3.5 py-2.5 mt-2 bg-amber-50/80 border border-amber-200 rounded text-amber-800 text-[11px] leading-relaxed">
+                                                    <svg className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                                    </svg>
+                                                    <span>Swalakshya AI Bot uses AI to generate answers, which may sometimes be <strong>inaccurate</strong>. Always refer to the <strong>original scriptures and references</strong> attached to each answer to study authentic content and <strong>stay true to Jinvaani</strong>. Use this bot as a <strong>starting point</strong>, not as a <strong>definitive source</strong>.</span>
+                                                </div>
                                             </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-                            
-                            {homeMode && !isLoading && !searchData && !similarDocumentsData && (
-                                <div className="mt-5">
-                                    <p className="text-xs text-slate-400 uppercase tracking-wider mb-2.5 font-medium">Try searching for</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {suggestedQueries.map(term => (
-                                            <button
-                                                key={term}
-                                                onClick={() => handleSuggestionClick(term)}
-                                                className="px-3 py-1 text-sm bg-white border border-slate-200 rounded text-slate-600 hover:border-sky-300 hover:text-sky-700 hover:bg-sky-50 transition-colors"
-                                            >
-                                                {term}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
+                                        </div>
+                                    )}
+                                </>
                             )}
                         </main>
                     )}
@@ -1513,6 +2102,7 @@ const AppContent = () => {
                     </svg>
                 </button>
             )}
+
         </div>
     );
 };
