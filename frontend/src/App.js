@@ -838,6 +838,9 @@ const AppContent = () => {
                 setChatSessionId(freshSession.session_id);
                 data = await sendStructuredMessage(freshSession.session_id);
             }
+            if (!data) {
+                throw new Error('No response received from server.');
+            }
             setChatMessages(prev => {
                 const updated = [...prev];
                 const idx = updated.findIndex(item => item.role === 'assistant' && item.pending);
@@ -869,7 +872,8 @@ const AppContent = () => {
                 const uniqueIds = [...new Set(chunkIdMatches.map(m => m[1]))];
                 const toFetch = uniqueIds.filter(id => !chunkTextsCache[id]);
                 if (toFetch.length > 0) {
-                    Promise.all(toFetch.map(id => api.getChunk(id, language))).then(results => {
+                    const languageCode = language === 'gujarati' ? 'gu' : 'hi';
+                    Promise.all(toFetch.map(id => api.getChunk(id, languageCode))).then(results => {
                         const fetched = {};
                         results.forEach((res, i) => {
                             if (res?.text_content) fetched[toFetch[i]] = res;
