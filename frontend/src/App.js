@@ -842,28 +842,22 @@ const AppContent = () => {
                 throw new Error('No response received from server.');
             }
             setChatMessages(prev => {
+                const { content, citationBlocks } = preTokenizeCitations(data.answer || '');
                 const updated = [...prev];
                 const idx = updated.findIndex(item => item.role === 'assistant' && item.pending);
+                const msg = {
+                    role: 'assistant',
+                    content,
+                    citationBlocks,
+                    follow_up_questions: data.follow_up_questions || [],
+                    references: data.references || [],
+                    citations: data.citations || []
+                };
                 if (idx !== -1) {
-                    updated[idx] = {
-                        role: 'assistant',
-                        content: data.answer || '',
-                        follow_up_questions: data.follow_up_questions || [],
-                        references: data.references || [],
-                        citations: data.citations || []
-                    };
+                    updated[idx] = msg;
                     return updated;
                 }
-                return [
-                    ...updated,
-                    {
-                        role: 'assistant',
-                        content: data.answer || '',
-                        follow_up_questions: data.follow_up_questions || [],
-                        references: data.references || [],
-                        citations: data.citations || []
-                    }
-                ];
+                return [...updated, msg];
             });
 
             // Fetch text content for any inline chunk quote references in the answer
@@ -1143,7 +1137,16 @@ const AppContent = () => {
         return cleaned.length > 650 || lineCount > 7;
     };
 
-    const formatAnswerHtml = (answerText) => {
+    const preTokenizeCitations = (answer) => {
+        const blocks = [];
+        const content = (answer || '').replace(/<citation([^>]*)>([\s\S]*?)<\/citation>/g, (match, attrStr, innerText) => {
+            blocks.push({ attrStr, innerText });
+            return `@@CITATION_${blocks.length - 1}@@`;
+        });
+        return { content, citationBlocks: blocks };
+    };
+
+    const formatAnswerHtml = (answerText, preloadedCitationBlocks) => {
         if (!answerText) return '';
         let sanitizedAnswer = cleanAnswerText(answerText);
 
@@ -1162,6 +1165,18 @@ const AppContent = () => {
         const codeParts = [];
         const quoteParts = [];
         const parenParts = [];
+        const citationBlocks = [];
+
+        // Step 0: Use pre-tokenized citation blocks if available (avoids raw <citation> tags
+        // appearing mid-render during the typing animation). Otherwise extract inline.
+        if (preloadedCitationBlocks && preloadedCitationBlocks.length > 0) {
+            citationBlocks.push(...preloadedCitationBlocks);
+        } else {
+            sanitizedAnswer = sanitizedAnswer.replace(/<citation([^>]*)>([\s\S]*?)<\/citation>/g, (match, attrStr, innerText) => {
+                citationBlocks.push({ attrStr, innerText });
+                return `@@CITATION_${citationBlocks.length - 1}@@`;
+            });
+        }
 
         // Step 1: Extract _italic_ FIRST — before any underscore-containing tokens are created,
         // so the token strings like __CODE_0__ don't get falsely matched by _([^_\n]+?)_
@@ -1286,6 +1301,44 @@ const AppContent = () => {
         html = html.replace(/__QUOT_(\d+)__/g, (match, idx) => {
             const content = quoteParts[Number(idx)] || '';
             return `<span class="llm-quote-block">${escapeHtml(content)}</span>`;
+        });
+
+        const parseCitationAttrs = (attrStr) => {
+            const attrs = {};
+            const re = /(\w+)="([^"]*)"/g;
+            let m;
+            while ((m = re.exec(attrStr)) !== null) {
+                attrs[m[1]] = m[2].replace(/&quot;/g, '"');
+            }
+            return attrs;
+        };
+        const buildCitationLabel = (attrs) => {
+            const parts = [];
+            if (attrs.granth) parts.push(attrs.granth);
+            if (attrs.category === 'Pravachan') {
+                if (attrs.pravachankar) parts.push(`by ${attrs.pravachankar}`);
+                if (attrs.series) parts.push(attrs.series);
+                if (attrs.series_number) parts.push(`Series No. ${attrs.series_number}`);
+                if (attrs.volume) parts.push(`Vol ${attrs.volume}`);
+                if (attrs.pravachan_number) parts.push(`No. ${attrs.pravachan_number}`);
+            } else {
+                if (attrs.gatha) parts.push(`Gatha ${attrs.gatha}`);
+                if (attrs.shlok) parts.push(`Shlok ${attrs.shlok}`);
+                if (attrs.kalash) parts.push(`Kalash ${attrs.kalash}`);
+                if (attrs.dohra) parts.push(`Doha ${attrs.dohra}`);
+            }
+            if (attrs.page) parts.push(`पृष्ठ ${attrs.page}`);
+            if (attrs.date) parts.push(attrs.date);
+            return parts.filter(Boolean).join(', ');
+        };
+        html = html.replace(/@@CITATION_(\d+)@@/g, (match, idx) => {
+            const block = citationBlocks[Number(idx)];
+            if (!block) return '';
+            const attrs = parseCitationAttrs(block.attrStr);
+            const escapedText = escapeHtml(block.innerText.trim()).replace(/\r?\n/g, '<br/>');
+            const label = buildCitationLabel(attrs);
+            const labelHtml = label ? `<span class="llm-quote-citation">${escapeHtml(label)}</span>` : '';
+            return `<span class="llm-quote-block">${escapedText}${labelHtml}</span>`;
         });
         html = html.replace(/__CITE_(\d+)__/g, (match, idx) => {
             const content = citationParts[Number(idx)] || '';
@@ -1589,7 +1642,7 @@ const AppContent = () => {
                                                 <h3 className="text-lg font-semibold text-slate-800">Answer</h3>
                                                 {llmLoading && (
                                                     <div className="flex items-center text-sm text-slate-500">
-                                                        <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-lime-500 mr-2"></div>
+                                                        <img src="/images/swalakshya.png" className="h-5 w-5 animate-pulse rounded-full mr-2" alt="" />
                                                         Generating...
                                                     </div>
                                                 )}
@@ -1734,7 +1787,7 @@ const AppContent = () => {
                                     {/* Empty state — centered search bar */}
                                     {chatMessages.length === 0 && !llmLoading && (
                                         <div className="flex flex-col items-center justify-center py-16">
-                                            <div className="w-full max-w-4xl space-y-6">
+                                            <div className="w-full max-w-4xl space-y-2">
                                                 <div className="w-full">
                                                     <SearchableContentWidget />
                                                 </div>
@@ -1787,6 +1840,12 @@ const AppContent = () => {
                                                         </div>
                                                     </div>
                                                 </div>
+                                                <div className="flex items-start gap-2.5 px-3.5 py-2.5 bg-amber-50/80 border border-amber-200 rounded text-amber-800 text-[11px] leading-relaxed">
+                                                    <svg className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                                    </svg>
+                                                    <span>Swalakshya AI Bot uses AI to generate answers, which may sometimes be <strong>inaccurate</strong>. Always refer to the <strong>original scriptures and references</strong> attached to each answer to study authentic content and <strong>stay true to Jinvaani</strong>. Use this bot as a <strong>starting point</strong>, not as a <strong>definitive source</strong>.</span>
+                                                </div>
                                                 <div className="w-full pt-1">
                                                     <p className="text-xs text-slate-400 uppercase tracking-wider mb-3 font-medium text-center">Try asking</p>
                                                     <div className="flex flex-wrap gap-2 justify-center">
@@ -1820,7 +1879,7 @@ const AppContent = () => {
                                                                 <div className="flex-1">
                                                                 {msg.pending ? (
                                                                     <div className="flex items-center text-sm text-slate-600 gap-2">
-                                                                        <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-lime-500"></div>
+                                                                        <img src="/images/swalakshya.png" className="h-6 w-6 animate-pulse rounded-full shrink-0" alt="" />
                                                                         <span>{msg.stageLabel || 'Preparing answer'}</span>
                                                                         <span className="flex items-center text-lime-600" aria-hidden="true">
                                                                             <span className="inline-block animate-bounce">.</span>
@@ -1842,7 +1901,8 @@ const AppContent = () => {
                                                                                         displayedTexts[idx] !== undefined ? displayedTexts[idx] : msg.content || '',
                                                                                         msg.citations,
                                                                                         chunkTextsCache
-                                                                                    )
+                                                                                    ),
+                                                                                    msg.citationBlocks
                                                                                 )}} />
                                                                             {displayedTexts[idx] === cleanAnswerText(msg.content) && shouldCollapseAnswer(msg.content) && (
                                                                                 <button

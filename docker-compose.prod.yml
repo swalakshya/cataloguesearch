@@ -100,6 +100,7 @@ services:
     container_name: cataloguesearch-frontend
     environment:
       - REACT_APP_RECAPTCHA_SITE_KEY=${REACT_APP_RECAPTCHA_SITE_KEY}
+      - REACT_APP_LLM_API_BASE_URL=${REACT_APP_LLM_API_BASE_URL}
     ports:
       - "80:80"
       - "443:443"
@@ -116,11 +117,50 @@ services:
     volumes:
       - /etc/letsencrypt:/etc/letsencrypt:ro
 
+  cataloguesearch-chat:
+    image: swalakshya/cataloguesearch-chat:latest
+    platform: linux/amd64
+    container_name: cataloguesearch-chat
+    environment:
+      - EXTERNAL_API_BASE_URL=http://cataloguesearch-api:8000
+      - LOGS_DIR=/app/logs
+      - SESSION_DB_PATH=/app/data/sessions.db
+      - LLM_PROVIDER=gemini
+      - LLM_MODEL=gemini-2.5-flash
+      - LLM_SERVICE_PORT=8012
+      - LLM_SESSION_IDLE_TIMEOUT_SEC=1800
+      - WORKFLOW_TOOL_CALL_BUDGET=25
+      - LLM_DEFAULT_CONTENT_TYPES=Pravachan,Granth
+      - LLM_ALLOWED_CONTENT_TYPES=Pravachan,Granth,Books
+      - DEFAULT_ANSWER_FORMAT=structured
+      - ENABLE_FULL_CHUNKS_IN_CITATIONS=true
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - chat-data:/app/data
+      - chat-logs:/app/logs
+    ports:
+      - "8012:8012"
+    networks:
+      - app-net
+    depends_on:
+      cataloguesearch-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8012/v1/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
 volumes:
   opensearch-data:
   api-data:
   api-logs:
   model-cache:
+  chat-data:
+  chat-logs:
 
 networks:
   app-net:
