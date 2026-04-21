@@ -137,6 +137,11 @@ services:
       - ENABLE_FULL_CHUNKS_IN_CITATIONS=true
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - FEEDBACK_DB_PATH=/app/data/feedback.db
+      - ADMIN_KEY=${ADMIN_KEY}
+      - BREVO_API_KEY=${BREVO_API_KEY}
+      - FEEDBACK_FROM_EMAIL=${FEEDBACK_FROM_EMAIL}
+      - FEEDBACK_TO_EMAIL=${FEEDBACK_TO_EMAIL}
     volumes:
       - chat-data:/app/data
       - chat-logs:/app/logs

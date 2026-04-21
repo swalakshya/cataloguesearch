@@ -11,6 +11,7 @@ import { SearchBar, MetadataFilters, AdvancedSearch, SearchOptions } from './com
 import { ResultsList, SuggestionsCard, Tabs, SimilarSourceInfoCard, SkeletonResultsList } from './components/SearchResults';
 import { ExpandModal, GranthVerseModal, GranthProseModal, WelcomeModal } from './components/Modals';
 import { FeedbackForm } from './components/Feedback';
+import { FeedbackButtons } from './components/AibotFeedback';
 import About from './components/About';
 import WhatsNew from './components/WhatsNew';
 import UsageGuide from './components/UsageGuide';
@@ -825,7 +826,10 @@ const AppContent = () => {
                     citationBlocks,
                     follow_up_questions: data.follow_up_questions || [],
                     references: data.references || [],
-                    citations: data.citations || []
+                    citations: data.citations || [],
+                    tool_trace_id: data.tool_trace_id || null,
+                    question: message,
+                    rawAnswer: data.answer || '',
                 };
                 if (idx !== -1) {
                     updated[idx] = msg;
@@ -1979,6 +1983,16 @@ const AppContent = () => {
                                                                                     })}
                                                                                 </div>
                                                                             </div>
+                                                                        )}
+                                                                        {displayedTexts[idx] === cleanAnswerText(msg.content) && msg.content && msg.question && (
+                                                                            <FeedbackButtons
+                                                                                requestId={msg.tool_trace_id}
+                                                                                question={msg.question || ''}
+                                                                                answer={msg.rawAnswer || cleanAnswerText(msg.content)}
+                                                                                references={msg.references}
+                                                                                citations={msg.citations}
+                                                                                followUpQuestions={msg.follow_up_questions}
+                                                                            />
                                                                         )}
                                                                     </>
                                                                 )}

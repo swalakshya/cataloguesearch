@@ -186,6 +186,23 @@ export const api = {
         }
     },
 
+    submitAnswerFeedback: async (feedbackData) => {
+        const response = await fetch(`${LLM_API_BASE_URL}/v1/feedback`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(feedbackData),
+        });
+        let body;
+        try { body = await response.json(); } catch { body = {}; }
+        if (!response.ok) {
+            const error = new Error(body?.detail || `HTTP error! status: ${response.status}`);
+            error.status = response.status;
+            error.detail = body?.detail || null;
+            throw error;
+        }
+        return body;
+    },
+
     answer: async (requestPayload) => {
         try {
             const response = await fetch(`${LLM_API_BASE_URL}/v1/answer`, {
