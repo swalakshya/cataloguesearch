@@ -363,18 +363,9 @@ const AppContent = () => {
         setLlmCitations([]);
         setLlmError(null);
         setLlmLoading(false);
-        setChatMessages([]);
-        setChatInput('');
-        setChatInputVisible(false);
-        resetTypingState();
-        clearPersistedChatSession();
         setChatContentTypes([...activeCategories]);
         setChatShastras([]);
         setHomeMode('search');
-        if (chatSessionId) {
-            api.closeChatSession(chatSessionId).catch(() => null);
-            setChatSessionId(null);
-        }
     };
 
     const currentPage = currentPageState;
@@ -384,14 +375,6 @@ const AppContent = () => {
         // Reset search state when navigating to Home
         if (page === 'home') {
             resetSearchState();
-        } else if (chatSessionId) {
-            api.closeChatSession(chatSessionId).catch(() => null);
-            setChatSessionId(null);
-            setChatMessages([]);
-            setChatInput('');
-            setChatInputVisible(false);
-            resetTypingState();
-            clearPersistedChatSession();
         }
         
         const routes = {
@@ -738,15 +721,6 @@ const AppContent = () => {
         setLlmReferences([]);
         setLlmCitations([]);
         setLlmError(null);
-        setChatMessages([]);
-        setChatInput('');
-        setChatInputVisible(false);
-        resetTypingState();
-        clearPersistedChatSession();
-        if (chatSessionId) {
-            api.closeChatSession(chatSessionId).catch(() => null);
-            setChatSessionId(null);
-        }
         setPravachanPage(page);
         setBooksPage(1);
         setSimilarDocumentsData(null);
