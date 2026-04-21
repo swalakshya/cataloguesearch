@@ -37,6 +37,15 @@ function saveVote(requestId, vote) {
     } catch {}
 }
 
+function hasCompleteContact(contact) {
+    return Boolean(
+        contact &&
+        String(contact.name || '').trim() &&
+        String(contact.email || '').trim() &&
+        String(contact.phone || '').trim()
+    );
+}
+
 // A field that is either a plain input (first time / editing) or a read-only
 // label that turns into an input when clicked.
 function ContactField({ label, value, isEditing, onEdit, onChange, type = 'text', required, error, placeholder }) {
@@ -116,6 +125,17 @@ function FeedbackModalForm({ vote, requestId, question, answer, references, foll
         return () => { if (closeTimerRef.current) clearTimeout(closeTimerRef.current); };
     }, []);
 
+    useEffect(() => {
+        const handleEsc = (event) => {
+            if (event.key === 'Escape' && !succeeded) {
+                onClose();
+            }
+        };
+
+        window.addEventListener('keydown', handleEsc);
+        return () => window.removeEventListener('keydown', handleEsc);
+    }, [onClose, succeeded]);
+
     const setField = (field, value) => {
         setContact(prev => ({ ...prev, [field]: value }));
         if (errors[field]) setErrors(prev => ({ ...prev, [field]: '' }));
@@ -179,7 +199,9 @@ function FeedbackModalForm({ vote, requestId, question, answer, references, foll
             closeTimerRef.current = setTimeout(() => onSubmit(vote), 2000);
         } catch (err) {
             if (err.detail === 'feedback_already_submitted') {
-                setSubmitError('Feedback already submitted for this answer.');
+                saveVote(requestId, vote);
+                setSucceeded(true);
+                closeTimerRef.current = setTimeout(() => onSubmit(vote), 1200);
             } else if (err.detail === 'feedback_not_enabled') {
                 setSubmitError('Feedback is not enabled on this server.');
             } else {
@@ -355,9 +377,79 @@ function FeedbackModal(props) {
     );
 }
 
+function HelpfulSubmitter({ requestId, question, answer, references, onSubmitted, onFallbackToModal }) {
+    const { executeRecaptcha } = useGoogleReCaptcha();
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [submitError, setSubmitError] = useState(null);
+
+    const handleHelpfulVote = async () => {
+        const savedContact = loadContact();
+        if (!hasCompleteContact(savedContact)) {
+            onFallbackToModal();
+            return;
+        }
+
+        if (!executeRecaptcha) {
+            setSubmitError('reCAPTCHA not ready. Please try again.');
+            return;
+        }
+
+        setIsSubmitting(true);
+        setSubmitError(null);
+        try {
+            const captchaToken = await executeRecaptcha('submit_answer_feedback');
+            await api.submitAnswerFeedback({
+                vote: 'helpful',
+                request_id: requestId || undefined,
+                question,
+                answer,
+                references: references || [],
+                captcha_token: captchaToken,
+                user_name: savedContact.name.trim(),
+                user_email: savedContact.email.trim(),
+                user_phone: savedContact.phone.trim(),
+            });
+            saveVote(requestId, 'helpful');
+            onSubmitted('helpful');
+        } catch (err) {
+            if (err.detail === 'feedback_already_submitted') {
+                saveVote(requestId, 'helpful');
+                onSubmitted('helpful');
+            } else if (err.detail === 'feedback_not_enabled') {
+                setSubmitError('Feedback is not enabled on this server.');
+            } else {
+                setSubmitError('Failed to submit feedback. Please try again.');
+            }
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    return (
+        <>
+            <button
+                onClick={handleHelpfulVote}
+                disabled={isSubmitting}
+                aria-label="Mark as helpful"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-sky-200 border-slate-200 text-slate-700 hover:bg-green-50 hover:border-green-200 hover:text-green-800 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+                {isSubmitting ? <Spinner /> : <span>🙏</span>}
+                <span>Helpful</span>
+            </button>
+            {submitError && (
+                <span className="text-sm text-red-600">{submitError}</span>
+            )}
+        </>
+    );
+}
+
 export function FeedbackButtons({ requestId, question, answer, references, citations, followUpQuestions }) {
     const [submitted, setSubmitted] = useState(() => loadVote(requestId));
     const [modalVote, setModalVote] = useState(null);   // null | 'helpful' | 'not_helpful'
+
+    useEffect(() => {
+        setSubmitted(loadVote(requestId));
+    }, [requestId]);
 
     const handleVote = (vote) => {
         if (submitted) return;
@@ -368,20 +460,30 @@ export function FeedbackButtons({ requestId, question, answer, references, citat
         <>
             <div className="mt-5 flex items-center gap-2">
                 <span className="text-sm font-semibold text-slate-600 mr-1">Was this helpful?</span>
-                <button
-                    onClick={() => handleVote('helpful')}
-                    disabled={!!submitted}
-                    aria-label="Mark as helpful"
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-sky-200 ${
-                        submitted === 'helpful'
-                            ? 'bg-green-50 border-green-300 text-green-800'
-                            : submitted
-                            ? 'opacity-40 cursor-not-allowed border-slate-200 text-slate-500'
-                            : 'border-slate-200 text-slate-700 hover:bg-green-50 hover:border-green-200 hover:text-green-800'
-                    }`}
-                >
-                    <span>🙏</span><span>Helpful</span>
-                </button>
+                {submitted ? (
+                    <button
+                        disabled
+                        aria-label="Mark as helpful"
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-sky-200 ${
+                            submitted === 'helpful'
+                                ? 'bg-green-50 border-green-300 text-green-800'
+                                : 'opacity-40 cursor-not-allowed border-slate-200 text-slate-500'
+                        }`}
+                    >
+                        <span>🙏</span><span>Helpful</span>
+                    </button>
+                ) : (
+                    <GoogleReCaptchaProvider reCaptchaKey={RECAPTCHA_KEY}>
+                        <HelpfulSubmitter
+                            requestId={requestId}
+                            question={question}
+                            answer={answer}
+                            references={references}
+                            onSubmitted={(vote) => setSubmitted(vote)}
+                            onFallbackToModal={() => setModalVote('helpful')}
+                        />
+                    </GoogleReCaptchaProvider>
+                )}
                 <button
                     onClick={() => handleVote('not_helpful')}
                     disabled={!!submitted}

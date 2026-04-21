@@ -186,6 +186,60 @@ export const api = {
         }
     },
 
+    // --- Feedback Admin API (chat service) ---
+    adminFeedbackAuth: async (keyHash) => {
+        const response = await fetch(`${LLM_API_BASE_URL}/v1/admin/auth`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key_hash: keyHash }),
+        });
+        if (!response.ok) throw new Error('Invalid key');
+        return await response.json(); // { token }
+    },
+
+    listFeedback: async (feedbackToken, { status, limit = 50, offset = 0 } = {}) => {
+        const params = new URLSearchParams({ limit, offset });
+        if (status) params.set('status', status);
+        const response = await fetch(`${LLM_API_BASE_URL}/v1/admin/feedback?${params}`, {
+            headers: { 'Authorization': `Bearer ${feedbackToken}` },
+        });
+        if (!response.ok) {
+            const err = new Error('Failed to load feedback');
+            err.status = response.status;
+            throw err;
+        }
+        return await response.json();
+    },
+
+    getFeedback: async (feedbackToken, id) => {
+        const response = await fetch(`${LLM_API_BASE_URL}/v1/admin/feedback/${encodeURIComponent(id)}`, {
+            headers: { 'Authorization': `Bearer ${feedbackToken}` },
+        });
+        if (!response.ok) {
+            const err = new Error('Failed to load feedback record');
+            err.status = response.status;
+            throw err;
+        }
+        return await response.json();
+    },
+
+    patchFeedback: async (feedbackToken, id, { status, moderator_comment }) => {
+        const response = await fetch(`${LLM_API_BASE_URL}/v1/admin/feedback/${encodeURIComponent(id)}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${feedbackToken}`,
+            },
+            body: JSON.stringify({ status, moderator_comment }),
+        });
+        if (!response.ok) {
+            const err = new Error('Failed to update feedback');
+            err.status = response.status;
+            throw err;
+        }
+        return await response.json();
+    },
+
     submitAnswerFeedback: async (feedbackData) => {
         const response = await fetch(`${LLM_API_BASE_URL}/v1/feedback`, {
             method: 'POST',
