@@ -62,6 +62,7 @@ services:
       - SHORTENER_BASE_URL=${SHORTENER_BASE_URL:-https://swalakshya.me}
       - SHORT_CODE_LEN=${SHORT_CODE_LEN:-7}
       - ADMIN_KEY=${ADMIN_KEY}
+      - CHAT_ADMIN_BASE_URL=${CHAT_ADMIN_BASE_URL:-http://host.docker.internal:8012}
     volumes:
       - cataloguesearch-data:/app/data
       - cataloguesearch-logs:/app/logs

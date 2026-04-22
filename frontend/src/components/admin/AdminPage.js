@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { api } from '../../services/api';
 import AnalyticsDashboard from '../analytics/AnalyticsDashboard';
+import ChatBotAnalytics from './ChatBotAnalytics';
 
 const AGENT_PARAM_META = {
     rerank_oversample: { label: 'Rerank oversample (top-k)', type: 'number', min: 10, max: 200, step: 5 },
@@ -263,6 +264,16 @@ const AdminPage = ({ token, onLogout }) => {
                 >
                     Analytics
                 </button>
+                <button
+                    onClick={() => setActiveSection('chat-bot-analytics')}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                        activeSection === 'chat-bot-analytics'
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                >
+                    Chat Bot Analytics
+                </button>
             </div>
 
             {activeSection === 'settings' ? (
@@ -380,8 +391,10 @@ const AdminPage = ({ token, onLogout }) => {
                         Agent config inherits from Search Config. Override individual values to tune the agent independently.
                     </p>
                 </>
-            ) : (
+            ) : activeSection === 'analytics' ? (
                 <AnalyticsDashboard token={token} onSessionExpired={handleSessionExpired} />
+            ) : (
+                <ChatBotAnalytics token={token} onSessionExpired={handleSessionExpired} />
             )}
         </div>
     );

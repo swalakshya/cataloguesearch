@@ -493,4 +493,53 @@ export const api = {
         }
         return await response.json();
     },
+
+    getChatRequestLogs: async (
+        token,
+        { fromTs, toTs, requestId, sessionId, userId, status = 'all', limit = 20, offset = 0 } = {}
+    ) => {
+        const params = new URLSearchParams();
+        if (fromTs != null) params.set('from_ts', String(fromTs));
+        if (toTs != null) params.set('to_ts', String(toTs));
+        if (requestId) params.set('request_id', requestId);
+        if (sessionId) params.set('session_id', sessionId);
+        if (userId) params.set('user_id', userId);
+        if (status && status !== 'all') params.set('status', status);
+        params.set('limit', String(limit));
+        params.set('offset', String(offset));
+
+        const response = await fetch(`${API_BASE_URL}/admin/chat-request-logs?${params}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) {
+            let detail = null;
+            try {
+                const body = await response.json();
+                detail = body?.detail || null;
+            } catch {
+                detail = null;
+            }
+            if (response.status === 401) throw new Error('Unauthorized');
+            throw new Error(detail || 'Failed to load chat request logs');
+        }
+        return await response.json();
+    },
+
+    getChatRequestLogDetail: async (token, requestId) => {
+        const response = await fetch(`${API_BASE_URL}/admin/chat-request-logs/${encodeURIComponent(requestId)}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) {
+            let detail = null;
+            try {
+                const body = await response.json();
+                detail = body?.detail || null;
+            } catch {
+                detail = null;
+            }
+            if (response.status === 401) throw new Error('Unauthorized');
+            throw new Error(detail || 'Failed to load chat request log detail');
+        }
+        return await response.json();
+    },
 };

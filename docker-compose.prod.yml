@@ -76,6 +76,7 @@ services:
       - SHORTENER_BASE_URL=https://swalakshya.me
       - SHORT_CODE_LEN=7
       - ADMIN_KEY=${ADMIN_KEY}
+      - CHAT_ADMIN_BASE_URL=http://cataloguesearch-chat:8012
     volumes:
       - api-data:/app/data
       - api-logs:/app/logs
@@ -124,6 +125,7 @@ services:
     environment:
       - EXTERNAL_API_BASE_URL=http://cataloguesearch-api:8000
       - LOGS_DIR=/app/logs
+      - CHAT_DB_PATH=/app/data/cataloguesearch-chat.db
       - SESSION_DB_PATH=/app/data/sessions.db
       - LLM_PROVIDER=gemini
       - LLM_MODEL=gemini-2.5-flash

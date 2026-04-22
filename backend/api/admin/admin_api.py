@@ -6,6 +6,7 @@ import secrets
 import time
 from typing import Any, Dict, Optional
 
+import requests
 from fastapi import APIRouter, Body, Header, HTTPException, Request
 
 from backend.common.opensearch import get_opensearch_client
@@ -16,10 +17,11 @@ log_handle = logging.getLogger(__name__)
 router = APIRouter(tags=["admin"])
 
 # ---------------------------------------------------------------------------
-# In-memory session store: token -> expiry (unix timestamp)
+# In-memory session store keyed by cataloguesearch admin session token.
 # ---------------------------------------------------------------------------
-_sessions: Dict[str, float] = {}
+_sessions: Dict[str, Dict[str, Any]] = {}
 _SESSION_TTL = 86400  # 1 day
+_CHAT_ADMIN_TIMEOUT_SEC = 15
 
 
 def _get_key_hash() -> str:
@@ -32,13 +34,115 @@ def _get_key_hash() -> str:
 
 def _require_auth(authorization: Optional[str]):
     """Raise 401 if the Bearer token is missing or expired."""
+    _get_session(authorization)
+
+
+def _get_session(authorization: Optional[str]) -> Dict[str, Any]:
+    """Return the current admin session, or raise 401 if missing/expired."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing token")
     token = authorization.removeprefix("Bearer ").strip()
-    expiry = _sessions.get(token)
-    if expiry is None or time.time() > expiry:
+    session = _sessions.get(token)
+    expiry = session.get("expires_at") if isinstance(session, dict) else session
+    if not session or expiry is None or time.time() > expiry:
         _sessions.pop(token, None)
         raise HTTPException(status_code=401, detail="Invalid or expired token")
+    return session
+
+
+def _get_chat_admin_base_url() -> str:
+    base_url = (
+        os.environ.get("CHAT_ADMIN_BASE_URL")
+        or os.environ.get("LLM_API_BASE_URL")
+        or "http://localhost:8012"
+    )
+    return base_url.rstrip("/")
+
+
+def _ensure_chat_admin_token(session: Dict[str, Any], *, force_refresh: bool = False) -> str:
+    cached_token = session.get("chat_admin_token")
+    if cached_token and not force_refresh:
+        return cached_token
+
+    key_hash = session.get("key_hash")
+    if not key_hash:
+        raise HTTPException(status_code=401, detail="Missing admin session key hash")
+
+    auth_url = f"{_get_chat_admin_base_url()}/v1/admin/auth"
+    try:
+        response = requests.post(
+            auth_url,
+            json={"key_hash": key_hash},
+            timeout=_CHAT_ADMIN_TIMEOUT_SEC,
+        )
+    except requests.RequestException as exc:
+        log_handle.warning("Chat admin auth request failed: %s", exc)
+        raise HTTPException(status_code=503, detail="chat_admin_unavailable") from exc
+
+    detail = _extract_detail(response)
+    if response.status_code != 200:
+        log_handle.warning(
+            "Chat admin auth failed: status=%s detail=%s",
+            response.status_code,
+            detail,
+        )
+        if response.status_code == 401:
+            raise HTTPException(status_code=401, detail="Invalid key")
+        raise HTTPException(status_code=503, detail=detail or "chat_admin_auth_failed")
+
+    body = _safe_json(response)
+    token = body.get("token") if isinstance(body, dict) else None
+    if not token:
+        raise HTTPException(status_code=502, detail="chat_admin_invalid_response")
+
+    session["chat_admin_token"] = token
+    return token
+
+
+def _chat_admin_get(session: Dict[str, Any], path: str, *, params: Optional[Dict[str, Any]] = None):
+    last_response = None
+    for attempt in range(2):
+        token = _ensure_chat_admin_token(session, force_refresh=attempt > 0)
+        try:
+            response = requests.get(
+                f"{_get_chat_admin_base_url()}{path}",
+                params=params,
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=_CHAT_ADMIN_TIMEOUT_SEC,
+            )
+        except requests.RequestException as exc:
+            log_handle.warning("Chat admin GET %s failed: %s", path, exc)
+            raise HTTPException(status_code=503, detail="chat_admin_unavailable") from exc
+
+        if response.status_code == 401 and attempt == 0:
+            session["chat_admin_token"] = None
+            last_response = response
+            continue
+        return response
+
+    return last_response
+
+
+def _safe_json(response: requests.Response) -> Dict[str, Any]:
+    try:
+        parsed = response.json()
+    except ValueError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _extract_detail(response: requests.Response) -> Optional[str]:
+    body = _safe_json(response)
+    detail = body.get("detail")
+    return str(detail) if detail else None
+
+
+def _proxy_chat_response(response: requests.Response):
+    detail = _extract_detail(response)
+    if response.status_code >= 400:
+        status_code = response.status_code if response.status_code in (400, 401, 404, 503) else 502
+        raise HTTPException(status_code=status_code, detail=detail or "chat_admin_request_failed")
+    return _safe_json(response)
 
 
 # ---------------------------------------------------------------------------
@@ -58,7 +162,11 @@ async def admin_auth(key_hash: str = Body(..., embed=True)):
         raise HTTPException(status_code=401, detail="Invalid key")
 
     token = secrets.token_urlsafe(32)
-    _sessions[token] = time.time() + _SESSION_TTL
+    _sessions[token] = {
+        "expires_at": time.time() + _SESSION_TTL,
+        "key_hash": key_hash,
+        "chat_admin_token": None,
+    }
     log_handle.info("Admin session created")
     return {"token": token}
 
@@ -213,3 +321,42 @@ async def reset_one_admin_config(
     config.reset_overrides(request.app.state.overrides_path, key=key)
     log_handle.info("Admin override reset: %s", key)
     return {"status": "ok", "key": key}
+
+
+@router.get("/admin/chat-request-logs")
+async def get_chat_request_logs(
+    authorization: Optional[str] = Header(None),
+    from_ts: Optional[int] = None,
+    to_ts: Optional[int] = None,
+    request_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    status: str = "all",
+    limit: int = 50,
+    offset: int = 0,
+):
+    """Proxy paginated chat request-log summaries from cataloguesearch-chat."""
+    session = _get_session(authorization)
+    params = {
+        "from": from_ts,
+        "to": to_ts,
+        "request_id": request_id,
+        "session_id": session_id,
+        "user_id": user_id,
+        "status": status,
+        "limit": limit,
+        "offset": offset,
+    }
+    response = _chat_admin_get(session, "/v1/admin/request-logs", params=params)
+    return _proxy_chat_response(response)
+
+
+@router.get("/admin/chat-request-logs/{request_id}")
+async def get_chat_request_log_detail(
+    request_id: str,
+    authorization: Optional[str] = Header(None),
+):
+    """Proxy one chat request-log detail record from cataloguesearch-chat."""
+    session = _get_session(authorization)
+    response = _chat_admin_get(session, f"/v1/admin/request-logs/{request_id}")
+    return _proxy_chat_response(response)
