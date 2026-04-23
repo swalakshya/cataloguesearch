@@ -446,6 +446,8 @@ const AppContent = () => {
     const [chunkTextsCache, setChunkTextsCache] = useState({});
     const typingIntervalsRef = useRef({});
     const messagesEndRef = useRef(null);
+    const latestUserBubbleRef = useRef(null);
+    const [showScrollDown, setShowScrollDown] = useState(false);
     const isChatMode = homeMode === 'chat';
     const chatEnabled = isChatMode;
 
@@ -488,10 +490,34 @@ const AppContent = () => {
         });
     }, [chatMessages]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Auto-scroll to bottom when messages or typed text updates
+    // Scroll new user bubble just below the sticky nav when a question is submitted
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [chatMessages, displayedTexts]);
+        const msgs = chatMessages;
+        if (msgs.length < 2) return;
+        const last = msgs[msgs.length - 1];
+        const secondLast = msgs[msgs.length - 2];
+        if (last?.pending && secondLast?.role === 'user') {
+            const el = latestUserBubbleRef.current;
+            if (el) {
+                const NAV_HEIGHT = 64; // h-16
+                const PADDING = 12;
+                const top = el.getBoundingClientRect().top + window.scrollY - NAV_HEIGHT - PADDING;
+                window.scrollTo({ top, behavior: 'smooth' });
+            }
+        }
+    }, [chatMessages]);
+
+    // Show/hide scroll-down arrow via IntersectionObserver on messagesEndRef sentinel
+    useEffect(() => {
+        const el = messagesEndRef.current;
+        if (!el) return;
+        const observer = new IntersectionObserver(
+            ([entry]) => setShowScrollDown(!entry.isIntersecting),
+            { threshold: 0 }
+        );
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [chatMessages.length, llmLoading]); // re-attach when chat activates/deactivates
 
     useEffect(() => {
         if (currentPage === 'home') {
@@ -1856,20 +1882,33 @@ const AppContent = () => {
                                         <div className="flex flex-col max-w-4xl mx-auto w-full min-h-[calc(100vh-240px)]">
                                             {/* Messages */}
                                             <div className="flex-1 py-4 space-y-6">
-                                                {chatMessages.map((msg, idx) => (
+                                                {chatMessages.map((msg, idx) => {
+                                                    const lastUserIdx = chatMessages.reduce((last, m, i) => m.role === 'user' ? i : last, -1);
+                                                    const isStreaming = msg.role === 'assistant' && (
+                                                        msg.pending || (
+                                                            displayedTexts[idx] !== undefined &&
+                                                            displayedTexts[idx] !== cleanAnswerText(msg.content)
+                                                        )
+                                                    );
+                                                    return (
                                                     <div key={`${msg.role}-${idx}`}>
                                                         {msg.role === 'user' ? (
-                                                            <div className="flex justify-end">
+                                                            <div ref={idx === lastUserIdx ? latestUserBubbleRef : null} className="flex justify-end">
                                                                 <div className="bg-sky-600 shadow-sm rounded-lg rounded-tr-none px-4 py-2.5 max-w-[72%] text-white text-base">
                                                                     {msg.content}
                                                                 </div>
                                                             </div>
                                                         ) : (
                                                             <div className="aibot-assistant-enter pt-2">
+                                                                <div className="flex items-start gap-3">
+                                                                <img
+                                                                    src="/images/swalakshya.png"
+                                                                    className={`h-6 w-6 rounded-full shrink-0 mt-0.5 ${isStreaming ? 'animate-pulse' : ''}`}
+                                                                    alt=""
+                                                                />
                                                                 <div className="flex-1">
                                                                 {msg.pending ? (
                                                                     <div className="flex items-center text-sm text-slate-600 gap-2">
-                                                                        <img src="/images/swalakshya.png" className="h-6 w-6 animate-pulse rounded-full shrink-0" alt="" />
                                                                         <span>{msg.stageLabel || 'Preparing answer'}</span>
                                                                         <span className="flex items-center text-lime-600" aria-hidden="true">
                                                                             <span className="inline-block animate-bounce">.</span>
@@ -2009,13 +2048,30 @@ const AppContent = () => {
                                                                     </>
                                                                 )}
                                                                 </div>
+                                                                </div>{/* flex items-start gap-3 */}
                                                             </div>
                                                         )}
                                                     </div>
-                                                ))}
+                                                    );
+                                                })}
                                                 {llmError && <div className="text-red-600 text-sm">{llmError}</div>}
                                                 <div ref={messagesEndRef} />
+                                                {/* Spacer while loading so the new user bubble can always reach the top of the viewport */}
+                                                {llmLoading && <div style={{ height: '70vh', flexShrink: 0 }} aria-hidden="true" />}
                                             </div>
+
+                                            {/* Scroll-to-bottom arrow */}
+                                            {showScrollDown && (
+                                                <button
+                                                    onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                                                    className="fixed bottom-28 left-1/2 -translate-x-1/2 z-40 h-9 w-9 rounded-full bg-sky-600 text-white shadow-lg flex items-center justify-center hover:bg-sky-700 transition-colors"
+                                                    aria-label="Scroll to bottom"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                                    </svg>
+                                                </button>
+                                            )}
 
                                             {/* Sticky bottom input */}
                                             <div className="sticky bottom-0 mt-auto pt-3 pb-4 shrink-0" style={{ backgroundColor: '#f0f4f9' }}>
