@@ -24,6 +24,7 @@ from backend.api.agent.app import agent_app
 from backend.api.url.router import router as url_router
 from backend.api.admin.admin_api import router as admin_router
 from backend.api.admin.analytics import router as analytics_router
+from backend.api.admin.metrics_store import MetricsStore, normalize_language
 from backend.shortener.core import ShortenerStore
 from backend.shortener.opensearch_loader import fetch_file_urls
 
@@ -81,11 +82,16 @@ async def lifespan(app: FastAPI):
     app.state.shortener_store = shortener_store
     app.state.shortener_base_url = shortener_base_url
 
+    db_path = os.environ.get("METRICS_DB_PATH", os.path.join(logs_dir, "metrics.db"))
+    app.state.metrics_store = MetricsStore(db_path)
+    log_handle.info("MetricsStore initialised at %s", db_path)
+
     agent_app.state.config = config
     agent_app.state.index_searcher = app.state.index_searcher
     agent_app.state.embedding_model = app.state.embedding_model
     agent_app.state.shortener_store = shortener_store
     agent_app.state.shortener_base_url = shortener_base_url
+    agent_app.state.metrics_store = app.state.metrics_store
 
     app.state.metadata_cache = {
         "data": None,
@@ -468,14 +474,23 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
 
         latency_ms = round((time.time() - start_time) * 1000, 2)
         search_type = effective_mode if effective_mode in ("lexical", "vector", "rrf") else ("lexical" if is_lexical_query else "vector")
-        escaped_query = keywords.replace(',', ';').replace('"', "'").replace('\n', ' ').replace('\r', '')
-        escaped_categories = str(categories).replace(',', ';').replace('"', "'")
         pravachan_cfg = search_types.get("Pravachan", {})
-        log_handle.metrics(
-            f"{query_source},{get_query_id()},{client_ip},{escaped_query},{search_type},{enable_reranking},"
-            f"{language},{escaped_categories},{pravachan_cfg.get('page_size', 20)},"
-            f"{pravachan_cfg.get('page_number', 1)},{latency_ms},{ttfb_ms if ttfb_ms is not None else '-'},{total_hits}"
-        )
+        request.app.state.metrics_store.insert({
+            "created_at": int(start_time * 1000),
+            "source": query_source,
+            "query_id": get_query_id() or None,
+            "chat_request_id": None,
+            "query": keywords,
+            "search_mode": search_type,
+            "reranked": int(enable_reranking),
+            "language": normalize_language(language),
+            "categories": str(categories),
+            "page_size": pravachan_cfg.get("page_size", 20),
+            "page": pravachan_cfg.get("page_number", 1),
+            "latency_ms": latency_ms,
+            "ttfb_ms": ttfb_ms,
+            "total_hits": total_hits,
+        })
         log_handle.info(f"Search complete: query_id={query_id}, search_type={search_type}, total_hits={total_hits}, latency={latency_ms}ms")
 
         yield f"data: {json.dumps({'type': 'done', 'suggestions': suggestions}, ensure_ascii=False)}\n\n"

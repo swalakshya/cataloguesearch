@@ -1,6 +1,7 @@
 import hashlib
 import logging
 import os
+import sqlite3
 import pytest
 import requests
 from backend.common import embedding_models
@@ -1428,7 +1429,7 @@ def _agent_url(api_server, path):
     return f"http://{api_server.host}:{api_server.port}/api/agent{path}"
 
 
-def _agent_search(api_server, query, language="hi", content_type=None, rerank=False, page_size=5):
+def _agent_search(api_server, query, language="hi", content_type=None, rerank=False, page_size=5, chat_request_id=None):
     payload = {
         "query": query,
         "language": language,
@@ -1437,12 +1438,15 @@ def _agent_search(api_server, query, language="hi", content_type=None, rerank=Fa
         "page": 1,
         "rerank": rerank,
     }
-    return requests.post(_agent_url(api_server, "/search"), json=payload)
+    headers = {}
+    if chat_request_id:
+        headers["X-Chat-Request-Id"] = chat_request_id
+    return requests.post(_agent_url(api_server, "/search"), json=payload, headers=headers)
 
 
 def test_agent_search_lexical(api_server):
     """Agent /search returns a list of chunks for a short lexical query."""
-    resp = _agent_search(api_server, "इंदौर")
+    resp = _agent_search(api_server, "इंदौर", chat_request_id="pytest-chat-req-001")
     assert resp.status_code == 200
     results = resp.json()
     assert isinstance(results, list)
@@ -1883,3 +1887,396 @@ def test_admin_search_mode_rrf(api_server):
         )
         assert reset_resp.status_code == 200
         log_handle.info("✓ admin config reset after RRF test")
+
+
+def test_metrics_db_state(api_server):
+    """Verify SQLite metrics DB is populated correctly by all prior tests.
+
+    This test MUST run last — it inspects the DB written by the live server
+    that was exercised by all the preceding test functions.
+    """
+    logs_dir = os.environ.get("LOGS_DIR", "logs")
+    db_path = os.path.join(logs_dir, "metrics.db")
+    assert os.path.exists(db_path), f"metrics.db not found at {db_path}"
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute("SELECT * FROM search_metrics").fetchall()
+        assert len(rows) >= 10, f"Expected ≥10 rows, got {len(rows)}"
+
+        valid_modes = {"lexical", "vector", "rrf"}
+        valid_langs = {"hi", "gu"}
+        for r in rows:
+            assert r["latency_ms"] is not None and r["latency_ms"] > 0, (
+                f"Row {r['query_id']} has bad latency_ms: {r['latency_ms']}"
+            )
+            assert r["total_hits"] is not None, f"Row {r['query_id']} has NULL total_hits"
+            assert r["search_mode"] in valid_modes, (
+                f"Row {r['query_id']} has unexpected search_mode: {r['search_mode']!r}"
+            )
+            assert r["language"] in valid_langs, (
+                f"Row {r['query_id']} has un-normalised language: {r['language']!r}"
+            )
+            assert r["source"] is not None, f"Row {r['query_id']} has NULL source"
+
+        # Agent rows
+        agent_rows = [r for r in rows if r["source"] == "agent"]
+        assert len(agent_rows) >= 5, f"Expected ≥5 agent rows, got {len(agent_rows)}"
+
+        # chat_request_id linkage: at least one row carries the sentinel id
+        # (agent auto-mode may write multiple rows per request — one per search probe)
+        linked = [r for r in rows if r["chat_request_id"] == "pytest-chat-req-001"]
+        assert len(linked) >= 1, (
+            f"Expected ≥1 row with chat_request_id='pytest-chat-req-001', got {len(linked)}"
+        )
+
+        # All other rows must have chat_request_id = NULL
+        unlinked_with_id = [
+            r for r in rows
+            if r["chat_request_id"] is not None and r["chat_request_id"] != "pytest-chat-req-001"
+        ]
+        assert len(unlinked_with_id) == 0, (
+            f"Unexpected non-null chat_request_id values: {[r['chat_request_id'] for r in unlinked_with_id]}"
+        )
+
+        # At least one non-agent row should have ttfb_ms recorded
+        ttfb_rows = [r for r in rows if r["source"] != "agent" and r["ttfb_ms"] is not None]
+        assert len(ttfb_rows) >= 1, "Expected ≥1 non-agent row with ttfb_ms set"
+
+    finally:
+        conn.close()
+
+    log_handle.info(f"✓ metrics_db_state: {len(rows)} rows validated")
+
+
+# ---------------------------------------------------------------------------
+# Admin API — additional coverage
+# ---------------------------------------------------------------------------
+
+def _admin_url(api_server, path):
+    return f"http://{api_server.host}:{api_server.port}/api{path}"
+
+
+def _get_admin_token(api_server):
+    """Acquire a fresh admin token. Sets ADMIN_KEY env var as a side effect."""
+    os.environ["ADMIN_KEY"] = _ADMIN_TEST_KEY
+    key_hash = hashlib.sha256(_ADMIN_TEST_KEY.encode()).hexdigest()
+    resp = requests.post(_admin_url(api_server, "/admin/auth"), json={"key_hash": key_hash})
+    assert resp.status_code == 200
+    return resp.json()["token"]
+
+
+def test_admin_auth_wrong_key(api_server):
+    """Wrong hash → 401."""
+    os.environ["ADMIN_KEY"] = _ADMIN_TEST_KEY
+    resp = requests.post(
+        _admin_url(api_server, "/admin/auth"),
+        json={"key_hash": "a" * 64},
+    )
+    assert resp.status_code == 401
+
+
+def test_admin_missing_token(api_server):
+    """Requests without Authorization header → 401."""
+    resp = requests.get(_admin_url(api_server, "/admin/config"))
+    assert resp.status_code == 401
+
+
+def test_admin_invalid_token(api_server):
+    """Requests with a bogus Bearer token → 401."""
+    resp = requests.get(
+        _admin_url(api_server, "/admin/config"),
+        headers={"Authorization": "Bearer notarealtoken"},
+    )
+    assert resp.status_code == 401
+
+
+def test_admin_config_get_structure(api_server):
+    """GET /admin/config returns defaults, overrides, and effective keys."""
+    token = _get_admin_token(api_server)
+    auth = {"Authorization": f"Bearer {token}"}
+    resp = requests.get(_admin_url(api_server, "/admin/config"), headers=auth)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "defaults" in body
+    assert "overrides" in body
+    assert "effective" in body
+    assert "search_mode" in body["defaults"]
+
+
+def test_admin_config_unknown_key_rejected(api_server):
+    """POST /admin/config with an unknown key → 400."""
+    token = _get_admin_token(api_server)
+    auth = {"Authorization": f"Bearer {token}"}
+    resp = requests.post(
+        _admin_url(api_server, "/admin/config"),
+        json={"nonexistent_param": 99},
+        headers=auth,
+    )
+    assert resp.status_code == 400
+    assert "Unknown keys" in resp.json()["detail"]
+
+
+def test_admin_config_reset_single_key(api_server):
+    """DELETE /admin/config/{key} resets only that key."""
+    token = _get_admin_token(api_server)
+    auth = {"Authorization": f"Bearer {token}"}
+    # Set an override
+    requests.post(
+        _admin_url(api_server, "/admin/config"),
+        json={"page_size_granth": 3},
+        headers=auth,
+    )
+    # Reset just that key
+    resp = requests.delete(_admin_url(api_server, "/admin/config/page_size_granth"), headers=auth)
+    assert resp.status_code == 200
+    assert resp.json()["key"] == "page_size_granth"
+    # Confirm it's gone from overrides
+    get_resp = requests.get(_admin_url(api_server, "/admin/config"), headers=auth)
+    assert "page_size_granth" not in get_resp.json()["overrides"]
+
+
+def test_admin_config_reset_unknown_key(api_server):
+    """DELETE /admin/config/{unknown_key} → 400."""
+    token = _get_admin_token(api_server)
+    auth = {"Authorization": f"Bearer {token}"}
+    resp = requests.delete(_admin_url(api_server, "/admin/config/no_such_key"), headers=auth)
+    assert resp.status_code == 400
+
+
+def test_admin_agent_config_get(api_server):
+    """GET /admin/agent-config returns defaults, overrides, effective."""
+    token = _get_admin_token(api_server)
+    auth = {"Authorization": f"Bearer {token}"}
+    resp = requests.get(_admin_url(api_server, "/admin/agent-config"), headers=auth)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "defaults" in body
+    assert "overrides" in body
+    assert "effective" in body
+    assert "rerank_oversample" in body["defaults"]
+
+
+def test_admin_agent_config_update(api_server):
+    """POST /admin/agent-config sets a value; GET reflects it."""
+    token = _get_admin_token(api_server)
+    auth = {"Authorization": f"Bearer {token}"}
+    try:
+        resp = requests.post(
+            _admin_url(api_server, "/admin/agent-config"),
+            json={"rerank_batch_size": 2},
+            headers=auth,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["overrides"]["rerank_batch_size"] == 2
+
+        get_resp = requests.get(_admin_url(api_server, "/admin/agent-config"), headers=auth)
+        assert get_resp.json()["effective"]["rerank_batch_size"] == 2
+    finally:
+        requests.delete(_admin_url(api_server, "/admin/agent-config"), headers=auth)
+
+
+def test_admin_agent_config_unknown_key_rejected(api_server):
+    """POST /admin/agent-config with an unknown key → 400."""
+    token = _get_admin_token(api_server)
+    auth = {"Authorization": f"Bearer {token}"}
+    resp = requests.post(
+        _admin_url(api_server, "/admin/agent-config"),
+        json={"no_such_key": 1},
+        headers=auth,
+    )
+    assert resp.status_code == 400
+    assert "Unknown agent config keys" in resp.json()["detail"]
+
+
+def test_admin_agent_config_reset_all(api_server):
+    """DELETE /admin/agent-config clears all agent overrides."""
+    token = _get_admin_token(api_server)
+    auth = {"Authorization": f"Bearer {token}"}
+    requests.post(
+        _admin_url(api_server, "/admin/agent-config"),
+        json={"rerank_batch_size": 2},
+        headers=auth,
+    )
+    resp = requests.delete(_admin_url(api_server, "/admin/agent-config"), headers=auth)
+    assert resp.status_code == 200
+    get_resp = requests.get(_admin_url(api_server, "/admin/agent-config"), headers=auth)
+    assert get_resp.json()["overrides"] == {}
+
+
+def test_admin_agent_config_reset_single_key(api_server):
+    """DELETE /admin/agent-config/{key} resets only that key."""
+    token = _get_admin_token(api_server)
+    auth = {"Authorization": f"Bearer {token}"}
+    try:
+        requests.post(
+            _admin_url(api_server, "/admin/agent-config"),
+            json={"rerank_batch_size": 2, "rerank_max_length": 500},
+            headers=auth,
+        )
+        resp = requests.delete(
+            _admin_url(api_server, "/admin/agent-config/rerank_batch_size"),
+            headers=auth,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["key"] == "rerank_batch_size"
+        get_resp = requests.get(_admin_url(api_server, "/admin/agent-config"), headers=auth)
+        overrides = get_resp.json()["overrides"]
+        assert "rerank_batch_size" not in overrides
+        assert "rerank_max_length" in overrides  # other key untouched
+    finally:
+        requests.delete(_admin_url(api_server, "/admin/agent-config"), headers=auth)
+
+
+def test_admin_agent_config_reset_unknown_key(api_server):
+    """DELETE /admin/agent-config/{unknown} → 400."""
+    token = _get_admin_token(api_server)
+    auth = {"Authorization": f"Bearer {token}"}
+    resp = requests.delete(
+        _admin_url(api_server, "/admin/agent-config/no_such_key"),
+        headers=auth,
+    )
+    assert resp.status_code == 400
+
+
+def test_admin_cache_clear(api_server):
+    """POST /admin/cache/clear returns 200 (live OS) or 503 (network error)."""
+    token = _get_admin_token(api_server)
+    auth = {"Authorization": f"Bearer {token}"}
+    resp = requests.post(_admin_url(api_server, "/admin/cache/clear"), headers=auth)
+    assert resp.status_code in (200, 503)
+
+
+# ---------------------------------------------------------------------------
+# Analytics endpoint coverage
+# ---------------------------------------------------------------------------
+
+def test_analytics_requires_auth(api_server):
+    """GET /admin/analytics without token → 401."""
+    resp = requests.get(_admin_url(api_server, "/admin/analytics"))
+    assert resp.status_code == 401
+
+
+def test_analytics_basic_structure(api_server):
+    """GET /admin/analytics returns expected top-level keys and types."""
+    token = _get_admin_token(api_server)
+    auth = {"Authorization": f"Bearer {token}"}
+    resp = requests.get(_admin_url(api_server, "/admin/analytics"), headers=auth)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "total" in body
+    assert "sources" in body
+    assert "by_day" in body
+    assert "queries" in body
+    assert isinstance(body["total"], int)
+    assert isinstance(body["sources"], list)
+    assert isinstance(body["by_day"], list)
+    assert isinstance(body["queries"], list)
+    assert body["total"] >= 0
+
+
+def test_analytics_date_filter(api_server):
+    """from_date + to_date narrows the result set (today's date → should include test rows)."""
+    from datetime import date
+    token = _get_admin_token(api_server)
+    auth = {"Authorization": f"Bearer {token}"}
+    today = date.today().isoformat()
+    resp = requests.get(
+        _admin_url(api_server, "/admin/analytics"),
+        params={"from_date": today, "to_date": today},
+        headers=auth,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    # Rows were inserted by today's test run → should find some
+    assert body["total"] >= 1
+    # by_day entries must be on or after from_date
+    for entry in body["by_day"]:
+        assert entry["date"] >= today
+
+
+def test_analytics_invalid_date_format(api_server):
+    """from_date with bad format → 400."""
+    token = _get_admin_token(api_server)
+    auth = {"Authorization": f"Bearer {token}"}
+    resp = requests.get(
+        _admin_url(api_server, "/admin/analytics"),
+        params={"from_date": "not-a-date"},
+        headers=auth,
+    )
+    assert resp.status_code == 400
+    assert "from_date" in resp.json()["detail"]
+
+
+def test_analytics_to_date_invalid_format(api_server):
+    """to_date with bad format → 400."""
+    token = _get_admin_token(api_server)
+    auth = {"Authorization": f"Bearer {token}"}
+    resp = requests.get(
+        _admin_url(api_server, "/admin/analytics"),
+        params={"to_date": "2026/01/01"},
+        headers=auth,
+    )
+    assert resp.status_code == 400
+
+
+def test_analytics_date_order_violation(api_server):
+    """from_date > to_date → 400."""
+    token = _get_admin_token(api_server)
+    auth = {"Authorization": f"Bearer {token}"}
+    resp = requests.get(
+        _admin_url(api_server, "/admin/analytics"),
+        params={"from_date": "2026-12-31", "to_date": "2026-01-01"},
+        headers=auth,
+    )
+    assert resp.status_code == 400
+    assert "from_date" in resp.json()["detail"]
+
+
+def test_analytics_source_filter(api_server):
+    """?source=agent returns only agent rows."""
+    token = _get_admin_token(api_server)
+    auth = {"Authorization": f"Bearer {token}"}
+    resp = requests.get(
+        _admin_url(api_server, "/admin/analytics"),
+        params={"source": "agent"},
+        headers=auth,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    for q in body["queries"]:
+        assert q["source"] == "agent"
+
+
+def test_analytics_language_filter(api_server):
+    """?language=hi returns only hi rows."""
+    token = _get_admin_token(api_server)
+    auth = {"Authorization": f"Bearer {token}"}
+    resp = requests.get(
+        _admin_url(api_server, "/admin/analytics"),
+        params={"language": "hi"},
+        headers=auth,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    for q in body["queries"]:
+        assert q["language"] == "hi"
+
+
+def test_analytics_sources_field_is_unfiltered(api_server):
+    """The 'sources' field always returns all distinct sources, regardless of ?source filter."""
+    token = _get_admin_token(api_server)
+    auth = {"Authorization": f"Bearer {token}"}
+    # Get all sources first
+    all_resp = requests.get(_admin_url(api_server, "/admin/analytics"), headers=auth)
+    all_sources = set(all_resp.json()["sources"])
+    # Filter to a single source
+    filtered_resp = requests.get(
+        _admin_url(api_server, "/admin/analytics"),
+        params={"source": "agent"},
+        headers=auth,
+    )
+    assert filtered_resp.status_code == 200
+    # sources in filtered response should equal the unfiltered list
+    assert set(filtered_resp.json()["sources"]) == all_sources

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Body, HTTPException, Query, Request
 from opensearchpy.exceptions import NotFoundError, TransportError
 from pydantic import BaseModel, Field
 
+from backend.api.admin.metrics_store import normalize_language
 from backend.common.opensearch import get_metadata, get_opensearch_client
 from backend.search.result_ranker import ResultRanker
 from backend.utils import JSONResponse
@@ -311,7 +312,8 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
     do not need to know which role a person holds.
     """
     try:
-        set_query_id(os.urandom(3).hex())
+        chat_request_id = request.headers.get("x-chat-request-id") or None
+        set_query_id(chat_request_id or os.urandom(3).hex())
         start_time = time.time()
         client_ip = (
             request.headers.get("x-real-ip") or
@@ -330,13 +332,22 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
 
         def _log_metrics(results: list, mode: str, reranked: bool) -> None:
             latency_ms = round((time.time() - start_time) * 1000, 2)
-            escaped_q = payload.query.replace(',', ';').replace('"', "'").replace('\n', ' ').replace('\r', '')
-            escaped_ct = str(payload.content_type).replace(',', ';').replace('"', "'")
-            log_handle.metrics(
-                f"agent,{get_query_id()},{client_ip},{escaped_q},{mode},{reranked},"
-                f"{payload.language},{escaped_ct},{payload.page_size},{payload.page},"
-                f"{latency_ms},-,{len(results)}"
-            )
+            request.app.state.metrics_store.insert({
+                "created_at": int(start_time * 1000),
+                "source": "agent",
+                "query_id": get_query_id() or None,
+                "chat_request_id": chat_request_id,
+                "query": payload.query,
+                "search_mode": mode,
+                "reranked": int(reranked),
+                "language": normalize_language(payload.language),
+                "categories": str(payload.content_type),
+                "page_size": payload.page_size,
+                "page": payload.page,
+                "latency_ms": latency_ms,
+                "ttfb_ms": None,
+                "total_hits": len(results),
+            })
 
         log_handle.info(
             "agent_search request",
