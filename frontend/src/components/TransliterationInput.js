@@ -74,45 +74,19 @@ const TransliterationInput = ({
     // Get current language config
     const currentLangConfig = languageConfig[language] || languageConfig['hindi'];
 
+    // Transliteration is always disabled
+    const isEnabled = false;
+
     // State
-    const [isEnabled, setIsEnabled] = useState(() => {
-        try {
-            const stored = localStorage.getItem(storageKey);
-            return stored === 'true';
-        } catch {
-            return false;
-        }
-    });
     const [suggestions, setSuggestions] = useState([]);
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [showDropdown, setShowDropdown] = useState(false);
     const [currentWord, setCurrentWord] = useState({ word: '', startIndex: 0, endIndex: 0 });
-    const [showTooltip, setShowTooltip] = useState(() => {
-        try {
-            const hasSeenTooltip = localStorage.getItem('transliterationTooltipSeen');
-            return !hasSeenTooltip;
-        } catch {
-            return false;
-        }
-    });
-    const [isMobile, setIsMobile] = useState(false);
 
     // Refs
     const inputRef = useRef(null);
     const debounceTimerRef = useRef(null);
     const dropdownRef = useRef(null);
-    const tooltipRef = useRef(null);
-
-    // Detect mobile screen size
-    useEffect(() => {
-        const checkMobile = () => {
-            setIsMobile(window.innerWidth < 768);
-        };
-
-        checkMobile();
-        window.addEventListener('resize', checkMobile);
-        return () => window.removeEventListener('resize', checkMobile);
-    }, []);
 
     // Auto-focus on mount
     useEffect(() => {
@@ -140,16 +114,6 @@ const TransliterationInput = ({
         setSuggestions([]);
     }, [language]);
 
-    // Show tooltip after a delay on first visit
-    useEffect(() => {
-        if (showTooltip && !isEnabled) {
-            const timer = setTimeout(() => {
-                // Tooltip is already visible, this is just for potential future animations
-            }, 2000);
-            return () => clearTimeout(timer);
-        }
-    }, [showTooltip, isEnabled]);
-
     // Global "/" key to focus input
     useEffect(() => {
         const handleKeyPress = (event) => {
@@ -165,15 +129,6 @@ const TransliterationInput = ({
         return () => document.removeEventListener('keydown', handleKeyPress);
     }, []);
 
-    // Persist toggle state to localStorage
-    useEffect(() => {
-        try {
-            localStorage.setItem(storageKey, isEnabled.toString());
-        } catch (error) {
-            console.warn('Could not save transliteration state to localStorage:', error);
-        }
-    }, [isEnabled, storageKey]);
-
     // Close dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -186,20 +141,6 @@ const TransliterationInput = ({
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
-
-    // Close tooltip when clicking outside
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (tooltipRef.current && !tooltipRef.current.contains(event.target)) {
-                handleDismissTooltip();
-            }
-        };
-
-        if (showTooltip) {
-            document.addEventListener('mousedown', handleClickOutside);
-            return () => document.removeEventListener('mousedown', handleClickOutside);
-        }
-    }, [showTooltip]);
 
     // Extract English suffix at cursor position (for compound words like "कुंदkund")
     const extractCurrentWord = useCallback((text, cursorPosition) => {
@@ -381,39 +322,8 @@ const TransliterationInput = ({
         replaceWithSuggestion(suggestion);
     };
 
-    // Toggle transliteration
-    const handleToggle = () => {
-        setIsEnabled(prev => !prev);
-        if (isEnabled) {
-            // If turning off, hide dropdown
-            setShowDropdown(false);
-            setSuggestions([]);
-        }
-        // Dismiss tooltip when user interacts with toggle
-        handleDismissTooltip();
-    };
-
-    // Dismiss tooltip
-    const handleDismissTooltip = () => {
-        setShowTooltip(false);
-        try {
-            localStorage.setItem('transliterationTooltipSeen', 'true');
-        } catch (error) {
-            console.warn('Could not save tooltip state to localStorage:', error);
-        }
-    };
-
-    // Get dynamic placeholder based on state and screen size
-    const getDynamicPlaceholder = () => {
-        if (!isEnabled) {
-            return placeholder;
-        }
-        return isMobile ? currentLangConfig.placeholderMobile : currentLangConfig.placeholderDesktop;
-    };
-
     return (
         <div className="relative w-full">
-            {/* Input with toggle button */}
             <div className="relative">
                 <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm pointer-events-none select-none">🔍</span>
                 <input
@@ -422,70 +332,10 @@ const TransliterationInput = ({
                     value={value}
                     onChange={handleInputChange}
                     onKeyDown={handleKeyDown}
-                    placeholder={getDynamicPlaceholder()}
+                    placeholder={placeholder}
                     disabled={disabled}
-                    className={`w-full h-8 pl-8 pr-20 text-sm bg-white border border-slate-400 shadow-sm rounded-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-600 text-slate-900 font-sans disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-300 disabled:cursor-not-allowed ${className}`}
+                    className={`w-full h-8 pl-8 pr-3 text-sm bg-white border border-slate-400 shadow-sm rounded-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-600 text-slate-900 font-sans disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-300 disabled:cursor-not-allowed ${className}`}
                 />
-
-                {/* Toggle Button */}
-                <button
-                    type="button"
-                    onClick={handleToggle}
-                    disabled={disabled}
-                    className={`absolute right-2 top-1/2 -translate-y-1/2 px-2 py-0.5 flex items-center justify-center rounded transition-all duration-300 font-semibold text-xs ${
-                        isEnabled
-                            ? 'bg-green-500 text-white hover:bg-green-600 shadow-md'
-                            : 'bg-neutral-200 text-neutral-600 hover:bg-neutral-300'
-                    } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${
-                        showTooltip && !isEnabled ? 'animate-pulse' : ''
-                    }`}
-                    title={isEnabled ? `${currentLangConfig.name} typing enabled` : `Enable ${currentLangConfig.name} typing`}
-                >
-                    <span className="whitespace-nowrap">
-                        {currentLangConfig.symbol}
-                    </span>
-                </button>
-
-                {/* First-time Tooltip */}
-                {showTooltip && !isEnabled && (
-                    <div
-                        ref={tooltipRef}
-                        className="absolute top-full right-0 mt-2 w-64 bg-slate-800 text-white rounded-lg shadow-xl p-3 z-50 animate-fadeIn"
-                        style={{
-                            animation: 'fadeIn 0.3s ease-in-out'
-                        }}
-                    >
-                        {/* Arrow pointing to toggle button */}
-                        <div className="absolute -top-2 right-6 w-4 h-4 bg-slate-800 transform rotate-45"></div>
-
-                        <div className="relative">
-                            {/* Close button */}
-                            <button
-                                onClick={handleDismissTooltip}
-                                className="absolute -top-2 -right-2 text-slate-400 hover:text-white transition-colors"
-                                aria-label="Close tooltip"
-                            >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-
-                            <div className="pr-4">
-                                <div className="flex items-start gap-2 mb-2">
-                                    <span className="text-2xl">💡</span>
-                                    <div>
-                                        <p className="font-semibold text-sm mb-1">
-                                            {currentLangConfig.tooltipText}
-                                        </p>
-                                        <p className="text-xs text-slate-300">
-                                            Click {currentLangConfig.symbol} above to enable
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
             </div>
 
             {/* Suggestions Dropdown */}

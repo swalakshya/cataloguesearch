@@ -311,14 +311,14 @@ const AppContent = () => {
         if (path === '/usage-guide') return 'usage-guide';
         if (path === '/search-index') return 'search-index';
         if (path === '/eval') return 'eval';
-        if (path === '/aibot') return 'aibot';
+        if (path === '/chat') return 'chat';
         return 'home'; // Default to 'home' for root path
     });
     
     // Update state when URL changes (browser navigation)
     useEffect(() => {
         const path = location.pathname;
-        setHomeMode(path === '/aibot' ? 'chat' : 'search');
+        setHomeMode(path === '/chat' ? 'chat' : 'search');
         if (path === '/about') {
             setCurrentPageState('about');
         } else if (path === '/feedback') {
@@ -331,8 +331,8 @@ const AppContent = () => {
             setCurrentPageState('search-index');
         } else if (path === '/eval') {
             setCurrentPageState('eval');
-        } else if (path === '/aibot') {
-            setCurrentPageState('aibot');
+        } else if (path === '/chat') {
+            setCurrentPageState('chat');
         } else if (path === '/') {
             setCurrentPageState('home');
         }
@@ -441,7 +441,7 @@ const AppContent = () => {
     const PAGE_SIZE = 20;
     const llmProvider = (process.env.REACT_APP_LLM_PROVIDER || '').trim();
     const [llmAvailable, setLlmAvailable] = useState(false);
-    const [homeMode, setHomeMode] = useState(() => location.pathname === '/aibot' ? 'chat' : 'search');
+    const [homeMode, setHomeMode] = useState(() => location.pathname === '/chat' ? 'chat' : 'search');
     const [displayedTexts, setDisplayedTexts] = useState({});
     const [chunkTextsCache, setChunkTextsCache] = useState({});
     const typingIntervalsRef = useRef({});
@@ -499,7 +499,7 @@ const AppContent = () => {
             return;
         }
         const overrides = {
-            'aibot':        'AI Bot',
+            'chat':         'AI Bot',
             'search-index': 'Content',
             'usage-guide':  'Usage Guide',
             'whats-new':    "What's New",
@@ -1102,7 +1102,7 @@ const AppContent = () => {
 
     const paginatedSimilarResults = getPaginatedResults(similarDocumentsData?.results, similarDocsPage);
 
-    const showSearchInterface = currentPage === 'home' || (currentPage === 'aibot' && llmAvailable);
+    const showSearchInterface = currentPage === 'home' || (currentPage === 'chat' && llmAvailable);
 
     const cleanAnswerText = (answerText) => {
         if (!answerText) return '';
@@ -1533,7 +1533,7 @@ const AppContent = () => {
                 <div className="max-w-[1080px] mx-auto">
                     <Header currentPage={currentPage} />
 
-                    {currentPage === 'aibot' && !llmAvailable && (
+                    {currentPage === 'chat' && !llmAvailable && (
                         <main>
                             <div className="text-center py-16">
                                 <p className="text-slate-500 text-lg">AI Service is unavailable right now.</p>
@@ -2178,7 +2178,7 @@ export default function App() {
                 <Route path="/search-index" element={<AppContent />} />
                 <Route path="/eval" element={<AppContent />} />
                 <Route path="/developer" element={<AppContent />} />
-                <Route path="/aibot" element={<AppContent />} />
+                <Route path="/chat" element={<AppContent />} />
                 <Route path="/admin" element={<AdminRoute />} />
             </Routes>
         </Router>
