@@ -1387,6 +1387,14 @@ const AppContent = () => {
         };
     };
 
+    const buildReferencePdfUrl = (fileUrl, pdfPageNumber, fallbackPageNumber) => {
+        const url = String(fileUrl || '').trim();
+        const page = Number(pdfPageNumber ?? fallbackPageNumber);
+        if (!url) return null;
+        if (!Number.isFinite(page) || page <= 0) return url;
+        return url.endsWith(`/${page}`) ? url : `${url}/${page}`;
+    };
+
     const getCitationCategoryMeta = (category) => {
         switch (category) {
             case 'Pravachan':
@@ -1479,7 +1487,11 @@ const AppContent = () => {
             badgeClassName: categoryMeta.badgeClassName,
             numberClassName: categoryMeta.numberClassName,
             readChunkId: citation?.chunk_id || null,
-            viewPdfUrl: citation?.file_url || fallback.url || null
+            viewPdfUrl: buildReferencePdfUrl(
+                citation?.file_url || fallback.url || null,
+                citation?.pdf_page_number,
+                citation?.page_number
+            )
         };
     };
 

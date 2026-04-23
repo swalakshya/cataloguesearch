@@ -113,6 +113,7 @@ def _chunk_from_hit(hit: Dict[str, Any], language: str) -> Dict[str, Any]:
         "series_start_date": metadata.get("series_start_date"),
         "series_end_date": metadata.get("series_end_date"),
         "page_number": source.get("page_number"),
+        "pdf_page_number": source.get("pdf_page_number"),
         "file_url": metadata.get("file_url", ""),
         "score": score,
     }
