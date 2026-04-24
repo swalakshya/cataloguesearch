@@ -258,9 +258,10 @@ export default function CostAnalytics({ token, onSessionExpired }) {
 
             {/* Summary cards */}
             {summary && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                     <SummaryCard label="Requests" value={fmtTokens(summary.request_count)} />
                     <SummaryCard label="Input tokens" value={fmtTokens(summary.input_tokens)} />
+                    <SummaryCard label="Cached tokens" value={fmtTokens(summary.cached_input_tokens)} sub="of input" />
                     <SummaryCard label="Output tokens" value={fmtTokens(summary.output_tokens)} />
                     <SummaryCard label="Total tokens" value={fmtTokens(summary.total_tokens)} />
                 </div>
