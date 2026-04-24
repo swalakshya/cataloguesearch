@@ -82,7 +82,7 @@ async def lifespan(app: FastAPI):
     app.state.shortener_store = shortener_store
     app.state.shortener_base_url = shortener_base_url
 
-    db_path = os.environ.get("METRICS_DB_PATH", os.path.join(logs_dir, "metrics.db"))
+    db_path = config.METRICS_DB_PATH or os.path.join(logs_dir, "metrics.db")
     app.state.metrics_store = MetricsStore(db_path)
     log_handle.info("MetricsStore initialised at %s", db_path)
 

@@ -51,3 +51,17 @@ def test_custom_json_encoder_numpy_array():
 def test_custom_json_encoder_set():
     result = json.loads(json.dumps({"values": {1, 2, 3}}, cls=CustomJSONEncoder))
     assert set(result["values"]) == {1, 2, 3}
+
+
+def test_metrics_db_path_default(monkeypatch):
+    monkeypatch.delenv("METRICS_DB_PATH", raising=False)
+    Config.reset()
+    config = Config("configs/config.yaml")
+    assert config.METRICS_DB_PATH is None
+
+
+def test_metrics_db_path_from_env(monkeypatch):
+    monkeypatch.setenv("METRICS_DB_PATH", "/custom/path/metrics.db")
+    Config.reset()
+    config = Config("configs/config.yaml")
+    assert config.METRICS_DB_PATH == "/custom/path/metrics.db"

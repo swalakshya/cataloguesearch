@@ -63,6 +63,7 @@ services:
       - SHORT_CODE_LEN=${SHORT_CODE_LEN:-7}
       - ADMIN_KEY=${ADMIN_KEY}
       - CHAT_ADMIN_BASE_URL=${CHAT_ADMIN_BASE_URL:-http://host.docker.internal:8012}
+      - METRICS_DB_PATH=/app/data/cataloguesearch-api.db
     volumes:
       - cataloguesearch-data:/app/data
       - cataloguesearch-logs:/app/logs
