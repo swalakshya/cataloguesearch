@@ -2227,10 +2227,17 @@ const AppContent = () => {
 function AdminRoute() {
     React.useEffect(() => { document.title = 'Swalakshya · Admin'; }, []);
     const [token, setToken] = React.useState(() => localStorage.getItem('adminToken'));
-    const handleAuth = (t) => { localStorage.setItem('adminToken', t); setToken(t); };
-    const handleLogout = () => { localStorage.removeItem('adminToken'); setToken(null); };
+    const [llmToken, setLlmToken] = React.useState(() => localStorage.getItem('llmAdminToken'));
+    const handleAuth = (t, lt) => {
+        localStorage.setItem('adminToken', t); setToken(t);
+        if (lt) { localStorage.setItem('llmAdminToken', lt); setLlmToken(lt); }
+    };
+    const handleLogout = () => {
+        localStorage.removeItem('adminToken'); localStorage.removeItem('llmAdminToken');
+        setToken(null); setLlmToken(null);
+    };
     if (!token) return <AdminLoginPage onAuth={handleAuth} />;
-    return <AdminPageComponent token={token} onLogout={handleLogout} />;
+    return <AdminPageComponent token={token} llmToken={llmToken} onLogout={handleLogout} />;
 }
 
 // Main App wrapper with Router

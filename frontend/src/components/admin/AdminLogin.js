@@ -20,9 +20,11 @@ const AdminLogin = ({ onAuth }) => {
         try {
             const keyHash = await sha256(key);
             const { token } = await api.adminAuth(keyHash);
+            let llmToken = null;
+            try { const r = await api.adminFeedbackAuth(keyHash); llmToken = r.token; } catch {}
             if (saveKey) localStorage.setItem('adminKey', key);
             else localStorage.removeItem('adminKey');
-            onAuth(token);
+            onAuth(token, llmToken);
         } catch {
             setError('Invalid key. Please try again.');
         } finally {

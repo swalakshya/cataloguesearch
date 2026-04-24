@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { api } from '../../services/api';
 import AnalyticsDashboard from '../analytics/AnalyticsDashboard';
 import ChatBotAnalytics from './ChatBotAnalytics';
+import CostAnalytics from './CostAnalytics';
 
 const AGENT_PARAM_META = {
     rerank_oversample: { label: 'Rerank oversample (top-k)', type: 'number', min: 10, max: 200, step: 5 },
@@ -137,7 +138,7 @@ const ConfigRow = ({ paramKey, defaults, overrides, effective, onSave, onReset, 
     );
 };
 
-const AdminPage = ({ token, onLogout }) => {
+const AdminPage = ({ token, llmToken, onLogout }) => {
     const [config, setConfig] = useState(null);
     const [error, setError] = useState('');
     const [resetConfirm, setResetConfirm] = useState(false);
@@ -274,6 +275,16 @@ const AdminPage = ({ token, onLogout }) => {
                 >
                     Chat Bot Analytics
                 </button>
+                <button
+                    onClick={() => setActiveSection('cost-analytics')}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                        activeSection === 'cost-analytics'
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                >
+                    Cost Analytics
+                </button>
             </div>
 
             {activeSection === 'settings' ? (
@@ -393,8 +404,10 @@ const AdminPage = ({ token, onLogout }) => {
                 </>
             ) : activeSection === 'analytics' ? (
                 <AnalyticsDashboard token={token} onSessionExpired={handleSessionExpired} />
-            ) : (
+            ) : activeSection === 'chat-bot-analytics' ? (
                 <ChatBotAnalytics token={token} onSessionExpired={handleSessionExpired} />
+            ) : (
+                <CostAnalytics token={llmToken || token} onSessionExpired={handleSessionExpired} />
             )}
         </div>
     );

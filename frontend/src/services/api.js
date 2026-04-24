@@ -542,4 +542,35 @@ export const api = {
         }
         return await response.json();
     },
+
+    getCostAnalysis: async (
+        token,
+        { fromTs, toTs, requestId, sessionId, userId, steps, limit = 50, offset = 0 } = {}
+    ) => {
+        const params = new URLSearchParams();
+        if (fromTs != null) params.set('from', String(fromTs));
+        if (toTs != null) params.set('to', String(toTs));
+        if (requestId) params.set('request_id', requestId);
+        if (sessionId) params.set('session_id', sessionId);
+        if (userId) params.set('user_id', userId);
+        if (Array.isArray(steps)) steps.forEach((s) => params.append('step', s));
+        params.set('limit', String(limit));
+        params.set('offset', String(offset));
+
+        const response = await fetch(`${LLM_API_BASE_URL}/v1/admin/cost-analysis?${params}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) {
+            let detail = null;
+            try {
+                const body = await response.json();
+                detail = body?.detail || null;
+            } catch {
+                detail = null;
+            }
+            if (response.status === 401) throw new Error('Unauthorized');
+            throw new Error(detail || 'Failed to load cost analysis');
+        }
+        return await response.json();
+    },
 };
