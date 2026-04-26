@@ -571,6 +571,60 @@ def test_force_crawl(initialise):
             assert state3[doc_id]["last_indexed_timestamp"] == state2[doc_id]["last_indexed_timestamp"]
 
 
+def test_crawl_with_root_folder(initialise):
+    config = Config()
+    doc_ids = setup()
+
+    hindi_base = f"{config.BASE_PDF_PATH}/hindi"
+    index_state = MockIndexState(config.SQLITE_DB_PATH)
+    discovery = Discovery(
+        config,
+        MockIndexGenerator(config, None),
+        index_state,
+        pdf_processor_factory=MockPDFProcessor)
+
+    # Crawl only the hindi subtree
+    discovery.crawl(process=True, index=True, root_folder=hindi_base)
+
+    state1 = index_state.load_state()
+    assert len(state1) == 6, f"Expected 6 hindi files, got {len(state1)}"
+
+    hindi_ids = {
+        doc_ids["bangalore_hindi"][1],
+        doc_ids["hampi_hindi"][1],
+        doc_ids["indore_hindi"][1],
+        doc_ids["jaipur_hindi"][1],
+        doc_ids["songadh_hindi"][1],
+        doc_ids["thanjavur_hindi"][1],
+    }
+    gujarati_ids = {
+        doc_ids["bangalore_gujarati"][1],
+        doc_ids["hampi_gujarati"][1],
+        doc_ids["indore_gujarati"][1],
+        doc_ids["jaipur_gujarati"][1],
+        doc_ids["songadh_gujarati"][1],
+        doc_ids["thanjavur_gujarati"][1],
+    }
+    assert hindi_ids == set(state1.keys()), "State should contain only hindi doc IDs"
+    for gid in gujarati_ids:
+        assert gid not in state1, f"Gujarati doc {gid} should not be indexed"
+
+    # Full crawl — should pick up the remaining gujarati files
+    discovery.crawl(process=True, index=True)
+
+    state2 = index_state.load_state()
+    assert len(state2) == 12, f"Expected 12 files after full crawl, got {len(state2)}"
+
+    # Hindi files already indexed — timestamps must be unchanged
+    for hid in hindi_ids:
+        assert state2[hid]["last_indexed_timestamp"] == state1[hid]["last_indexed_timestamp"], \
+            f"Hindi doc {hid} should not have been re-indexed"
+
+    # Gujarati files are new — must now be present
+    for gid in gujarati_ids:
+        assert gid in state2, f"Gujarati doc {gid} should now be indexed"
+
+
 def validate(old_state, new_state, changed_keys,
              check_file_changed=False, check_config_changed=True, new_file_added=False):
     for doc_id, vals in new_state.items():

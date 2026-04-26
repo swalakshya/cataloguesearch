@@ -38,6 +38,11 @@ const WhatsNew = () => {
             date: "April 26, 2026",
             newContent: [
                 "Granths: Dravya Drushti Prakash by Nihal Chandra Sogani",
+                "Granths: Gurudevshri ke Vachanamrut by Shri Kanji Swami",
+                "Granths: Tattvagyan Tarangini by Bhattarak Shri Gyanbhushan",
+                "Granths: Updesh Siddhant Ratnamala by Shri Nemichand Bhandari",
+                "Granths: Anagaar Dharmamrut and Sagaar Dharmamrut by Pandit Ashadhar",
+                "Granths: Various Granths of Pandit Deepchand Kasliwal: Anubhav Prakash, Aatmavlokan, Chid Vilas, Anubhav Anand, Parmatma Puran, Savaiya Teeka and Bhav Deepika",
             ],
         },
         {

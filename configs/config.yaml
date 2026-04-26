@@ -8,7 +8,7 @@ crawler:
   ocr_engine: "tesseract"
   default_llm_model: "gemini-2.5-flash"
   secondary_llm_model: "gemini-3-flash-preview"
-  llm_workers: 6
+  llm_workers: 10
 
 index:
   opensearch_config: "{BASE_DIR}/configs/opensearch-config.yaml"

@@ -372,6 +372,66 @@ export const searchableGranths = [
     status: "searchable"
   },
   {
+    name: "Gurudevshri ke Vachanamrut",
+    author: "Shri Kanji Swami",
+    status: "searchable"
+  },
+  {
+    name: "Tattvagyan Tarangini",
+    author: "Bhattarak Shri Gyanbhushan",
+    status: "searchable"
+  },
+  {
+    name: "Updesh Siddhant Ratnamala",
+    author: "Shri Nemichand Bhandari",
+    status: "searchable"
+  },
+  {
+    name: "Anagaar Dharmamrut",
+    author: "Pandit Ashadhar",
+    status: "searchable"
+  },
+  {
+    name: "Sagaar Dharmamrut",
+    author: "Pandit Ashadhar",
+    status: "searchable"
+  },
+  {
+    name: "Anubhav Prakash",
+    author: "Pandit Deepchand Kasliwal",
+    status: "searchable"
+  },
+  {
+    name: "Aatmavlokan",
+    author: "Pandit Deepchand Kasliwal",
+    status: "searchable"
+  },
+  {
+    name: "Chid Vilas",
+    author: "Pandit Deepchand Kasliwal",
+    status: "searchable"
+  },
+  {
+    name: "Anubhav Anand",
+    author: "Pandit Deepchand Kasliwal",
+    status: "searchable"
+  },
+  {
+    name: "Parmatma Puran",
+    author: "Pandit Deepchand Kasliwal",
+    status: "searchable"
+  },
+  {
+    name: "Savaiya Teeka",
+    author: "Pandit Deepchand Kasliwal",
+    status: "searchable"
+  },
+  {
+    name: "Bhav Deepika",
+    author: "Pandit Deepchand Kasliwal",
+    status: "searchable"
+  },
+  {
     name: "Charcha Sangrah",
     author: "Pandit Raimall"
   }
