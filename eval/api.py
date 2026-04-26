@@ -1385,6 +1385,8 @@ async def get_unindexed_pdfs():
         sub_sections = scan_cfg.get("sub_sections", [])
         file_metadata = dict(metadata)
         file_metadata["file_url"] = scan_cfg.get("file_url", "")
+        if "volume" in scan_cfg:
+            file_metadata["volume"] = scan_cfg["volume"]
 
         scan_config_dir = _get_terminal_scan_config_dir(file_path, base_pdf_path)
 

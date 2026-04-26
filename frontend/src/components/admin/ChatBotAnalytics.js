@@ -337,7 +337,16 @@ const ChatBotAnalytics = ({ token, onSessionExpired }) => {
                     <h2 className="text-2xl font-bold text-slate-800">Chat Bot Analytics</h2>
                     <p className="mt-0.5 text-sm text-slate-500">Paginated request logs for the chat bot, newest first.</p>
                 </div>
-                <p className="text-sm text-slate-500">{loading && data.logs?.length ? 'Refreshing…' : summary}</p>
+                <div className="flex items-center gap-3">
+                    <p className="text-sm text-slate-500">{summary}</p>
+                    <button
+                        onClick={() => loadLogs(appliedFilters)}
+                        disabled={loading}
+                        className="text-sm text-slate-600 hover:text-slate-900 border border-slate-300 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                    >
+                        {loading ? 'Refreshing…' : 'Refresh'}
+                    </button>
+                </div>
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">

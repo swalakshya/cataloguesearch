@@ -299,6 +299,12 @@ const AdminPage = ({ token, llmToken, onLogout }) => {
                             </p>
                         </div>
                         <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => { loadConfig(); loadAgentConfig(); }}
+                                className="text-sm text-slate-600 hover:text-slate-900 border border-slate-300 px-3 py-1.5 rounded-lg transition-colors"
+                            >
+                                Refresh
+                            </button>
                             {overrideCount > 0 && !resetConfirm && (
                                 <button onClick={() => setResetConfirm(true)} className="text-sm text-red-600 hover:text-red-800 border border-red-200 px-3 py-1.5 rounded-lg transition-colors">
                                     Reset all to defaults

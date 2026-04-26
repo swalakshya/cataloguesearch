@@ -102,7 +102,16 @@ const AnalyticsDashboard = ({ token, onSessionExpired }) => {
                     <h2 className="text-2xl font-bold text-slate-800">Analytics</h2>
                     <p className="text-sm text-slate-500 mt-0.5">Latency, TTFB, and raw query logs for the selected time window.</p>
                 </div>
-                <p className="text-sm text-slate-500">{loading && analytics ? 'Refreshing…' : summary}</p>
+                <div className="flex items-center gap-3">
+                    <p className="text-sm text-slate-500">{summary}</p>
+                    <button
+                        onClick={() => loadAnalytics(appliedFilters)}
+                        disabled={loading}
+                        className="text-sm text-slate-600 hover:text-slate-900 border border-slate-300 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                    >
+                        {loading ? 'Refreshing…' : 'Refresh'}
+                    </button>
+                </div>
             </div>
 
             <AnalyticsFilters

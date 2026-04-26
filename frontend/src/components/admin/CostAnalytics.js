@@ -176,11 +176,20 @@ export default function CostAnalytics({ token, onSessionExpired }) {
 
     return (
         <div className="flex flex-col gap-6">
-            <div>
-                <h2 className="text-2xl font-bold text-slate-800">Cost Analytics</h2>
-                <p className="text-sm text-slate-500 mt-0.5">
-                    Actual LLM token usage per request, broken down by step.
-                </p>
+            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div>
+                    <h2 className="text-2xl font-bold text-slate-800">Cost Analytics</h2>
+                    <p className="text-sm text-slate-500 mt-0.5">
+                        Actual LLM token usage per request, broken down by step.
+                    </p>
+                </div>
+                <button
+                    onClick={() => load(filters)}
+                    disabled={loading}
+                    className="self-start text-sm text-slate-600 hover:text-slate-900 border border-slate-300 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                >
+                    {loading ? 'Refreshing…' : 'Refresh'}
+                </button>
             </div>
 
             {/* Filters */}
