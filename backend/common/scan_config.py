@@ -70,7 +70,9 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
         "question_prefix": [],
         "answer_prefix": [],
         "stop_words": [],
-        "verses": []
+        "verses": [],
+        "skip_pdf_pages": [],
+        "hard_end_regex": [],
     }
 
     # Merge scan_config.json from each folder, starting from base directory
@@ -94,6 +96,8 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
                 scan_meta["answer_prefix"].extend(default_config.get("answer_prefix", []))
                 scan_meta["stop_words"].extend(default_config.get("stop_words", []))
                 scan_meta["verses"].extend(default_config.get("verses", []))
+                scan_meta["skip_pdf_pages"].extend(default_config.get("skip_pdf_pages", []))
+                scan_meta["hard_end_regex"].extend(default_config.get("hard_end_regex", []))
 
                 # Update crop settings from default config
                 if "crop" in default_config:
@@ -151,6 +155,7 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
         scan_meta["answer_prefix"].extend(file_config.get("answer_prefix", []))
         scan_meta["stop_words"].extend(file_config.get("stop_words", []))
         scan_meta["verses"].extend(file_config.get("verses", []))
+        scan_meta["hard_end_regex"].extend(file_config.get("hard_end_regex", []))
         scan_meta["file_url"] = file_config.get("file_url", "")
         if "volume" in file_config:
             scan_meta["volume"] = file_config["volume"]
@@ -160,6 +165,8 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
             scan_meta["end_page"] = file_config.get("end_page", num_pages)
         if file_config.get("page_list"):
             scan_meta["page_list"].extend(file_config.get("page_list"))
+        if file_config.get("skip_pdf_pages"):
+            scan_meta["skip_pdf_pages"].extend(file_config.get("skip_pdf_pages"))
 
         # Update crop settings from file-specific config (overrides defaults)
         if "crop" in file_config:

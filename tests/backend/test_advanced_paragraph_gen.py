@@ -440,3 +440,73 @@ class TestPhase3ProseCombining:
         )
         assert prose is not None
         assert "मनुष्य का सबसे बड़ा शत्रु" not in prose
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# IS_HARD_END — hard_end_regex config key
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _make_page(lines):
+    """Build a minimal single-page pages_data entry with fixed margins."""
+    return {
+        "page_num": 1,
+        "metadata": {
+            "prose_left_margin": 100,
+            "prose_right_margin": 1000,
+        },
+        "lines": [
+            {"line_num": i, "text": t, "x_start": 100, "x_end": 800}
+            for i, t in enumerate(lines)
+        ],
+    }
+
+
+class TestHardEndRegex:
+
+    def _run(self, lines, extra_config=None):
+        cfg = {**_SCAN_CONFIG, "hard_end_regex": ["[0-9०-९]+\\.\\s*$"], **(extra_config or {})}
+        language_meta = get_language_meta("hi", cfg)
+        gen = AdvancedParagraphGenerator(Config(), language_meta)
+        return [text for _, text in gen.generate_paragraphs([_make_page(lines)], cfg)]
+
+    def test_flush_on_devanagari_number_dot(self):
+        """Line ending with Devanagari number + '.' is kept as its own paragraph."""
+        texts = self._run([
+            "'कुछ करे नहीं, तो गमे नहीं' ऐसी आदत हो गई है, लेकिन 'कुछ करे, तो गमे नहीं' ऐसा होना चाहिए। ८४.",
+            "रुचि की आवश्यकता चाहिए, दरकार होनी चाहिए, थकावट होनी चाहिए।",
+        ])
+        assert any("आदत हो गई है" in t and "रुचि की आवश्यकता" not in t for t in texts), \
+            "Line ending ८४. was not kept as its own paragraph"
+        assert any("रुचि की आवश्यकता" in t for t in texts)
+
+    def test_flush_on_ascii_number_dot(self):
+        """Line ending with ASCII digits + '.' also triggers IS_HARD_END and stays separate."""
+        texts = self._run([
+            "जहाँ तक अंदर में डुबकी नहीं मारता, वहाँ तक प्रयत्न चालू रखना चाहिए। 86.",
+            "अगली पंक्ति में नया विषय प्रारम्भ होता है।",
+        ])
+        assert any("प्रयत्न चालू" in t and "अगली पंक्ति" not in t for t in texts), \
+            "Line ending 86. was not kept separate from following prose"
+
+    def test_no_flush_without_config_key(self):
+        """Without hard_end_regex, lines with number-dot endings merge with following prose."""
+        cfg = {**_SCAN_CONFIG}  # no hard_end_regex
+        language_meta = get_language_meta("hi", cfg)
+        gen = AdvancedParagraphGenerator(Config(), language_meta)
+        lines = [
+            "'कुछ करे नहीं, तो गमे नहीं' ऐसी आदत हो गई है, लेकिन 'कुछ करे, तो गमे नहीं' ऐसा होना चाहिए। ८४.",
+            "रुचि की आवश्यकता चाहिए, दरकार होनी चाहिए, थकावट होनी चाहिए।",
+        ]
+        texts = [text for _, text in gen.generate_paragraphs([_make_page(lines)], cfg)]
+        assert any("आदत हो गई है" in t and "रुचि की आवश्यकता" in t for t in texts), \
+            "Without hard_end_regex, the two lines should merge"
+
+    def test_no_false_positive_number_mid_text(self):
+        """Number at the START of a line does not trigger IS_HARD_END."""
+        texts = self._run([
+            "83. रुचि की आवश्यकता चाहिए, दरकार होनी चाहिए, थकावट होनी चाहिए।",
+            "जहाँ तक अंदर में डुबकी नहीं मारता, प्रयत्न चालू रखना चाहिए।",
+        ])
+        # Both lines should land in the same paragraph
+        assert any("रुचि की आवश्यकता" in t and "डुबकी नहीं मारता" in t for t in texts), \
+            "Number at start of line incorrectly triggered IS_HARD_END"

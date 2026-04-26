@@ -35,6 +35,12 @@ const WhatsNew = () => {
             ],
         },
         {
+            date: "April 26, 2026",
+            newContent: [
+                "Granths: Dravya Drushti Prakash by Nihal Chandra Sogani",
+            ],
+        },
+        {
             date: "April 10, 2026",
             newContent: [
                 "Granths: Harivansh Puran by Acharya Jinsen",

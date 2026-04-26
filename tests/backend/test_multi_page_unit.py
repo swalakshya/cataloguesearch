@@ -206,3 +206,62 @@ class TestLogicalPageOrdering:
         p = self._make(book_start_page=5, book_start_side="right")
         result = p.expand_pages_with_bounds([6, 7], 6, "right", 7, "right")
         assert result == [3, 4, 5]
+
+    def test_skip_pdf_pages_excluded_from_expand(self):
+        """
+        When physical pages are pre-filtered by skip_pdf_pages before calling
+        expand_pages, the logical pages derived from skipped physical pages
+        are absent and remaining logical page numbers are not renumbered.
+
+        book_start_side="left", skip_pdf_pages=[2, 4]:
+          Physical [1,2,3,4,5] minus skip → [1,3,5]
+          expand_pages([1,3,5]):
+            PDF 1 → logical (1,2)
+            PDF 3 → logical (5,6)
+            PDF 5 → logical (9,10)
+          Logical pages from PDF 2 (3,4) and PDF 4 (7,8) are absent.
+        """
+        p = self._make(book_start_page=1, book_start_side="left")
+        skip = {2, 4}
+        all_physical = [1, 2, 3, 4, 5]
+        filtered = [ph for ph in all_physical if ph not in skip]
+        result = p.expand_pages(filtered)
+        # Logical pages from skipped physical pages must be absent
+        assert 3 not in result  # left half of physical page 2
+        assert 4 not in result  # right half of physical page 2
+        assert 7 not in result  # left half of physical page 4
+        assert 8 not in result  # right half of physical page 4
+        # Non-skipped physical pages must still produce their logical pages
+        assert 1 in result and 2 in result   # physical page 1
+        assert 5 in result and 6 in result   # physical page 3
+        assert 9 in result and 10 in result  # physical page 5
+        # No renumbering — gaps are simply absent
+        assert result == [1, 2, 5, 6, 9, 10]
+
+    def test_skip_pdf_pages_with_sub_section_bounds(self):
+        """
+        skip_pdf_pages applied to sub-section physical pages before
+        expand_pages_with_bounds; boundary logic still fires correctly.
+
+        book_start_page=1, book_start_side="left"
+        Sub-section: start_page=1, start_side="left", end_page=4, end_side="left"
+        skip_pdf_pages=[2, 3]
+
+        Physical [1,2,3,4] minus skip → [1,4]
+        expand_pages_with_bounds([1,4], 1, "left", 4, "left"):
+          PDF 1 → (1,2); start_lp=left(1)=1 → both included → [1,2]
+          PDF 4 → (7,8); end_lp=left(4)=7  → right(8) excluded → [7]
+        Result: [1, 2, 7]
+        Pages 3,4 (from PDF 2) and 5,6 (from PDF 3) are absent.
+        """
+        p = self._make(book_start_page=1, book_start_side="left")
+        skip = {2, 3}
+        all_physical = [1, 2, 3, 4]
+        filtered = [ph for ph in all_physical if ph not in skip]
+        result = p.expand_pages_with_bounds(filtered, 1, "left", 4, "left")
+        assert 3 not in result and 4 not in result  # from skipped physical page 2
+        assert 5 not in result and 6 not in result  # from skipped physical page 3
+        assert 1 in result and 2 in result           # physical page 1, both halves
+        assert 7 in result                           # physical page 4, left half (end_side)
+        assert 8 not in result                       # physical page 4, right half trimmed by end_side
+        assert result == [1, 2, 7]

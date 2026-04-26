@@ -65,7 +65,19 @@ class AdvancedPDFProcessor(PDFProcessor):
             try:
                 with open(json_file, 'r', encoding='utf-8') as f:
                     page_data = json.load(f)
-                    pages_data.append(page_data)
+                # Old format: flat list of line dicts — wrap into the expected envelope
+                if isinstance(page_data, list):
+                    page_data = {
+                        "page_num": page_num,
+                        "metadata": {
+                            "avg_left_margin": 0,
+                            "avg_right_margin": 0,
+                            "prose_left_margin": 0,
+                            "prose_right_margin": 0
+                        },
+                        "lines": page_data
+                    }
+                pages_data.append(page_data)
             except (IOError, json.JSONDecodeError) as e:
                 log_handle.error(f"Failed to read JSON file {json_file}: {e}")
                 # Return empty page data on error

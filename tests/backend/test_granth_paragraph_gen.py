@@ -557,3 +557,95 @@ class TestQaMergeBehaviour:
         # Q7 and A7 must be together (qa_merge=False → one Q+A pair)
         assert any("७. प्रश्न" in t and "उत्तर" in t for t in texts), \
             "Q7 and A7 were not merged into one paragraph"
+
+
+# ── hard_end_regex ─────────────────────────────────────────────────────────────
+
+_HARD_END_SCAN_CONFIG = {
+    "ocr_engine": "llm",
+    "question_prefix": ["प्रश्न"],
+    "answer_prefix": ["उत्तर"],
+    "typo_list": [],
+    "hard_end_regex": ["[0-9०-९]+\\.\\s*$"],
+}
+
+
+def _make_hard_end_gen():
+    from backend.crawler.paragraph_generator.granth import GranthParagraphGenerator
+    from backend.crawler.paragraph_generator.language_meta import HindiMeta
+    return GranthParagraphGenerator(Config(), HindiMeta(_HARD_END_SCAN_CONFIG))
+
+
+class TestHardEndRegex:
+
+    def test_flush_on_devanagari_number_dot(self):
+        """Block ending with Devanagari number + '.' is flushed and kept separate."""
+        pages_data = [(1, [
+            {"type": "hindi_text", "text": "'कुछ करे नहीं, तो गमे नहीं' ऐसी आदत हो गई है। लेकिन 'कुछ करे, तो गमे नहीं' ऐसा होना चाहिए। ८४."},
+            {"type": "hindi_text", "text": "रुचि की आवश्यकता चाहिए, दरकार होनी चाहिए, थकावट होनी चाहिए।"},
+        ])]
+        gen = _make_hard_end_gen()
+        paras = gen.generate_paragraphs(pages_data, _HARD_END_SCAN_CONFIG)
+        texts = [t for _, t in paras]
+        assert any("आदत हो गई है" in t and "रुचि की आवश्यकता" not in t for t in texts), \
+            "Block ending ८४. was not kept as its own paragraph"
+        assert any("रुचि की आवश्यकता" in t for t in texts), \
+            "Following block missing from output"
+
+    def test_flush_on_ascii_number_dot(self):
+        """Block ending with ASCII digits + '.' also triggers a hard flush."""
+        pages_data = [(1, [
+            {"type": "hindi_text", "text": "जहाँ तक अंदर में डुबकी नहीं मारता, वहाँ तक प्रयत्न चालू रखना चाहिए। 86."},
+            {"type": "hindi_text", "text": "प्रश्न: रुचि बढ़ते-बढ़ते महत्ता बढ़ती है?"},
+            {"type": "hindi_text", "text": "उत्तर: रुचि बढ़ती है ऐसे लक्ष्य में पर्याय की महत्ता होती है।"},
+        ])]
+        gen = _make_hard_end_gen()
+        paras = gen.generate_paragraphs(pages_data, _HARD_END_SCAN_CONFIG)
+        texts = [t for _, t in paras]
+        assert any("प्रयत्न चालू" in t and "प्रश्न:" not in t for t in texts), \
+            "Block ending 86. was not separated from the following Q&A"
+
+    def test_no_flush_without_config_key(self):
+        """Omitting hard_end_regex → blocks with number-dot endings are not hard-bounded."""
+        cfg_no_hard_end = {k: v for k, v in _HARD_END_SCAN_CONFIG.items() if k != "hard_end_regex"}
+        pages_data = [(1, [
+            {"type": "hindi_text", "text": "'कुछ करे नहीं, तो गमे नहीं' ऐसी आदत हो गई है। लेकिन 'कुछ करे, तो गमे नहीं' ऐसा होना चाहिए। ८४."},
+            {"type": "hindi_text", "text": "रुचि की आवश्यकता चाहिए, दरकार होनी चाहिए, थकावट होनी चाहिए।"},
+        ])]
+        from backend.crawler.paragraph_generator.granth import GranthParagraphGenerator
+        from backend.crawler.paragraph_generator.language_meta import HindiMeta
+        gen = GranthParagraphGenerator(Config(), HindiMeta(cfg_no_hard_end))
+        paras = gen.generate_paragraphs(pages_data, cfg_no_hard_end)
+        texts = [t for _, t in paras]
+        # Without hard_end_regex, ८४. doesn't trigger is_verse_end=True,
+        # so phase 2 is free to merge the two short paragraphs.
+        assert any("आदत हो गई है" in t and "रुचि की आवश्यकता" in t for t in texts), \
+            "Without hard_end_regex, the two paragraphs should be merged by phase 2"
+
+    def test_no_false_positive_number_mid_text(self):
+        """'83. कुछ पाठ' at the START of a block does not trigger a hard flush."""
+        pages_data = [(1, [
+            {"type": "hindi_text", "text": "83. रुचि की आवश्यकता चाहिए, दरकार होनी चाहिए, थकावट होनी चाहिए।"},
+            {"type": "hindi_text", "text": "जहाँ तक अंदर में डुबकी नहीं मारता, वहाँ तक प्रयत्न चालू रखना चाहिए।"},
+        ])]
+        gen = _make_hard_end_gen()
+        paras = gen.generate_paragraphs(pages_data, _HARD_END_SCAN_CONFIG)
+        texts = [t for _, t in paras]
+        # Both blocks should land in the same paragraph (number is at start, not end)
+        assert any("रुचि की आवश्यकता" in t and "डुबकी नहीं मारता" in t for t in texts), \
+            "Number at start of text incorrectly triggered a hard flush"
+
+    def test_hard_end_paragraphs_stay_separate_despite_short_length(self):
+        """Each sutra ending with number-dot is kept separate even when short,
+        because hard_end_regex sets is_verse_end=True which prevents phase 2 merging."""
+        pages_data = [(1, [
+            {"type": "hindi_text", "text": "कोई एकांत से वेदांत में खिंच नहीं जाता इसलिए दोनों बातें बताई हैं। ८७."},
+            {"type": "hindi_text", "text": "जहाँ तक अंदर में आत्मा में डुबकी नहीं मारता वहाँ तक प्रयत्न चालू रखना चाहिए। ८८."},
+        ])]
+        gen = _make_hard_end_gen()
+        paras = gen.generate_paragraphs(pages_data, _HARD_END_SCAN_CONFIG)
+        texts = [t for _, t in paras]
+        assert any("कोई एकांत से" in t and "जहाँ तक अंदर" not in t for t in texts), \
+            "Sutra ८७. should be its own paragraph (not merged with ८८.)"
+        assert any("जहाँ तक अंदर" in t for t in texts), \
+            "Sutra ८८. should be in the output"

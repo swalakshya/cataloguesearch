@@ -73,7 +73,8 @@ class LineClassifier:
 
     def __init__(self, avg_left_margin, avg_right_margin, indent_threshold=15,
                  center_threshold=20, header_regexes=None,
-                 question_prefix=None, answer_prefix=None, sentence_terminators=None):
+                 question_prefix=None, answer_prefix=None, sentence_terminators=None,
+                 hard_end_regexes=None):
         self.avg_left_margin = avg_left_margin
         self.avg_right_margin = avg_right_margin
         self.indent_threshold = indent_threshold
@@ -82,6 +83,7 @@ class LineClassifier:
         self.question_prefix = question_prefix if question_prefix is not None else []
         self.answer_prefix = answer_prefix if answer_prefix is not None else []
         self.sentence_terminators = sentence_terminators if sentence_terminators is not None else HINDI_SENTENCE_TERMINATORS
+        self.hard_end_regexes = hard_end_regexes if hard_end_regexes is not None else []
 
     def classify(self, text: str, x_start: int, x_end: int, page_num: int,
                  line_num: int) -> Line:
@@ -140,6 +142,9 @@ class LineClassifier:
 
         if re.search(r'।।\d+।।$', stripped_text):
             tags.add('IS_ABSOLUTE_TERMINATOR')
+
+        if any(r.search(stripped_text) for r in self.hard_end_regexes):
+            tags.add('IS_HARD_END')
 
         return Line(text, int(x_start), int(x_end), page_num, line_num, tags, speaker)
 
@@ -215,6 +220,15 @@ class ParagraphGenerator:
 
         # IS_ABSOLUTE_TERMINATOR should end the current paragraph (be the last line)
         if 'IS_ABSOLUTE_TERMINATOR' in line.tags:
+            if not self.current_paragraph_lines:
+                self._reset_current_paragraph(line)
+            self.current_paragraph_lines.append(line)
+            self._finalize_paragraph()
+            self._reset_current_paragraph()
+            return False
+
+        # IS_HARD_END: flush after this line, stay in STANDARD_PROSE
+        if 'IS_HARD_END' in line.tags:
             if not self.current_paragraph_lines:
                 self._reset_current_paragraph(line)
             self.current_paragraph_lines.append(line)
@@ -355,8 +369,10 @@ class AdvancedParagraphGenerator(BaseParagraphGenerator):
         # Phase 2: Combine consecutive blocks by type
         combined_by_type = self._phase2_combine_by_type(typed_paragraphs)
 
+        hard_end_regexes = [re.compile(p) for p in scan_config.get("hard_end_regex", [])]
+
         # Phase 3: Merge to min word length, build page_spans
-        phase3 = self._phase3_combine_prose(combined_by_type, min_words)
+        phase3 = self._phase3_combine_prose(combined_by_type, min_words, hard_end_regexes)
 
         # Phase 4: Split oversized paragraphs (only if max configured)
         if max_words is not None:
@@ -389,6 +405,7 @@ class AdvancedParagraphGenerator(BaseParagraphGenerator):
         question_prefix = scan_config.get("question_prefix", [])
         answer_prefix = scan_config.get("answer_prefix", [])
         typo_list = scan_config.get("typo_list", [])
+        hard_end_regexes = [re.compile(p) for p in scan_config.get("hard_end_regex", [])]
 
         all_typed_paragraphs = []
 
@@ -413,7 +430,8 @@ class AdvancedParagraphGenerator(BaseParagraphGenerator):
                 header_regexes=header_regexes,
                 question_prefix=question_prefix,
                 answer_prefix=answer_prefix,
-                sentence_terminators=sentence_terminators
+                sentence_terminators=sentence_terminators,
+                hard_end_regexes=hard_end_regexes,
             )
 
             # Normalize lines and classify
@@ -489,6 +507,7 @@ class AdvancedParagraphGenerator(BaseParagraphGenerator):
             self,
             typed_paragraphs: List[Tuple[int, str, State]],
             min_para_len: int = _MIN_PARA_LENGTH,
+            hard_end_regexes: list = None,
     ) -> List[ParaInfo]:
         """
         Phase 3: Merge paragraphs to min word length, same logic as granth Phase 2.
@@ -560,6 +579,8 @@ class AdvancedParagraphGenerator(BaseParagraphGenerator):
             if para_type == State.STANDARD_PROSE:
                 buffer_len += wc
                 if ABSOLUTE_TERM_RE.search(text):
+                    _flush()
+                elif hard_end_regexes and any(r.search(text) for r in hard_end_regexes):
                     _flush()
                 elif buffer_len >= min_para_len and text.strip().endswith(
                         tuple(self._language_meta.sentence_terminators)):

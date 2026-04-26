@@ -33,6 +33,7 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
     const [jumpPageNumber, setJumpPageNumber] = useState('');
+    const [skipPdfPages, setSkipPdfPages] = useState([]);
     const [basePaths, setBasePaths] = useState(parentBasePaths || null);
     const [baseDirectoryHandles, setBaseDirectoryHandles] = useState(parentBaseDirectoryHandles || {
         pdf: null,
@@ -486,6 +487,21 @@ Please select the SOURCE directory (${selection.sourcePath})`;
         }
     }, [selectedFolder, permissionsGranted, sourceHandle, targetHandle]);
 
+    // Fetch scan-config to get skip_pdf_pages when folder changes
+    useEffect(() => {
+        if (!selectedFolder?.relativePath) {
+            setSkipPdfPages([]);
+            return;
+        }
+        const pdfRelPath = selectedFolder.relativePath + (selectedFolder.selectedPDFFile ? `/${selectedFolder.selectedPDFFile}` : '.pdf');
+        fetch(`${API_BASE_URL}/eval/ocr/scan-config?relative_path=${encodeURIComponent(pdfRelPath)}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                setSkipPdfPages(data?.skip_pdf_pages || []);
+            })
+            .catch(() => setSkipPdfPages([]));
+    }, [selectedFolder]);
+
     // Helper functions to construct file paths for copy buttons
     const getPdfPath = () => {
         if (!basePaths || !selectedFolder?.relativePath || !selectedFolder?.selectedPDFFile) {
@@ -885,7 +901,12 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                         </div>
                         <div className="border border-slate-300 rounded-lg overflow-hidden" style={{ backgroundColor: 'var(--bg-surface)' }}>
                             <div className="p-4 space-y-3 max-h-[700px] overflow-y-auto">
-                                {!targetContent && (
+                                {!targetContent && skipPdfPages.includes(parseInt(jumpPageNumber)) && (
+                                    <div className="text-amber-500 text-sm text-center py-8 font-semibold">
+                                        Skipped!
+                                    </div>
+                                )}
+                                {!targetContent && !skipPdfPages.includes(parseInt(jumpPageNumber)) && (
                                     <div className="text-slate-400 text-sm text-center py-8 italic">
                                         No indexed data
                                     </div>

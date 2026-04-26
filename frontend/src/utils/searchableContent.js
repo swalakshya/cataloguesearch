@@ -367,6 +367,11 @@ export const searchableGranths = [
     status: "searchable"
   },
   {
+    name: "Dravya Drushti Prakash",
+    author: "Nihal Chandra Sogani",
+    status: "searchable"
+  },
+  {
     name: "Charcha Sangrah",
     author: "Pandit Raimall"
   }

@@ -298,6 +298,34 @@ def test_pages_crawl(initialise):
 
     validate(state1, state2, changed_files, check_file_changed=False, check_config_changed=True)
 
+    # Add skip_pdf_pages to a file — should trigger re-index (config_hash changes)
+    skip_target_path = f"{config.BASE_PDF_PATH}/hindi/history/hampi_hindi.pdf"
+    skip_target_id = doc_ids["hampi_hindi"][1]
+    skip_config_path = skip_target_path.replace(".pdf", "_config.json")
+    write_config_file(skip_config_path, {"skip_pdf_pages": [2, 4, 6]})
+
+    discovery.crawl(process=True, index=True)
+    state3 = index_state.load_state()
+
+    assert state3[skip_target_id]["last_indexed_timestamp"] != state2[skip_target_id]["last_indexed_timestamp"]
+    assert state3[skip_target_id]["config_hash"] != state2[skip_target_id]["config_hash"]
+
+    # Extend skip_pdf_pages — should trigger another re-index
+    write_config_file(skip_config_path, {"skip_pdf_pages": [2, 4, 6, 8]})
+    discovery.crawl(process=True, index=True)
+    state4 = index_state.load_state()
+
+    assert state4[skip_target_id]["last_indexed_timestamp"] != state3[skip_target_id]["last_indexed_timestamp"]
+    assert state4[skip_target_id]["config_hash"] != state3[skip_target_id]["config_hash"]
+
+    # Remove skip_pdf_pages entirely — config_hash changes again
+    write_config_file(skip_config_path, {})
+    discovery.crawl(process=True, index=True)
+    state5 = index_state.load_state()
+
+    assert state5[skip_target_id]["last_indexed_timestamp"] != state4[skip_target_id]["last_indexed_timestamp"]
+    assert state5[skip_target_id]["config_hash"] != state4[skip_target_id]["config_hash"]
+
 def test_ignore_file(initialise):
     config = Config()
     doc_ids = setup()
@@ -425,6 +453,39 @@ def test_page_list_scan_config():
     # page_list combined with top-level start_page/end_page
     pages = sfp._get_page_list({"page_list": [{"start": 1, "end": 2}], "start_page": 4, "end_page": 5})
     assert pages == [1, 2, 4, 5]
+
+    # skip_pdf_pages removes specific pages from a range
+    pages = sfp._get_page_list({
+        "start_page": 1, "end_page": 15,
+        "skip_pdf_pages": [3, 7, 12]
+    })
+    assert 3 not in pages and 7 not in pages and 12 not in pages
+    assert 2 in pages and 4 in pages and 6 in pages and 8 in pages and 11 in pages and 13 in pages
+    assert len(pages) == 12  # 15 pages minus 3 skipped
+
+    # skip_pdf_pages applies across sub_sections — pages skipped in whichever section they fall
+    pages = sfp._get_page_list({
+        "sub_sections": [
+            {"start_page": 1, "end_page": 10},
+            {"start_page": 11, "end_page": 20},
+        ],
+        "skip_pdf_pages": [5, 8, 15]
+    })
+    assert 5 not in pages and 8 not in pages and 15 not in pages
+    assert 4 in pages and 6 in pages and 7 in pages and 9 in pages and 14 in pages and 16 in pages
+    assert len(pages) == 17  # 20 pages minus 3 skipped
+
+    # skip_pdf_pages at sub-section boundaries trims both sections
+    pages = sfp._get_page_list({
+        "sub_sections": [
+            {"start_page": 1, "end_page": 20},
+            {"start_page": 21, "end_page": 40},
+        ],
+        "skip_pdf_pages": [20, 21]
+    })
+    assert 20 not in pages and 21 not in pages
+    assert 19 in pages and 22 in pages
+    assert len(pages) == 38  # 40 pages minus 2 skipped
 
 
 def test_force_crawl(initialise):

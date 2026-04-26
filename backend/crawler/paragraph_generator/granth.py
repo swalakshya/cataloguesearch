@@ -110,8 +110,9 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
 
         header_regexes = scan_config.get("header_regex", [])
         strip_regex = scan_config.get("strip_regex", [])
+        hard_end_regexes = [re.compile(p) for p in scan_config.get("hard_end_regex", [])]
         qa_prefixes = question_prefixes + answer_prefixes
-        phase1 = self._phase1_sentence_boundaries(pages_data, stop_prefixes, qa_prefixes, typo_list, header_regexes, strip_regex)
+        phase1 = self._phase1_sentence_boundaries(pages_data, stop_prefixes, qa_prefixes, typo_list, header_regexes, strip_regex, hard_end_regexes)
         phase1_5 = self._phase1_5_tag_qa(phase1, question_prefixes, answer_prefixes)
         phase2 = self._phase2_min_length(phase1_5, stop_prefixes, qa_merge, min_words)
 
@@ -139,6 +140,7 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
         typo_list: list,
         header_regexes: list = None,
         strip_regex: list = None,
+        hard_end_regexes: list = None,
     ) -> List[ParaInfo]:
         """
         Combine hindi_text blocks into complete sentences.
@@ -154,6 +156,7 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
           - is_verse_end=True marks a paragraph whose last line ends with a verse marker.
         """
         _header_regexes = [re.compile(p) for p in (header_regexes or [])]
+        _hard_end_regexes = list(hard_end_regexes or [])
 
         result: List[ParaInfo] = []
         buffer: List[str] = []
@@ -166,7 +169,8 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
             nonlocal buffer, buffer_page, chapter_break, buffer_page_spans, buffer_word_count
             if buffer:
                 text = '\n'.join(buffer)
-                is_verse_end = bool(_VERSE_END_RE.search(buffer[-1]))
+                is_verse_end = (bool(_VERSE_END_RE.search(buffer[-1])) or
+                                any(r.search(buffer[-1]) for r in _hard_end_regexes))
                 result.append(ParaInfo(
                     page_num=buffer_page,
                     text=text,
@@ -223,7 +227,9 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
                     buffer_page_spans.append((page_num, buffer_word_count))
                 buffer_word_count += len(text.split())
 
-                if text.endswith(self.punctuation_suffixes) or _VERSE_END_RE.search(text):
+                if (text.endswith(self.punctuation_suffixes)
+                        or _VERSE_END_RE.search(text)
+                        or any(r.search(text) for r in _hard_end_regexes)):
                     _flush()
 
         _flush()

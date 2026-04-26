@@ -1207,3 +1207,201 @@ class TestBookStartAnchor:
                 f"Logical page {pn}: expected pdf_page_number={expected_pdf}, "
                 f"got {src['pdf_page_number']}"
             )
+
+
+# ── module globals set by skip_pdf_pages fixture ──────────────────────────────
+_SKIP_SEC_A_DOC_ID = None
+_SKIP_SEC_B_DOC_ID = None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TestSkipPdfPages
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestSkipPdfPages:
+    """
+    Verify skip_pdf_pages works correctly for both single-document and
+    sub-section multi-page PDFs.
+
+    Uses bangalore_hindi.pdf (4 PDF pages, book_start_side="left"):
+      PDF page 1 → logical pages 1 (left), 2 (right)
+      PDF page 2 → logical pages 3 (left), 4 (right)
+      PDF page 3 → logical pages 5 (left), 6 (right)
+      PDF page 4 → logical pages 7 (left), 8 (right)
+
+    skip_pdf_pages: [2, 3]  →  logical pages 3, 4, 5, 6 must be absent.
+
+    Sub-sections:
+      Sec A: PDF pages 1–2 (start_side="left", end_side="right")
+             → logical pages [1,2,3,4] minus skipped → [1,2]
+      Sec B: PDF pages 3–4 (start_side="left", end_side="right")
+             → logical pages [5,6,7,8] minus skipped → [7,8]
+    """
+
+    # Logical pages that must NOT appear in any indexed chunks
+    _SKIPPED_LOGICAL = {3, 4, 5, 6}
+    # Logical pages that MUST appear
+    _EXPECTED_SEC_A = {1, 2}
+    _EXPECTED_SEC_B = {7, 8}
+
+    @pytest.fixture(scope="class")
+    def skip_pages_setup(self, config, opensearch_client):
+        global _SKIP_SEC_A_DOC_ID, _SKIP_SEC_B_DOC_ID
+
+        all_indices = [config.OPENSEARCH_INDEX_NAME, config.OPENSEARCH_METADATA_INDEX_NAME]
+        for idx in all_indices:
+            opensearch_client.indices.delete(index=idx, ignore=[400, 404])
+        create_indices_if_not_exists(config, opensearch_client)
+
+        base_dir = tempfile.mkdtemp(prefix="skip_pdf_pages_")
+        pdf_dir  = os.path.join(base_dir, "data", "pdfs")
+        ocr_dir  = os.path.join(base_dir, "data", "ocr")
+        text_dir = os.path.join(base_dir, "data", "texts")
+        db_path  = os.path.join(base_dir, "crawl_state.db")
+
+        os.makedirs(pdf_dir)
+        os.makedirs(ocr_dir)
+        os.makedirs(text_dir)
+
+        shutil.copy(_BANGALORE_PDF, os.path.join(pdf_dir, "bangalore_hindi.pdf"))
+
+        write_config_file(os.path.join(pdf_dir, "config.json"),
+                          {"language": "hi", "category": "Pravachan"})
+
+        write_config_file(os.path.join(pdf_dir, "scan_config.json"), {
+            "default": {
+                "chunk_strategy":   "advanced",
+                "multi_page":       True,
+                "ignore_bookmarks": True,
+                "language":         "hi",
+                "psm":              6,
+            },
+            "bangalore_hindi": {
+                "start_page":      1,
+                "end_page":        _BANGALORE_PDF_PAGES,
+                "book_start_side": "left",
+                "skip_pdf_pages":  [2, 3],
+                "sub_sections": [
+                    {
+                        "field":      "half",
+                        "name":       "Sec A",
+                        "start_page": 1,
+                        "start_side": "left",
+                        "end_page":   2,
+                        "end_side":   "right",
+                    },
+                    {
+                        "field":      "half",
+                        "name":       "Sec B",
+                        "start_page": 3,
+                        "start_side": "left",
+                        "end_page":   4,
+                        "end_side":   "right",
+                    },
+                ],
+            },
+        })
+
+        relative_path = "bangalore_hindi.pdf"
+        _SKIP_SEC_A_DOC_ID = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{relative_path}#half:Sec A"))
+        _SKIP_SEC_B_DOC_ID = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{relative_path}#half:Sec B"))
+
+        crawler = config.settings()["crawler"]
+        orig = {k: crawler[k] for k in
+                ("base_pdf_path", "base_text_path", "base_ocr_path", "sqlite_db_path")}
+        crawler["base_pdf_path"]  = pdf_dir
+        crawler["base_text_path"] = text_dir
+        crawler["base_ocr_path"]  = ocr_dir
+        crawler["sqlite_db_path"] = db_path
+
+        try:
+            discovery = Discovery(
+                config,
+                IndexGenerator(config, opensearch_client),
+                IndexState(config.SQLITE_DB_PATH),
+            )
+            discovery.crawl(process=True, index=True)
+            opensearch_client.indices.refresh(index=config.OPENSEARCH_INDEX_NAME)
+
+            yield {"ocr_dir": os.path.join(ocr_dir, "bangalore_hindi")}
+
+        finally:
+            crawler.update(orig)
+            shutil.rmtree(base_dir, ignore_errors=True)
+            for idx in all_indices:
+                opensearch_client.indices.delete(index=idx, ignore=[400, 404])
+
+    # ── OCR file assertions ────────────────────────────────────────────────────
+
+    def test_skipped_ocr_files_absent(self, skip_pages_setup):
+        """OCR files for logical pages derived from skipped physical pages 2 and 3
+        must not exist (pages 3, 4, 5, 6)."""
+        ocr_dir = skip_pages_setup["ocr_dir"]
+        for lp in self._SKIPPED_LOGICAL:
+            path = os.path.join(ocr_dir, f"page_{lp:04d}.json")
+            assert not os.path.exists(path), (
+                f"OCR file page_{lp:04d}.json should not exist (derived from skipped physical pages)"
+            )
+
+    def test_non_skipped_ocr_files_present(self, skip_pages_setup):
+        """OCR files for logical pages from non-skipped physical pages 1 and 4 must exist."""
+        ocr_dir = skip_pages_setup["ocr_dir"]
+        for lp in [1, 2, 7, 8]:
+            path = os.path.join(ocr_dir, f"page_{lp:04d}.json")
+            assert os.path.exists(path), f"OCR file page_{lp:04d}.json should exist"
+
+    # ── OpenSearch indexing assertions ────────────────────────────────────────
+
+    @pytest.fixture(scope="class")
+    def sec_a_skip_chunks(self, skip_pages_setup, config, opensearch_client):
+        return _docs_for(opensearch_client, config.OPENSEARCH_INDEX_NAME, _SKIP_SEC_A_DOC_ID)
+
+    @pytest.fixture(scope="class")
+    def sec_b_skip_chunks(self, skip_pages_setup, config, opensearch_client):
+        return _docs_for(opensearch_client, config.OPENSEARCH_INDEX_NAME, _SKIP_SEC_B_DOC_ID)
+
+    def test_sec_a_has_indexed_chunks(self, sec_a_skip_chunks):
+        assert len(sec_a_skip_chunks) > 0, "Sec A has no indexed chunks after skip"
+
+    def test_sec_b_has_indexed_chunks(self, sec_b_skip_chunks):
+        assert len(sec_b_skip_chunks) > 0, "Sec B has no indexed chunks after skip"
+
+    def test_skipped_logical_pages_absent_from_sec_a(self, sec_a_skip_chunks):
+        """Pages 3 and 4 (from skipped physical page 2) must not appear in Sec A."""
+        indexed_pages = {doc["_source"]["page_number"] for doc in sec_a_skip_chunks}
+        assert not indexed_pages & self._SKIPPED_LOGICAL, (
+            f"Skipped logical pages {indexed_pages & self._SKIPPED_LOGICAL} "
+            f"found in Sec A — skip_pdf_pages not applied"
+        )
+
+    def test_skipped_logical_pages_absent_from_sec_b(self, sec_b_skip_chunks):
+        """Pages 5 and 6 (from skipped physical page 3) must not appear in Sec B."""
+        indexed_pages = {doc["_source"]["page_number"] for doc in sec_b_skip_chunks}
+        assert not indexed_pages & self._SKIPPED_LOGICAL, (
+            f"Skipped logical pages {indexed_pages & self._SKIPPED_LOGICAL} "
+            f"found in Sec B — skip_pdf_pages not applied"
+        )
+
+    def test_sec_a_page_numbers_in_expected_range(self, sec_a_skip_chunks):
+        """Sec A may only have logical pages 1 and 2 (page 4 is the end_side boundary,
+        but pages 3,4 are skipped so only 1,2 remain)."""
+        indexed_pages = {doc["_source"]["page_number"] for doc in sec_a_skip_chunks}
+        assert indexed_pages <= self._EXPECTED_SEC_A, (
+            f"Sec A has unexpected pages: {indexed_pages - self._EXPECTED_SEC_A}"
+        )
+
+    def test_sec_b_page_numbers_in_expected_range(self, sec_b_skip_chunks):
+        """Sec B may only have logical pages 7 and 8 (pages 5,6 are skipped)."""
+        indexed_pages = {doc["_source"]["page_number"] for doc in sec_b_skip_chunks}
+        assert indexed_pages <= self._EXPECTED_SEC_B, (
+            f"Sec B has unexpected pages: {indexed_pages - self._EXPECTED_SEC_B}"
+        )
+
+    def test_page_continuity_not_renumbered(self, sec_b_skip_chunks):
+        """Pages in Sec B must retain their original logical numbers (7, 8) —
+        numbering is NOT renumbered after the gap caused by the skip."""
+        indexed_pages = {doc["_source"]["page_number"] for doc in sec_b_skip_chunks}
+        for pn in indexed_pages:
+            assert pn >= 7, (
+                f"Sec B page_number={pn} is < 7 — pages may have been incorrectly renumbered"
+            )

@@ -155,6 +155,12 @@ class SingleFileProcessor:
             if sg_start is not None and sg_end is not None:
                 all_pages.update(range(sg_start, sg_end + 1))
 
+        # Remove explicitly skipped physical pages
+        skip_pages = set(scan_config.get("skip_pdf_pages", []))
+        if skip_pages:
+            log_handle.info(f"Skipping PDF pages: {sorted(skip_pages)}")
+            all_pages -= skip_pages
+
         return sorted(list(all_pages))
 
     def _get_bounded_logical_pages(self, scan_config, pdf_processor):
@@ -172,9 +178,12 @@ class SingleFileProcessor:
         if not hasattr(pdf_processor, 'expand_pages_with_bounds'):
             return self._get_page_list(scan_config)
 
+        skip_physical = set(scan_config.get("skip_pdf_pages", []))
+
         sub_sections = scan_config.get("sub_sections", [])
         if not sub_sections:
             # No sub-sections — fall back to plain expand_pages
+            # _get_page_list already filters skip_pdf_pages for physical pages
             pages_list = self._get_page_list(scan_config)
             return pdf_processor.expand_pages(pages_list)
 
@@ -186,7 +195,13 @@ class SingleFileProcessor:
             sg_end_side   = sg.get("end_side")
             if sg_start is None or sg_end is None:
                 continue
-            physical_pages = sorted(range(sg_start, sg_end + 1))
+            # Filter skip_pdf_pages from physical pages before expansion
+            physical_pages = [
+                p for p in sorted(range(sg_start, sg_end + 1))
+                if p not in skip_physical
+            ]
+            if not physical_pages:
+                continue
             if sg_start_side and sg_end_side:
                 expanded = pdf_processor.expand_pages_with_bounds(
                     physical_pages, sg_start, sg_start_side, sg_end, sg_end_side
@@ -420,7 +435,11 @@ class SingleFileProcessor:
                     uuid.NAMESPACE_URL,
                     f"{relative_path}#{sg_field}:{sg_name}"
                 ))
-                sub_pages = list(range(sg_start, sg_end + 1))
+                skip_physical = set(self._scan_config.get("skip_pdf_pages", []))
+                sub_pages = [
+                    p for p in range(sg_start, sg_end + 1)
+                    if p not in skip_physical
+                ]
                 sg_start_side = sg.get("start_side")
                 sg_end_side   = sg.get("end_side")
 
