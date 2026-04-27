@@ -26,12 +26,10 @@ const WhatsNew = () => {
 
     const updates = [
         {
-            date: "April 12, 2026",
-            newFeatures: [
-                "Search quality improvements: RRF hybrid search combining BM25 + semantic search",
-                "Results now stream per category — first tab appears faster",
-                "Text search toggle to force keyword search",
-                "All category tabs shown immediately on search with loading indicators",
+            date: "April 28, 2026",
+            newContent: [
+                "Granths: Yogsaar by Acharya Amitgati",
+                "Granths: Varasanuvekkha by Acharya Kund Kund",
             ],
         },
         {
@@ -43,6 +41,15 @@ const WhatsNew = () => {
                 "Granths: Updesh Siddhant Ratnamala by Shri Nemichand Bhandari",
                 "Granths: Anagaar Dharmamrut and Sagaar Dharmamrut by Pandit Ashadhar",
                 "Granths: Various Granths of Pandit Deepchand Kasliwal: Anubhav Prakash, Aatmavlokan, Chid Vilas, Anubhav Anand, Parmatma Puran, Savaiya Teeka and Bhav Deepika",
+            ],
+        },
+        {
+            date: "April 12, 2026",
+            newFeatures: [
+                "Search quality improvements: RRF hybrid search combining BM25 + semantic search",
+                "Results now stream per category — first tab appears faster",
+                "Text search toggle to force keyword search",
+                "All category tabs shown immediately on search with loading indicators",
             ],
         },
         {
