@@ -75,7 +75,7 @@ const ParseBookmarksControl = ({ isPDF, pdfDoc }) => {
             const ignored = [];
 
             data.bookmarks.forEach(bookmark => {
-                if (bookmark.pravachan_no || bookmark.date || bookmark.gatha || bookmark.kalash || bookmark.shlok || bookmark.sutra || bookmark.doha) {
+                if (bookmark.pravachan_no || bookmark.date || bookmark.gatha || bookmark.kalash || bookmark.shlok || bookmark.sutra || bookmark.doha || bookmark.kavya) {
                     extracted.push(bookmark);
                 } else {
                     ignored.push(bookmark);

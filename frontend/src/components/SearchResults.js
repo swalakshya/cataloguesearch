@@ -172,6 +172,7 @@ export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, re
                             {result.chunk_labels?.kalash && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Kalash: {result.chunk_labels.kalash}</span>}
                             {result.chunk_labels?.shlok && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Shlok: {result.chunk_labels.shlok}</span>}
                             {result.chunk_labels?.doha && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Doha: {result.chunk_labels.doha}</span>}
+                            {result.chunk_labels?.kavya && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Kavya: {result.chunk_labels.kavya}</span>}
                             {result.chunk_labels?.sutra && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Sutra: {result.chunk_labels.sutra}</span>}
                         </>
                     ) : (
@@ -183,8 +184,9 @@ export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, re
                             {result.chunk_labels?.kalash && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Kalash: {result.chunk_labels.kalash}</span>}
                             {result.chunk_labels?.shlok && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Shlok: {result.chunk_labels.shlok}</span>}
                             {result.chunk_labels?.doha && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Doha: {result.chunk_labels.doha}</span>}
+                            {result.chunk_labels?.kavya && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Kavya: {result.chunk_labels.kavya}</span>}
                             {result.chunk_labels?.sutra && <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Sutra: {result.chunk_labels.sutra}</span>}
-                            {!result.metadata?.volume && !result.chunk_labels?.date && !result.chunk_labels?.pravachan_number && !result.chunk_labels?.gatha && !result.chunk_labels?.kalash && !result.chunk_labels?.shlok && !result.chunk_labels?.doha && !result.chunk_labels?.sutra && (
+                            {!result.metadata?.volume && !result.chunk_labels?.date && !result.chunk_labels?.pravachan_number && !result.chunk_labels?.gatha && !result.chunk_labels?.kalash && !result.chunk_labels?.shlok && !result.chunk_labels?.doha && !result.chunk_labels?.kavya && !result.chunk_labels?.sutra && (
                                 <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· {result.filename}</span>
                             )}
                             <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>· Page No. {result.page_number}</span>

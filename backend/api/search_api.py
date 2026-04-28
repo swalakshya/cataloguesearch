@@ -566,6 +566,7 @@ async def get_chunk(request: Request, chunk_id: str, language: str = Query("hi",
             "shlok": chunk_labels.get("shlok"),
             "kalash": chunk_labels.get("kalash"),
             "doha": chunk_labels.get("doha"),
+            "kavya": chunk_labels.get("kavya"),
             "sutra": chunk_labels.get("sutra"),
         }
         return JSONResponse(content=result, status_code=200)

@@ -198,6 +198,7 @@ class LLMIndexGenerator(IndexGenerator):
                     "kalash": pravachan_data.get('kalash'),
                     "shlok": pravachan_data.get('shlok'),
                     "doha": pravachan_data.get('doha'),
+                    "kavya": pravachan_data.get('kavya'),
                     "sutra": pravachan_data.get('sutra'),
                     "timestamp_indexed": timestamp,
                     "language": language,

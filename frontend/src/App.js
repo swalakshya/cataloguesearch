@@ -1330,6 +1330,7 @@ const AppContent = () => {
                 if (attrs.shlok) parts.push(`Shlok ${attrs.shlok}`);
                 if (attrs.kalash) parts.push(`Kalash ${attrs.kalash}`);
                 if (attrs.dohra) parts.push(`Doha ${attrs.dohra}`);
+                if (attrs.kavya) parts.push(`Kavya ${attrs.kavya}`);
             }
             if (attrs.page) parts.push(`पृष्ठ ${attrs.page}`);
             if (attrs.date) parts.push(attrs.date);
@@ -1379,6 +1380,7 @@ const AppContent = () => {
                 citation.kalash  && `Kalash ${citation.kalash}`,
                 // citations use "dohra", chunk_labels use "doha" — handle both
                 (citation.dohra || citation.doha) && `Doha ${citation.dohra || citation.doha}`,
+                citation.kavya   && `Kavya ${citation.kavya}`,
                 citation.sutra   && `Sutra ${citation.sutra}`,
             ].filter(Boolean);
             parts.push(...verseLocators);
@@ -1470,6 +1472,7 @@ const AppContent = () => {
             citation.dohra !== undefined && citation.dohra !== null ? `Dohra ${citation.dohra}` : null,
             citation.doha !== undefined && citation.doha !== null ? `Doha ${citation.doha}` : null,
             citation.kalash !== undefined && citation.kalash !== null ? `Kalash ${citation.kalash}` : null,
+            citation.kavya !== undefined && citation.kavya !== null ? `Kavya ${citation.kavya}` : null,
             citation.sutra !== undefined && citation.sutra !== null ? `Sutra ${citation.sutra}` : null,
         ].filter(Boolean);
 

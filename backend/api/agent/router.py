@@ -108,6 +108,7 @@ def _chunk_from_hit(hit: Dict[str, Any], language: str) -> Dict[str, Any]:
         "gatha": chunk_labels.get("gatha"),
         "kalash": chunk_labels.get("kalash"),
         "shlok": chunk_labels.get("shlok"),
+        "kavya": chunk_labels.get("kavya"),
         "series": metadata.get("Series"),
         "volume": metadata.get("volume"),
         "series_start_date": metadata.get("series_start_date"),

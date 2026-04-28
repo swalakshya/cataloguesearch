@@ -30,6 +30,14 @@ const WhatsNew = () => {
             newContent: [
                 "Granths: Yogsaar by Acharya Amitgati",
                 "Granths: Varasanuvekkha by Acharya Kund Kund",
+                "Granths: Tattvanushashan by Muni Nagsen",
+                "Granths: Sukumal Charitra by Acharya Sakalkirti",
+                "Granths: Bhagwati Aradhana by Acharya Shivarya",
+                "Granths: Shantinath Puran (Gujarati) by Acharya Sakalkirti",
+                "Granths: Laghu Tattvasphot by Acharya Amritchandra",
+                "Granths: Gnaanarnav by Acharya Shubhchandra",
+                "Granths: Samyag Gyan Chandrika (Jeevkand) by Pandit Todarmal",
+                "Pravachans: Bhaktamar Stotra and Rishabh Stotra",
             ],
         },
         {

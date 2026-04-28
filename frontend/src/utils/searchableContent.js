@@ -189,6 +189,18 @@ export const searchableContent = [
     count: 50,
     hindi: "searchable",
     gujarati: null
+  },
+  {
+    granth: "Bhaktamar Stotra",
+    count: null,
+    hindi: "searchable",
+    gujarati: null
+  },
+  {
+    granth: "Rishabh Stotra",
+    count: null,
+    hindi: "searchable",
+    gujarati: null
   }
 ];
 
@@ -442,8 +454,44 @@ export const searchableGranths = [
     status: "searchable"
   },
   {
+    name: "Tattvanushashan",
+    author: "Muni Nagsen",
+    status: "searchable"
+  },
+  {
+    name: "Sukumal Charitra",
+    author: "Acharya Sakalkirti",
+    status: "searchable"
+  },
+  {
+    name: "Bhagwati Aradhana",
+    author: "Acharya Shivarya",
+    status: "searchable"
+  },
+  {
+    name: "Shantinath Puran",
+    author: "Acharya Sakalkirti",
+    status: "searchable"
+  },
+  {
+    name: "Laghu Tattvasphot",
+    author: "Acharya Amritchandra",
+    status: "searchable"
+  },
+  {
     name: "Charcha Sangrah",
-    author: "Pandit Raimall"
+    author: "Pandit Raimall",
+    status: "searchable"
+  },
+  {
+    name: "Gnaanarnav",
+    author: "Acharya Shubhchandra",
+    status: "searchable"
+  },
+  {
+    name: "Samyag Gyan Chandrika",
+    author: "Pandit Todarmal",
+    status: "searchable"
   }
 ];
 

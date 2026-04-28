@@ -68,6 +68,9 @@ const ParsedBookmarksModal = ({
                 <td className="py-2 px-3 text-sm text-slate-700 text-center">
                     {bookmark.doha || '-'}
                 </td>
+                <td className="py-2 px-3 text-sm text-slate-700 text-center">
+                    {bookmark.kavya || '-'}
+                </td>
             </tr>
         );
     };
@@ -171,6 +174,9 @@ const ParsedBookmarksModal = ({
                                                     </th>
                                                     <th className="py-2 px-3 text-left text-xs font-semibold text-green-900 uppercase tracking-wider text-center">
                                                         Doha
+                                                    </th>
+                                                    <th className="py-2 px-3 text-left text-xs font-semibold text-green-900 uppercase tracking-wider text-center">
+                                                        Kavya
                                                     </th>
                                                 </tr>
                                             </thead>

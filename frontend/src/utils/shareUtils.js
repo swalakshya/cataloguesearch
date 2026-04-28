@@ -23,6 +23,7 @@ export const formatGranthShareContent = (query, result, shareUrl) => {
     if (result?.chunk_labels?.shlok) locationParts.push(`Shlok ${result.chunk_labels.shlok}`);
     if (result?.chunk_labels?.sutra) locationParts.push(`Sutra ${result.chunk_labels.sutra}`);
     if (result?.chunk_labels?.doha) locationParts.push(`Doha ${result.chunk_labels.doha}`);
+    if (result?.chunk_labels?.kavya) locationParts.push(`Kavya ${result.chunk_labels.kavya}`);
     const locationInfo = locationParts.join(', ');
 
     return {

@@ -50,8 +50,8 @@ Parse the following list of indexed bookmark titles and return the results:
 {indexed_titles_json}
 
 CRITICAL: Return ONLY a valid JSON array. Do NOT include any explanations, markdown formatting, or additional text.
-Your response must be a JSON array where each element has: index, page, pravachan_no, date, gatha, kalash, shlok, doha, sutra
-Example format: [{{"index": 0, "page": 5, "pravachan_no": "244-A", "date": "07-11-1965", "gatha": null, "kalash": "219", "shlok": null, "doha": null, "sutra": null}}]"""
+Your response must be a JSON array where each element has: index, page, pravachan_no, date, gatha, kalash, shlok, doha, kavya, sutra
+Example format: [{{"index": 0, "page": 5, "pravachan_no": "244-A", "date": "07-11-1965", "gatha": null, "kalash": "219", "shlok": null, "doha": null, "kavya": null, "sutra": null}}, {{"index": 1, "page": 61, "pravachan_no": null, "date": null, "gatha": null, "kalash": null, "shlok": null, "doha": null, "kavya": "7", "sutra": null}}]"""
 
         payload = {
             "model": self.model,
@@ -139,7 +139,7 @@ Example format: [{{"index": 0, "page": 5, "pravachan_no": "244-A", "date": "07-1
                 if parsed_data:
                     # Post-process: Convert "N/A" strings to None
                     for item in parsed_data:
-                        for field in ('pravachan_no', 'date', 'gatha', 'kalash', 'shlok', 'doha', 'sutra'):
+                        for field in ('pravachan_no', 'date', 'gatha', 'kalash', 'shlok', 'doha', 'kavya', 'sutra'):
                             if item.get(field) == 'N/A':
                                 item[field] = None
 

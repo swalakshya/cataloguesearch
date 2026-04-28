@@ -213,7 +213,7 @@ class SingleFileProcessor:
         return sorted(logical)
 
     # All meaningful fields that the bookmark extractor can return
-    _BOOKMARK_FIELDS = ("pravachan_no", "date", "gatha", "kalash", "shlok", "doha", "sutra")
+    _BOOKMARK_FIELDS = ("pravachan_no", "date", "gatha", "kalash", "shlok", "doha", "kavya", "sutra")
 
     def _apply_forward_fill(self, parsed_bookmarks, total_pages):
         """

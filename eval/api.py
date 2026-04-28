@@ -112,6 +112,7 @@ class BookmarkData(BaseModel):
     kalash: Optional[str] = None
     shlok: Optional[str] = None
     doha: Optional[str] = None
+    kavya: Optional[str] = None
     sutra: Optional[str] = None
 
 class BookmarkExtractionResponse(BaseModel):
@@ -594,6 +595,7 @@ async def extract_bookmarks(request: BookmarkExtractionRequest):
                 kalash=b.get('kalash'),
                 shlok=b.get('shlok'),
                 doha=b.get('doha'),
+                kavya=b.get('kavya'),
                 sutra=b.get('sutra'),
             )
             for b in bookmarks_data
@@ -1400,7 +1402,7 @@ async def get_unindexed_pdfs():
             for ss in sub_sections:
                 field = ss.get("field", "")
                 name = ss.get("name", "")
-                sub_key = f"{field}:{name}" if field else name
+                sub_key = f"{field}:{name}"
                 doc_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{relative_path}#{sub_key}"))
                 state = all_states.get(doc_id, {})
                 sub_config_hash = _config_hash({**file_metadata, "sub_section": {"field": field, "name": name}})
