@@ -1113,6 +1113,37 @@ async def get_classifier_bookmarks(ocr_relative_path: str):
         raise HTTPException(status_code=500, detail=f"Error extracting bookmarks: {str(e)}")
 
 
+@router.get("/pdf/parsed-bookmarks")
+async def get_parsed_bookmarks(ocr_relative_path: str):
+    """
+    Return the parsed bookmark metadata stored in index_state for this document.
+    These are LLM-extracted fields (pravachan_no, date, gatha, etc.) per bookmark page.
+    """
+    try:
+        config = Config("configs/config.yaml")
+        db_path = config.SQLITE_DB_PATH
+
+        if not db_path or not os.path.isfile(db_path):
+            return {"bookmarks": []}
+
+        relative_path = ocr_relative_path + ".pdf"
+        doc_id = str(uuid.uuid5(uuid.NAMESPACE_URL, relative_path))
+
+        index_state = IndexState(db_path)
+        state = index_state.get_state(doc_id)
+
+        raw = state.get("parsed_bookmarks")
+        if not raw:
+            return {"bookmarks": []}
+
+        bookmarks = json.loads(raw) if isinstance(raw, str) else raw
+        return {"bookmarks": bookmarks}
+
+    except Exception as e:
+        log_handle.error(f"Error fetching parsed bookmarks: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error fetching parsed bookmarks: {str(e)}")
+
+
 @router.get("/pdf/page-image")
 async def get_classifier_page_image(ocr_relative_path: str, logical_page: int):
     """

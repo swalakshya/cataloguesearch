@@ -497,6 +497,11 @@ export const searchableGranths = [
     name: "Moksha Shastra",
     author: "Acharya Umaswami",
     status: "searchable"
+  },
+  {
+    name: "Param Adhyatm Tarangini",
+    author: "Acharya Shubhchandra",
+    status: "searchable"
   }
 ];
 

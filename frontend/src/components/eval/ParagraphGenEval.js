@@ -52,6 +52,7 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
     } = usePDFJsViewer();
     const [showBookmarksModal, setShowBookmarksModal] = useState(false);
     const [bookmarks, setBookmarks] = useState([]);
+    const [parsedBookmarks, setParsedBookmarks] = useState([]);
 
     // PDF page rendering
     const [pdfPageDataUrl, setPdfPageDataUrl] = useState(null);
@@ -190,9 +191,10 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
             // Fetch page-mapping + bookmarks from backend (works for both multi-page and single-page)
             const ocrRelPath = relativePath;
             try {
-                const [mappingData, bookmarkData] = await Promise.all([
+                const [mappingData, bookmarkData, parsedBookmarkData] = await Promise.all([
                     fetch(`${API_BASE_URL}/eval/pdf/page-mapping?ocr_relative_path=${encodeURIComponent(ocrRelPath)}`).then(r => r.ok ? r.json() : null),
                     fetch(`${API_BASE_URL}/eval/pdf/bookmarks?ocr_relative_path=${encodeURIComponent(ocrRelPath)}`).then(r => r.ok ? r.json() : null),
+                    fetch(`${API_BASE_URL}/eval/pdf/parsed-bookmarks?ocr_relative_path=${encodeURIComponent(ocrRelPath)}`).then(r => r.ok ? r.json() : null),
                 ]);
                 const mapping = mappingData?.page_mapping || null;
                 setPageMapping(mapping);
@@ -204,11 +206,13 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
                     items: [],
                 }));
                 setBookmarks(adapted);
+                setParsedBookmarks(parsedBookmarkData?.bookmarks || []);
             } catch (e) {
                 console.warn('Could not load page-mapping/bookmarks from backend:', e);
                 setPageMapping(null);
                 pageMappingRef.current = null;
                 setBookmarks([]);
+                setParsedBookmarks([]);
             }
 
             // Load and display files
@@ -752,6 +756,7 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                             setError(null);
                             setPageMapping(null);
                             pageMappingRef.current = null;
+                            setParsedBookmarks([]);
                         }}
                         className="px-4 py-2 text-sm bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors"
                     >
@@ -883,9 +888,28 @@ Please select the SOURCE directory (${selection.sourcePath})`;
 
                     {/* Generated Paragraphs Column */}
                     <div className="flex-1 p-4">
-                        <div className="flex justify-between items-center mb-3">
-                            <h3 className="text-lg font-semibold text-slate-800">Generated Paragraphs</h3>
-                            <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 mb-3">
+                            <h3 className="text-lg font-semibold text-slate-800 flex-shrink-0">Generated Paragraphs</h3>
+                            {(() => {
+                                const currentPage = parseInt(jumpPageNumber, 10);
+                                const activeBookmark = parsedBookmarks.length && !isNaN(currentPage)
+                                    ? parsedBookmarks.filter(b => b.page <= currentPage).at(-1) ?? null
+                                    : null;
+                                if (!activeBookmark) return null;
+                                const LABELS = { pravachan_no: 'Pravachan', date: 'Date', gatha: 'Gatha', kalash: 'Kalash', shlok: 'Shlok', doha: 'Doha', kavya: 'Kavya', sutra: 'Sutra' };
+                                const fields = Object.entries(LABELS).filter(([k]) => activeBookmark[k] != null);
+                                if (!fields.length) return null;
+                                return (
+                                    <div className="flex items-center gap-1 flex-wrap flex-1">
+                                        {fields.map(([k, label]) => (
+                                            <span key={k} className="bg-indigo-100 text-indigo-800 text-sm font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap">
+                                                {label}: {activeBookmark[k]}
+                                            </span>
+                                        ))}
+                                    </div>
+                                );
+                            })()}
+                            <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
                                 <CopyPathButton
                                     path={getTxtPath()}
                                     label="TXT"
