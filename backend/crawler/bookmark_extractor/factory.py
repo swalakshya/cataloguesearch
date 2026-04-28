@@ -49,26 +49,27 @@ def create_bookmark_extractor(config: Config) -> BookmarkExtractor:
     """
     Factory function to create the appropriate BookmarkExtractor based on config.
 
-    Primary extractor is always Gemini (using DEFAULT_LLM_MODEL).
-    Falls back to the extractor defined by BOOKMARK_EXTRACTOR_LLM if Gemini fails.
+    Primary extractor is determined by BOOKMARK_EXTRACTOR_LLM config.
+    If primary is not Gemini, Gemini is wired as the fallback.
 
     Args:
         config: Configuration object
 
     Returns:
-        GeminiBookmarkExtractor with a fallback extractor wired up
+        BookmarkExtractor with fallback wired up
     """
+    primary_llm_type = (config.BOOKMARK_EXTRACTOR_LLM or "gemini").lower()
     gemini_model = config.DEFAULT_LLM_MODEL or "gemini-2.5-flash"
-    fallback_llm_type = config.BOOKMARK_EXTRACTOR_LLM
+
+    if primary_llm_type == "gemini":
+        log_handle.info("Creating bookmark extractor: primary=gemini(%s), no fallback", gemini_model)
+        return GeminiBookmarkExtractor(model=gemini_model)
 
     log_handle.info(
-        "Creating bookmark extractor: primary=gemini(%s), fallback=%s",
-        gemini_model, fallback_llm_type
+        "Creating bookmark extractor: primary=%s, fallback=gemini(%s)",
+        primary_llm_type, gemini_model
     )
 
-    primary = GeminiBookmarkExtractor(model=gemini_model)
-
-    if fallback_llm_type:
-        primary._fallback_extractor = create_bookmark_extractor_by_name(fallback_llm_type)
-
+    primary = create_bookmark_extractor_by_name(primary_llm_type)
+    primary._fallback_extractor = GeminiBookmarkExtractor(model=gemini_model)
     return primary
