@@ -492,6 +492,11 @@ export const searchableGranths = [
     name: "Samyag Gyan Chandrika",
     author: "Pandit Todarmal",
     status: "searchable"
+  },
+  {
+    name: "Moksha Shastra",
+    author: "Acharya Umaswami",
+    status: "searchable"
   }
 ];
 

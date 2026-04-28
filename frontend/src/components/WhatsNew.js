@@ -38,6 +38,7 @@ const WhatsNew = () => {
                 "Granths: Gnaanarnav by Acharya Shubhchandra",
                 "Granths: Samyag Gyan Chandrika (Jeevkand) by Pandit Todarmal",
                 "Pravachans: Bhaktamar Stotra and Rishabh Stotra",
+                "Granths: Moksha Shastra by Acharya Umaswami",
             ],
         },
         {
