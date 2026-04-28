@@ -595,6 +595,125 @@ const AppContent = () => {
         }
     }, [chatEnabled, chatSessionId, chatMessages]);
 
+    // SF3: visibilitychange handler — recover an in-flight message when the tab returns
+    useEffect(() => {
+        if (!chatEnabled || !chatSessionId) return;
+
+        const onVisible = async () => {
+            if (document.visibilityState !== 'visible') return;
+            const pendingKey = `pending_msg_${chatSessionId}`;
+            let pending = null;
+            try { pending = JSON.parse(localStorage.getItem(pendingKey)); } catch {}
+            if (!pending?.messageId) return;
+
+            try {
+                const jobStatus = await api.getChatMessageResult(chatSessionId, pending.messageId);
+
+                if (jobStatus.status === 'done') {
+                    // LLM finished while the tab was in the background — render immediately
+                    const { status: _s, message_id: _m, ...result } = jobStatus;
+                    applyChatResponse(result, null);
+                    localStorage.removeItem(pendingKey);
+
+                } else if (jobStatus.status === 'processing') {
+                    // Still running — reconnect to stream from the last received cursor
+                    setLlmLoading(true);
+                    try {
+                        const saveCursor = (id) => {
+                            try {
+                                const raw = localStorage.getItem(pendingKey);
+                                if (raw) {
+                                    const p = JSON.parse(raw);
+                                    p.lastEventId = id;
+                                    localStorage.setItem(pendingKey, JSON.stringify(p));
+                                }
+                            } catch {}
+                        };
+                        const data = await api.streamChatMessageResult(chatSessionId, pending.messageId, {
+                            lastEventId: pending.lastEventId ?? null,
+                            onEvent: (event) => {
+                                if (event?.type !== 'stage') return;
+                                setChatMessages(prev => {
+                                    const updated = [...prev];
+                                    const idx = updated.findIndex(m => m.role === 'assistant' && m.pending);
+                                    if (idx !== -1) updated[idx] = { ...updated[idx], stage: event.stage, stageLabel: event.label };
+                                    return updated;
+                                });
+                            },
+                            onEventId: saveCursor,
+                        });
+                        if (data) {
+                            applyChatResponse(data, null);
+                            localStorage.removeItem(pendingKey);
+                        }
+                    } finally {
+                        setLlmLoading(false);
+                    }
+                }
+            } catch (err) {
+                if (err?.status === 404) {
+                    // Job expired or server restarted mid-processing — inform the user
+                    localStorage.removeItem(pendingKey);
+                    setChatMessages(prev => prev.filter(m => !(m.role === 'assistant' && m.pending)));
+                    setChatNotice('Response was lost while the app was in the background. Please send your question again.');
+                    setTimeout(() => setChatNotice(null), 6000);
+                }
+            }
+        };
+
+        document.addEventListener('visibilitychange', onVisible);
+        return () => document.removeEventListener('visibilitychange', onVisible);
+    }, [chatEnabled, chatSessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // SF3: on startup, check if a message was in-flight when the app was last closed
+    useEffect(() => {
+        if (!chatEnabled || !chatSessionId) return;
+        const pendingKey = `pending_msg_${chatSessionId}`;
+        let pending = null;
+        try { pending = JSON.parse(localStorage.getItem(pendingKey)); } catch {}
+        if (!pending?.messageId) return;
+
+        // Ensure there's a visible pending placeholder so the user sees the spinner
+        setChatMessages(prev => {
+            const hasPending = prev.some(m => m.role === 'assistant' && m.pending);
+            if (hasPending) return prev;
+            return [...prev, { role: 'assistant', pending: true, stage: 'understanding', stageLabel: 'Understanding your question' }];
+        });
+
+        // Trigger recovery by emitting a synthetic visibilitychange (app just became visible)
+        api.getChatMessageResult(chatSessionId, pending.messageId).then(jobStatus => {
+            if (jobStatus.status === 'done') {
+                const { status: _s, message_id: _m, ...result } = jobStatus;
+                applyChatResponse(result, null);
+                try { localStorage.removeItem(pendingKey); } catch {}
+            } else if (jobStatus.status === 'processing') {
+                setLlmLoading(true);
+                api.streamChatMessageResult(chatSessionId, pending.messageId, {
+                    lastEventId: pending.lastEventId ?? null,
+                    onEvent: (event) => {
+                        if (event?.type !== 'stage') return;
+                        setChatMessages(prev => {
+                            const updated = [...prev];
+                            const idx = updated.findIndex(m => m.role === 'assistant' && m.pending);
+                            if (idx !== -1) updated[idx] = { ...updated[idx], stage: event.stage, stageLabel: event.label };
+                            return updated;
+                        });
+                    },
+                }).then(data => {
+                    if (data) { applyChatResponse(data, null); try { localStorage.removeItem(pendingKey); } catch {} }
+                }).catch(() => {
+                    try { localStorage.removeItem(pendingKey); } catch {}
+                    setChatMessages(prev => prev.filter(m => !(m.role === 'assistant' && m.pending)));
+                }).finally(() => setLlmLoading(false));
+            }
+        }).catch(err => {
+            if (err?.status === 404) {
+                try { localStorage.removeItem(pendingKey); } catch {}
+                setChatMessages(prev => prev.filter(m => !(m.role === 'assistant' && m.pending)));
+            }
+        });
+    }, [chatEnabled, chatSessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+
     const getChatSessionPayload = useCallback(() => {
         const languageCode = language === 'gujarati' ? 'gu' : 'hi';
         return {
@@ -765,71 +884,118 @@ const AppContent = () => {
         setIsLoading(false);
     }, [activeCategories, buildSearchPayload, chatSessionId, clearPersistedChatSession, query, resetTypingState]);
 
-    async function handleChatSend(sessionId, message) {
-        if (!message.trim()) {
-            return;
+    // Renders a completed LLM response into chatMessages (replaces the pending placeholder).
+    // question is stored on the msg for follow-up navigation; uses preTokenizeCitations from outer scope.
+    function applyChatResponse(data, question) {
+        setChatMessages(prev => {
+            const { content, citationBlocks } = preTokenizeCitations(data.answer || '');
+            const updated = [...prev];
+            const idx = updated.findIndex(item => item.role === 'assistant' && item.pending);
+            const msg = {
+                role: 'assistant',
+                content,
+                citationBlocks,
+                follow_up_questions: data.follow_up_questions || [],
+                references: data.references || [],
+                citations: data.citations || [],
+                tool_trace_id: data.tool_trace_id || null,
+                question: question || '',
+                rawAnswer: data.answer || '',
+            };
+            if (idx !== -1) { updated[idx] = msg; return updated; }
+            return [...updated, msg];
+        });
+
+        // Fetch inline chunk quote text in background
+        const chunkIdMatches = [...(data.answer || '').matchAll(/^\s*>\s*\{\{([^}]+)\}\}\s*$/gm)];
+        if (chunkIdMatches.length > 0) {
+            const uniqueIds = [...new Set(chunkIdMatches.map(m => m[1]))];
+            const toFetch = uniqueIds.filter(id => !chunkTextsCache[id]);
+            if (toFetch.length > 0) {
+                const languageCode = language === 'gujarati' ? 'gu' : 'hi';
+                Promise.all(toFetch.map(id => api.getChunk(id, languageCode))).then(results => {
+                    const fetched = {};
+                    results.forEach((res, i) => { if (res?.text_content) fetched[toFetch[i]] = res; });
+                    if (Object.keys(fetched).length > 0) setChunkTextsCache(prev => ({ ...prev, ...fetched }));
+                });
+            }
         }
+    }
+
+    async function handleChatSend(sessionId, message) {
+        if (!message.trim()) return;
+
         setLlmLoading(true);
         setLlmError(null);
         setChatMessages(prev => [
             ...prev,
             { role: 'user', content: message },
-            {
-                role: 'assistant',
-                pending: true,
-                stage: 'understanding',
-                stageLabel: 'Understanding your question'
-            }
+            { role: 'assistant', pending: true, stage: 'understanding', stageLabel: 'Understanding your question' }
         ]);
         setChatInput('');
         setChatInputVisible(false);
 
-        const sendStructuredMessage = async (targetSessionId) => api.sendChatMessageStream(
-            targetSessionId,
-            {
+        const onStageEvent = (event) => {
+            if (event?.type !== 'stage') return;
+            setChatMessages(prev => {
+                const updated = [...prev];
+                const idx = updated.findIndex(item => item.role === 'assistant' && item.pending);
+                if (idx !== -1) {
+                    updated[idx] = {
+                        ...updated[idx],
+                        stage: event.stage || updated[idx].stage,
+                        stageLabel: event.label || updated[idx].stageLabel
+                    };
+                }
+                return updated;
+            });
+        };
+
+        // Build a submit+stream function for a given session, storing cursor in localStorage
+        const streamForSession = async (targetSessionId, clientMsgId) => {
+            const pendingKey = `pending_msg_${targetSessionId}`;
+            const saveCursor = (lastEventId) => {
+                try { localStorage.setItem(pendingKey, JSON.stringify({ messageId: clientMsgId, lastEventId })); } catch {}
+            };
+
+            // Optimistically record that a message is in-flight BEFORE submitting,
+            // so visibilitychange can recover even if the POST response is lost.
+            saveCursor(null);
+
+            const { message_id: messageId } = await api.submitChatMessage(targetSessionId, {
                 role: 'user',
                 content: message,
                 response_format: 'structured',
-                filters: buildLlmFilters()
-            },
-            (event) => {
-                if (event?.type !== 'stage') return;
-                setChatMessages(prev => {
-                    const updated = [...prev];
-                    const idx = updated.findIndex(item => item.role === 'assistant' && item.pending);
-                    if (idx !== -1) {
-                        updated[idx] = {
-                            ...updated[idx],
-                            stage: event.stage || updated[idx].stage,
-                            stageLabel: event.label || updated[idx].stageLabel
-                        };
-                    }
-                    return updated;
-                });
-            }
-        );
+                filters: buildLlmFilters(),
+                client_message_id: clientMsgId,
+            });
+
+            return api.streamChatMessageResult(targetSessionId, messageId, {
+                lastEventId: null,
+                onEvent: onStageEvent,
+                onEventId: saveCursor,
+            });
+        };
+
+        // Generate a stable client-side message ID for idempotency
+        const clientMsgId = crypto.randomUUID();
 
         try {
             let data;
             try {
-                data = await sendStructuredMessage(sessionId);
+                data = await streamForSession(sessionId, clientMsgId);
             } catch (error) {
-                if (error?.detail !== 'session_not_found') {
-                    throw error;
-                }
+                if (error?.detail !== 'session_not_found') throw error;
 
+                // Session expired — clear stale pending key and start fresh
+                try { localStorage.removeItem(`pending_msg_${sessionId}`); } catch {}
                 clearPersistedChatSession();
                 flushSync(() => {
                     resetTypingState();
                     setChatSessionId(null);
                     setChatMessages([
                         { role: 'user', content: message },
-                        {
-                            role: 'assistant',
-                            pending: true,
-                            stage: 'understanding',
-                            stageLabel: 'Understanding your question'
-                        }
+                        { role: 'assistant', pending: true, stage: 'understanding', stageLabel: 'Understanding your question' }
                     ]);
                 });
                 setChatNotice('Previous session expired. Starting a new session…');
@@ -837,60 +1003,30 @@ const AppContent = () => {
 
                 const freshSession = await api.createChatSession(getChatSessionPayload());
                 setChatSessionId(freshSession.session_id);
-                data = await sendStructuredMessage(freshSession.session_id);
+                data = await streamForSession(freshSession.session_id, crypto.randomUUID());
             }
-            if (!data) {
-                throw new Error('No response received from server.');
-            }
-            setChatMessages(prev => {
-                const { content, citationBlocks } = preTokenizeCitations(data.answer || '');
-                const updated = [...prev];
-                const idx = updated.findIndex(item => item.role === 'assistant' && item.pending);
-                const msg = {
-                    role: 'assistant',
-                    content,
-                    citationBlocks,
-                    follow_up_questions: data.follow_up_questions || [],
-                    references: data.references || [],
-                    citations: data.citations || [],
-                    tool_trace_id: data.tool_trace_id || null,
-                    question: message,
-                    rawAnswer: data.answer || '',
-                };
-                if (idx !== -1) {
-                    updated[idx] = msg;
-                    return updated;
-                }
-                return [...updated, msg];
-            });
 
-            // Fetch text content for any inline chunk quote references in the answer
-            const chunkIdMatches = [...(data.answer || '').matchAll(/^\s*>\s*\{\{([^}]+)\}\}\s*$/gm)];
-            if (chunkIdMatches.length > 0) {
-                const uniqueIds = [...new Set(chunkIdMatches.map(m => m[1]))];
-                const toFetch = uniqueIds.filter(id => !chunkTextsCache[id]);
-                if (toFetch.length > 0) {
-                    const languageCode = language === 'gujarati' ? 'gu' : 'hi';
-                    Promise.all(toFetch.map(id => api.getChunk(id, languageCode))).then(results => {
-                        const fetched = {};
-                        results.forEach((res, i) => {
-                            if (res?.text_content) fetched[toFetch[i]] = res;
-                        });
-                        if (Object.keys(fetched).length > 0) {
-                            setChunkTextsCache(prev => ({ ...prev, ...fetched }));
-                        }
-                    });
-                }
-            }
+            if (!data) throw new Error('No response received from server.');
+
+            applyChatResponse(data, message);
+
+            // Clear the in-flight marker — response successfully delivered
+            try { localStorage.removeItem(`pending_msg_${sessionId}`); } catch {}
         } catch (error) {
             if (error?.detail === 'session_not_found') {
                 clearPersistedChatSession();
+                try { localStorage.removeItem(`pending_msg_${sessionId}`); } catch {}
                 setChatSessionId(null);
                 setChatMessages([]);
                 setLlmError('The previous chat session expired. Please send your question again.');
             } else {
                 setLlmError('Could not continue chat. Please try again.');
                 setChatMessages(prev => prev.filter(item => !(item.role === 'assistant' && item.pending)));
+                // 4xx = definitive server rejection → clear pending
+                // 5xx/network = ambiguous → keep pending so visibilitychange can recover
+                if (error?.status >= 400 && error?.status < 500) {
+                    try { localStorage.removeItem(`pending_msg_${sessionId}`); } catch {}
+                }
             }
         } finally {
             setLlmLoading(false);

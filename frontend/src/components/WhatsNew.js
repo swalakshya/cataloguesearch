@@ -41,6 +41,10 @@ const WhatsNew = () => {
                 "Granths: Moksha Shastra by Acharya Umaswami",
                 "Granths: Param Adhyatm Tarangini by Acharya Shubhchandra",
                 "Granths: Samyag Gyan Chandrika (Karmkand, Labdhisaar, Kshapanasaar) by Pandit Todarmal",
+                "Granths: Pravachansaar — Tattparyavratti (Tikakaar: Acharya Jaysen)",
+                "Granths: Panchastikaya — Tattparyavratti (Tikakaar: Acharya Jaysen)",
+                "Granths: Atmanushashan by Acharya Gunbhadra (Tikakaar: Pandit Todarmal)",
+                "Granths: Pandav Puran (Gujarati) by Acharya Shubhchandra",
             ],
         },
         {

@@ -289,25 +289,24 @@ export const api = {
 
     sendChatMessage: async (sessionId, requestPayload) => {
         try {
-            const response = await fetch(`${LLM_API_BASE_URL}/v1/chat/sessions/${sessionId}/messages`, {
+            // Step 1: submit (returns 202 { message_id })
+            const submitResponse = await fetch(`${LLM_API_BASE_URL}/v1/chat/sessions/${sessionId}/messages`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(requestPayload),
             });
-            if (!response.ok) {
+            if (!submitResponse.ok) {
                 let detail = null;
-                try {
-                    const body = await response.json();
-                    detail = body?.detail || null;
-                } catch {
-                    detail = null;
-                }
-                const error = new Error(detail || `HTTP error! status: ${response.status}`);
-                error.status = response.status;
+                try { const b = await submitResponse.json(); detail = b?.detail || null; } catch { detail = null; }
+                const error = new Error(detail || `HTTP error! status: ${submitResponse.status}`);
+                error.status = submitResponse.status;
                 error.detail = detail;
                 throw error;
             }
-            return await response.json();
+            const { message_id: messageId } = await submitResponse.json();
+
+            // Step 2: poll /result until done or error
+            return await pollChatMessageResult(sessionId, messageId);
         } catch (error) {
             console.error("API Error: Could not send chat message", error);
             throw error;
@@ -316,57 +315,66 @@ export const api = {
 
     sendChatMessageStream: async (sessionId, requestPayload, onEvent) => {
         try {
-            const response = await fetch(`${LLM_API_BASE_URL}/v1/chat/sessions/${sessionId}/messages/stream`, {
+            // Generate a stable message ID so reconnects don't duplicate the LLM call
+            const clientMessageId = crypto.randomUUID();
+
+            // Step 1: Submit (returns 202 { message_id })
+            const submitRes = await fetch(`${LLM_API_BASE_URL}/v1/chat/sessions/${sessionId}/messages`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestPayload),
+                body: JSON.stringify({ ...requestPayload, client_message_id: clientMessageId }),
             });
-            if (!response.ok) {
+            if (!submitRes.ok) {
                 let detail = null;
-                try {
-                    const body = await response.json();
-                    detail = body?.detail || null;
-                } catch {
-                    detail = null;
-                }
-                const error = new Error(detail || `HTTP error! status: ${response.status}`);
-                error.status = response.status;
+                try { const b = await submitRes.json(); detail = b?.detail || null; } catch { detail = null; }
+                const error = new Error(detail || `HTTP error! status: ${submitRes.status}`);
+                error.status = submitRes.status;
                 error.detail = detail;
                 throw error;
             }
+            const { message_id: messageId } = await submitRes.json();
 
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = '';
-            let finalPayload = null;
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-                for (const line of lines) {
-                    if (!line.startsWith('data: ')) continue;
-                    const payload = JSON.parse(line.slice(6));
-                    if (payload.type === 'stage') {
-                        onEvent?.(payload);
-                    } else if (payload.type === 'final') {
-                        finalPayload = payload.data;
-                    } else if (payload.type === 'error') {
-                        const error = new Error(payload.detail || 'message_failed');
-                        error.status = payload.status;
-                        error.detail = payload.detail;
-                        throw error;
-                    }
-                }
-            }
-
-            return finalPayload;
+            // Step 2: Open the GET /stream SSE endpoint (decoupled from submission)
+            return await streamMessageResult(sessionId, messageId, { lastEventId: null, onEvent });
         } catch (error) {
             console.error("API Error: Could not stream chat message", error);
             throw error;
         }
+    },
+
+    // SF2/SF3 decoupled methods — used by App.js for resilient chat delivery
+    submitChatMessage: async (sessionId, requestPayload) => {
+        const response = await fetch(`${LLM_API_BASE_URL}/v1/chat/sessions/${sessionId}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestPayload),
+        });
+        if (!response.ok) {
+            let detail = null;
+            try { const b = await response.json(); detail = b?.detail || null; } catch { detail = null; }
+            const error = new Error(detail || `HTTP error! status: ${response.status}`);
+            error.status = response.status;
+            error.detail = detail;
+            throw error;
+        }
+        return response.json(); // { message_id, status }
+    },
+
+    getChatMessageResult: async (sessionId, messageId) => {
+        const response = await fetch(`${LLM_API_BASE_URL}/v1/chat/sessions/${sessionId}/messages/${messageId}/result`);
+        let body = null;
+        try { body = await response.json(); } catch { body = null; }
+        if (!response.ok) {
+            const error = new Error(body?.detail || `HTTP error! status: ${response.status}`);
+            error.status = response.status;
+            error.detail = body?.detail || null;
+            throw error;
+        }
+        return body; // { status: 'processing'|'done'|'error', message_id, ...result }
+    },
+
+    streamChatMessageResult: async (sessionId, messageId, { lastEventId = null, onEvent, onEventId } = {}) => {
+        return streamMessageResult(sessionId, messageId, { lastEventId, onEvent, onEventId });
     },
 
     closeChatSession: async (sessionId) => {
@@ -574,3 +582,92 @@ export const api = {
         return await response.json();
     },
 };
+
+// Streams GET /stream SSE for a submitted message job. Used by sendChatMessageStream.
+// lastEventId: resume from this event index (for reconnect); null = start from beginning.
+// onEventId: called with each received SSE id for the caller to persist the cursor.
+async function streamMessageResult(sessionId, messageId, { lastEventId = null, onEvent, onEventId } = {}) {
+    const cursorParam = lastEventId !== null ? `?last_event_id=${lastEventId}` : '';
+    const streamUrl = `${LLM_API_BASE_URL}/v1/chat/sessions/${sessionId}/messages/${messageId}/stream${cursorParam}`;
+
+    const response = await fetch(streamUrl);
+    if (!response.ok) {
+        let detail = null;
+        try { const b = await response.json(); detail = b?.detail || null; } catch { detail = null; }
+        const error = new Error(detail || `HTTP error! status: ${response.status}`);
+        error.status = response.status;
+        error.detail = detail;
+        throw error;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    let finalPayload = null;
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() || '';
+        for (const line of lines) {
+            if (line.startsWith('id: ')) {
+                onEventId?.(Number(line.slice(4)));
+                continue;
+            }
+            if (!line.startsWith('data: ')) continue;
+            const payload = JSON.parse(line.slice(6));
+            if (payload.type === 'stage') {
+                onEvent?.(payload);
+            } else if (payload.type === 'final') {
+                finalPayload = payload.data;
+            } else if (payload.type === 'error') {
+                const error = new Error(payload.detail || 'message_failed');
+                error.status = payload.status;
+                error.detail = payload.detail;
+                throw error;
+            }
+        }
+    }
+
+    return finalPayload;
+}
+
+// Polls GET /result until the job is done or errored. Used by sendChatMessage.
+async function pollChatMessageResult(sessionId, messageId, { maxWaitMs = 300_000 } = {}) {
+    const resultUrl = `${LLM_API_BASE_URL}/v1/chat/sessions/${sessionId}/messages/${messageId}/result`;
+    const deadline = Date.now() + maxWaitMs;
+    let delay = 500;
+
+    while (Date.now() < deadline) {
+        const res = await fetch(resultUrl);
+        if (res.status === 202) {
+            const waitMs = delay;
+            delay = Math.min(Math.floor(delay * 1.5), 3000);
+            await new Promise((r) => setTimeout(r, waitMs));
+            continue;
+        }
+        let body = null;
+        try { body = await res.json(); } catch { body = null; }
+        if (!res.ok) {
+            const error = new Error(body?.detail || `HTTP error! status: ${res.status}`);
+            error.status = res.status;
+            error.detail = body?.detail || null;
+            throw error;
+        }
+        if (body?.status === 'error') {
+            const error = new Error(body.detail || 'message_failed');
+            error.status = 500;
+            error.detail = body.detail;
+            throw error;
+        }
+        // status === 'done': strip the envelope fields and return just the payload
+        const { status: _s, message_id: _m, ...result } = body;
+        return result;
+    }
+
+    const error = new Error('message_timeout');
+    error.detail = 'message_timeout';
+    throw error;
+}
