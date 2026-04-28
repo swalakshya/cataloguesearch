@@ -445,11 +445,32 @@ const AppContent = () => {
     const [displayedTexts, setDisplayedTexts] = useState({});
     const [chunkTextsCache, setChunkTextsCache] = useState({});
     const typingIntervalsRef = useRef({});
+    const recoveryTimeoutRef = useRef(null);
     const messagesEndRef = useRef(null);
     const latestUserBubbleRef = useRef(null);
+    const activeChatRunRef = useRef(0);
     const [showScrollDown, setShowScrollDown] = useState(false);
     const isChatMode = homeMode === 'chat';
     const chatEnabled = isChatMode;
+    const hasPendingChatMessage = chatMessages.some(msg => msg.role === 'assistant' && msg.pending);
+
+    const beginChatRun = useCallback(() => {
+        activeChatRunRef.current += 1;
+        return activeChatRunRef.current;
+    }, []);
+
+    const isActiveChatRun = useCallback((runId) => activeChatRunRef.current === runId, []);
+
+    const invalidateChatRuns = useCallback(() => {
+        activeChatRunRef.current += 1;
+    }, []);
+
+    const clearPendingMessage = useCallback((sessionId) => {
+        if (!sessionId) return;
+        try {
+            localStorage.removeItem(`pending_msg_${sessionId}`);
+        } catch {}
+    }, []);
 
     const resetTypingState = useCallback(() => {
         Object.values(typingIntervalsRef.current).forEach(clearInterval);
@@ -465,6 +486,118 @@ const AppContent = () => {
             console.warn('localStorage not available:', error);
         }
     }, []);
+
+    const clearRecoveryTimer = useCallback(() => {
+        if (recoveryTimeoutRef.current) {
+            clearTimeout(recoveryTimeoutRef.current);
+            recoveryTimeoutRef.current = null;
+        }
+    }, []);
+
+    function schedulePendingRecovery(sessionId, runId, delayMs = 1500) {
+        clearRecoveryTimer();
+        recoveryTimeoutRef.current = setTimeout(() => {
+            recoveryTimeoutRef.current = null;
+            if (isActiveChatRun(runId)) {
+                void recoverPendingMessage(sessionId, runId);
+            }
+        }, delayMs);
+    }
+
+    async function recoverPendingMessage(sessionId, runId = activeChatRunRef.current || beginChatRun()) {
+        if (!sessionId || !isActiveChatRun(runId)) return;
+
+        const pendingKey = `pending_msg_${sessionId}`;
+        let pending = null;
+        try { pending = JSON.parse(localStorage.getItem(pendingKey)); } catch {}
+        if (!pending?.messageId) return;
+
+        setChatMessages(prev => {
+            const hasPending = prev.some(m => m.role === 'assistant' && m.pending);
+            if (hasPending) return prev;
+            return [...prev, { role: 'assistant', pending: true, stage: 'understanding', stageLabel: 'Understanding your question' }];
+        });
+
+        try {
+            const jobStatus = await api.getChatMessageResult(sessionId, pending.messageId);
+            if (!isActiveChatRun(runId)) return;
+
+            if (jobStatus.status === 'done') {
+                const { status: _s, message_id: _m, ...result } = jobStatus;
+                applyChatResponse(result, null);
+                clearPendingMessage(sessionId);
+                clearRecoveryTimer();
+                setChatNotice(null);
+                setLlmLoading(false);
+                return;
+            }
+
+            if (jobStatus.status !== 'processing') return;
+
+            setLlmLoading(true);
+            const saveCursor = (id) => {
+                try {
+                    const raw = localStorage.getItem(pendingKey);
+                    if (raw) {
+                        const payload = JSON.parse(raw);
+                        payload.lastEventId = id;
+                        localStorage.setItem(pendingKey, JSON.stringify(payload));
+                    }
+                } catch {}
+            };
+
+            try {
+                const data = await api.streamChatMessageResult(sessionId, pending.messageId, {
+                    lastEventId: pending.lastEventId ?? null,
+                    onEvent: (event) => {
+                        if (!isActiveChatRun(runId) || event?.type !== 'stage') return;
+                        setChatMessages(prev => {
+                            const updated = [...prev];
+                            const idx = updated.findIndex(m => m.role === 'assistant' && m.pending);
+                            if (idx !== -1) updated[idx] = { ...updated[idx], stage: event.stage, stageLabel: event.label };
+                            return updated;
+                        });
+                    },
+                    onEventId: saveCursor,
+                });
+                if (!isActiveChatRun(runId)) return;
+                if (data) {
+                    applyChatResponse(data, null);
+                    clearPendingMessage(sessionId);
+                    clearRecoveryTimer();
+                    setChatNotice(null);
+                }
+            } catch (err) {
+                if (!isActiveChatRun(runId)) return;
+                if (err?.status === 404) {
+                    clearPendingMessage(sessionId);
+                    clearRecoveryTimer();
+                    setChatMessages(prev => prev.filter(m => !(m.role === 'assistant' && m.pending)));
+                    setChatNotice('Response was lost while the app was in the background. Please send your question again.');
+                    setTimeout(() => setChatNotice(null), 6000);
+                } else {
+                    setLlmError(null);
+                    setChatNotice('Connection interrupted. We’ll reconnect.');
+                    schedulePendingRecovery(sessionId, runId);
+                }
+            } finally {
+                if (isActiveChatRun(runId)) setLlmLoading(false);
+            }
+        } catch (err) {
+            if (!isActiveChatRun(runId)) return;
+            if (err?.status === 404) {
+                clearPendingMessage(sessionId);
+                clearRecoveryTimer();
+                setChatMessages(prev => prev.filter(m => !(m.role === 'assistant' && m.pending)));
+                setChatNotice('Response was lost while the app was in the background. Please send your question again.');
+                setTimeout(() => setChatNotice(null), 6000);
+            } else {
+                setLlmError(null);
+                setChatNotice('Connection interrupted. We’ll reconnect.');
+                schedulePendingRecovery(sessionId, runId);
+            }
+        }
+    }
 
     useEffect(() => {
         api.checkLlmHealth().then(setLlmAvailable);
@@ -601,64 +734,7 @@ const AppContent = () => {
 
         const onVisible = async () => {
             if (document.visibilityState !== 'visible') return;
-            const pendingKey = `pending_msg_${chatSessionId}`;
-            let pending = null;
-            try { pending = JSON.parse(localStorage.getItem(pendingKey)); } catch {}
-            if (!pending?.messageId) return;
-
-            try {
-                const jobStatus = await api.getChatMessageResult(chatSessionId, pending.messageId);
-
-                if (jobStatus.status === 'done') {
-                    // LLM finished while the tab was in the background — render immediately
-                    const { status: _s, message_id: _m, ...result } = jobStatus;
-                    applyChatResponse(result, null);
-                    localStorage.removeItem(pendingKey);
-
-                } else if (jobStatus.status === 'processing') {
-                    // Still running — reconnect to stream from the last received cursor
-                    setLlmLoading(true);
-                    try {
-                        const saveCursor = (id) => {
-                            try {
-                                const raw = localStorage.getItem(pendingKey);
-                                if (raw) {
-                                    const p = JSON.parse(raw);
-                                    p.lastEventId = id;
-                                    localStorage.setItem(pendingKey, JSON.stringify(p));
-                                }
-                            } catch {}
-                        };
-                        const data = await api.streamChatMessageResult(chatSessionId, pending.messageId, {
-                            lastEventId: pending.lastEventId ?? null,
-                            onEvent: (event) => {
-                                if (event?.type !== 'stage') return;
-                                setChatMessages(prev => {
-                                    const updated = [...prev];
-                                    const idx = updated.findIndex(m => m.role === 'assistant' && m.pending);
-                                    if (idx !== -1) updated[idx] = { ...updated[idx], stage: event.stage, stageLabel: event.label };
-                                    return updated;
-                                });
-                            },
-                            onEventId: saveCursor,
-                        });
-                        if (data) {
-                            applyChatResponse(data, null);
-                            localStorage.removeItem(pendingKey);
-                        }
-                    } finally {
-                        setLlmLoading(false);
-                    }
-                }
-            } catch (err) {
-                if (err?.status === 404) {
-                    // Job expired or server restarted mid-processing — inform the user
-                    localStorage.removeItem(pendingKey);
-                    setChatMessages(prev => prev.filter(m => !(m.role === 'assistant' && m.pending)));
-                    setChatNotice('Response was lost while the app was in the background. Please send your question again.');
-                    setTimeout(() => setChatNotice(null), 6000);
-                }
-            }
+            void recoverPendingMessage(chatSessionId);
         };
 
         document.addEventListener('visibilitychange', onVisible);
@@ -668,50 +744,7 @@ const AppContent = () => {
     // SF3: on startup, check if a message was in-flight when the app was last closed
     useEffect(() => {
         if (!chatEnabled || !chatSessionId) return;
-        const pendingKey = `pending_msg_${chatSessionId}`;
-        let pending = null;
-        try { pending = JSON.parse(localStorage.getItem(pendingKey)); } catch {}
-        if (!pending?.messageId) return;
-
-        // Ensure there's a visible pending placeholder so the user sees the spinner
-        setChatMessages(prev => {
-            const hasPending = prev.some(m => m.role === 'assistant' && m.pending);
-            if (hasPending) return prev;
-            return [...prev, { role: 'assistant', pending: true, stage: 'understanding', stageLabel: 'Understanding your question' }];
-        });
-
-        // Trigger recovery by emitting a synthetic visibilitychange (app just became visible)
-        api.getChatMessageResult(chatSessionId, pending.messageId).then(jobStatus => {
-            if (jobStatus.status === 'done') {
-                const { status: _s, message_id: _m, ...result } = jobStatus;
-                applyChatResponse(result, null);
-                try { localStorage.removeItem(pendingKey); } catch {}
-            } else if (jobStatus.status === 'processing') {
-                setLlmLoading(true);
-                api.streamChatMessageResult(chatSessionId, pending.messageId, {
-                    lastEventId: pending.lastEventId ?? null,
-                    onEvent: (event) => {
-                        if (event?.type !== 'stage') return;
-                        setChatMessages(prev => {
-                            const updated = [...prev];
-                            const idx = updated.findIndex(m => m.role === 'assistant' && m.pending);
-                            if (idx !== -1) updated[idx] = { ...updated[idx], stage: event.stage, stageLabel: event.label };
-                            return updated;
-                        });
-                    },
-                }).then(data => {
-                    if (data) { applyChatResponse(data, null); try { localStorage.removeItem(pendingKey); } catch {} }
-                }).catch(() => {
-                    try { localStorage.removeItem(pendingKey); } catch {}
-                    setChatMessages(prev => prev.filter(m => !(m.role === 'assistant' && m.pending)));
-                }).finally(() => setLlmLoading(false));
-            }
-        }).catch(err => {
-            if (err?.status === 404) {
-                try { localStorage.removeItem(pendingKey); } catch {}
-                setChatMessages(prev => prev.filter(m => !(m.role === 'assistant' && m.pending)));
-            }
-        });
+        void recoverPendingMessage(chatSessionId);
     }, [chatEnabled, chatSessionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const getChatSessionPayload = useCallback(() => {
@@ -922,11 +955,14 @@ const AppContent = () => {
         }
     }
 
-    async function handleChatSend(sessionId, message) {
+    async function handleChatSend(sessionId, message, { runId: providedRunId = null } = {}) {
         if (!message.trim()) return;
+        const runId = providedRunId ?? beginChatRun();
+        let activeSessionId = sessionId;
 
         setLlmLoading(true);
         setLlmError(null);
+        setChatNotice(null);
         setChatMessages(prev => [
             ...prev,
             { role: 'user', content: message },
@@ -936,7 +972,7 @@ const AppContent = () => {
         setChatInputVisible(false);
 
         const onStageEvent = (event) => {
-            if (event?.type !== 'stage') return;
+            if (!isActiveChatRun(runId) || event?.type !== 'stage') return;
             setChatMessages(prev => {
                 const updated = [...prev];
                 const idx = updated.findIndex(item => item.role === 'assistant' && item.pending);
@@ -985,10 +1021,11 @@ const AppContent = () => {
             try {
                 data = await streamForSession(sessionId, clientMsgId);
             } catch (error) {
+                if (!isActiveChatRun(runId)) return;
                 if (error?.detail !== 'session_not_found') throw error;
 
                 // Session expired — clear stale pending key and start fresh
-                try { localStorage.removeItem(`pending_msg_${sessionId}`); } catch {}
+                clearPendingMessage(sessionId);
                 clearPersistedChatSession();
                 flushSync(() => {
                     resetTypingState();
@@ -1002,40 +1039,51 @@ const AppContent = () => {
                 setTimeout(() => setChatNotice(null), 4000);
 
                 const freshSession = await api.createChatSession(getChatSessionPayload());
+                if (!isActiveChatRun(runId)) return;
+                activeSessionId = freshSession.session_id;
                 setChatSessionId(freshSession.session_id);
-                data = await streamForSession(freshSession.session_id, crypto.randomUUID());
+                data = await streamForSession(freshSession.session_id, clientMsgId);
             }
 
+            if (!isActiveChatRun(runId)) return;
             if (!data) throw new Error('No response received from server.');
 
             applyChatResponse(data, message);
+            setChatNotice(null);
 
             // Clear the in-flight marker — response successfully delivered
-            try { localStorage.removeItem(`pending_msg_${sessionId}`); } catch {}
+            clearPendingMessage(activeSessionId);
         } catch (error) {
+            if (!isActiveChatRun(runId)) return;
             if (error?.detail === 'session_not_found') {
                 clearPersistedChatSession();
-                try { localStorage.removeItem(`pending_msg_${sessionId}`); } catch {}
+                clearPendingMessage(activeSessionId);
                 setChatSessionId(null);
                 setChatMessages([]);
                 setLlmError('The previous chat session expired. Please send your question again.');
             } else {
-                setLlmError('Could not continue chat. Please try again.');
-                setChatMessages(prev => prev.filter(item => !(item.role === 'assistant' && item.pending)));
                 // 4xx = definitive server rejection → clear pending
                 // 5xx/network = ambiguous → keep pending so visibilitychange can recover
                 if (error?.status >= 400 && error?.status < 500) {
-                    try { localStorage.removeItem(`pending_msg_${sessionId}`); } catch {}
+                    clearPendingMessage(activeSessionId);
+                    setLlmError('Could not continue chat. Please try again.');
+                    setChatMessages(prev => prev.filter(item => !(item.role === 'assistant' && item.pending)));
+                } else {
+                    setLlmError(null);
+                    setChatNotice('Connection interrupted. We’ll continue when the app reconnects.');
+                    schedulePendingRecovery(activeSessionId, runId, 100);
                 }
             }
         } finally {
-            setLlmLoading(false);
+            if (isActiveChatRun(runId)) setLlmLoading(false);
         }
     }
 
     async function handleChatStart(firstQuestion) {
+        const runId = beginChatRun();
         setLlmLoading(true);
         setLlmError(null);
+        setChatNotice(null);
         setChatMessages([]);
         setChatInput('');
         setChatInputVisible(false);
@@ -1043,12 +1091,14 @@ const AppContent = () => {
         clearPersistedChatSession();
         try {
             const session = await api.createChatSession(getChatSessionPayload());
+            if (!isActiveChatRun(runId)) return;
             setChatSessionId(session.session_id);
-            await handleChatSend(session.session_id, firstQuestion);
+            await handleChatSend(session.session_id, firstQuestion, { runId });
         } catch (error) {
+            if (!isActiveChatRun(runId)) return;
             setLlmError('Could not start chat. Please try again.');
         } finally {
-            setLlmLoading(false);
+            if (isActiveChatRun(runId)) setLlmLoading(false);
         }
     }
 
@@ -1092,17 +1142,22 @@ const AppContent = () => {
     }
 
     const handleEndChat = useCallback(async () => {
+        invalidateChatRuns();
         if (chatSessionId) {
             await api.closeChatSession(chatSessionId).catch(() => null);
         }
+        clearPendingMessage(chatSessionId);
         setChatSessionId(null);
         setChatMessages([]);
         setChatInput('');
         setChatInputVisible(false);
         setLlmError(null);
+        setChatNotice(null);
+        setLlmLoading(false);
+        clearRecoveryTimer();
         resetTypingState();
         clearPersistedChatSession();
-    }, [chatSessionId, clearPersistedChatSession, resetTypingState]);
+    }, [chatSessionId, clearPendingMessage, clearPersistedChatSession, clearRecoveryTimer, invalidateChatRuns, resetTypingState]);
 
     const handleNewChat = useCallback(async () => {
         await handleEndChat();
@@ -2239,12 +2294,12 @@ const AppContent = () => {
                                                                 setQuery={setChatInput}
                                                                 onSearch={() => chatInput.trim() && !llmLoading && handleChatSend(chatSessionId, chatInput)}
                                                                 language={language}
-                                                                disabled={llmLoading}
+                                                                disabled={llmLoading || hasPendingChatMessage}
                                                             />
                                                         </div>
                                                         <button
                                                             onClick={() => handleChatSend(chatSessionId, chatInput)}
-                                                            disabled={llmLoading || !chatInput.trim()}
+                                                            disabled={llmLoading || hasPendingChatMessage || !chatInput.trim()}
                                                             className="bg-sky-600 text-white h-8 w-8 rounded-full border border-sky-700 hover:bg-sky-700 hover:border-sky-800 transition duration-200 disabled:bg-slate-200 disabled:text-slate-400 disabled:border-slate-300 flex items-center justify-center shrink-0"
                                                             aria-label="Send"
                                                         >
