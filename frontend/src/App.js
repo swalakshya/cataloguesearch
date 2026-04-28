@@ -449,6 +449,9 @@ const AppContent = () => {
     const messagesEndRef = useRef(null);
     const latestUserBubbleRef = useRef(null);
     const activeChatRunRef = useRef(0);
+    // Tracks the localId of the turn currently being streamed live in handleChatSend.
+    // recoverPendingMessage checks this before opening a competing stream for the same turn.
+    const activeStreamLocalIdRef = useRef(null);
     const [showScrollDown, setShowScrollDown] = useState(false);
     const isChatMode = homeMode === 'chat';
     const chatEnabled = isChatMode;
@@ -494,6 +497,23 @@ const AppContent = () => {
         }
     }, []);
 
+    const ensureRecoveredQuestion = useCallback((messages, question, localId) => {
+        if (!question) return messages;
+        // Already present — nothing to do.
+        const existing = messages.find(m => m.role === 'user' && m.localId === localId);
+        if (existing) return messages;
+        // Insert the user bubble immediately before the pending assistant for this turn
+        // so the order is always [user, assistant_pending], not [assistant_pending, user].
+        const userMsg = { role: 'user', content: question, localId };
+        const pendingIdx = localId ? messages.findIndex(m => m.localId === localId && m.pending) : -1;
+        if (pendingIdx !== -1) {
+            const next = [...messages];
+            next.splice(pendingIdx, 0, userMsg);
+            return next;
+        }
+        return [...messages, userMsg];
+    }, []);
+
     function schedulePendingRecovery(sessionId, runId, delayMs = 1500) {
         clearRecoveryTimer();
         recoveryTimeoutRef.current = setTimeout(() => {
@@ -512,10 +532,16 @@ const AppContent = () => {
         try { pending = JSON.parse(localStorage.getItem(pendingKey)); } catch {}
         if (!pending?.messageId) return;
 
+        const localId = pending.localId ?? null;
+
+        // If the live stream in handleChatSend already owns this turn, don't compete.
+        if (localId && activeStreamLocalIdRef.current === localId) return;
+
         setChatMessages(prev => {
-            const hasPending = prev.some(m => m.role === 'assistant' && m.pending);
-            if (hasPending) return prev;
-            return [...prev, { role: 'assistant', pending: true, stage: 'understanding', stageLabel: 'Understanding your question' }];
+            const withQuestion = ensureRecoveredQuestion(prev, pending.question, localId);
+            const hasPending = withQuestion.some(m => m.role === 'assistant' && m.pending && (!localId || m.localId === localId));
+            if (hasPending) return withQuestion;
+            return [...withQuestion, { role: 'assistant', pending: true, stage: 'understanding', stageLabel: 'Understanding your question', localId }];
         });
 
         try {
@@ -524,7 +550,7 @@ const AppContent = () => {
 
             if (jobStatus.status === 'done') {
                 const { status: _s, message_id: _m, ...result } = jobStatus;
-                applyChatResponse(result, null);
+                applyChatResponse(result, pending.question || null, localId);
                 clearPendingMessage(sessionId);
                 clearRecoveryTimer();
                 setChatNotice(null);
@@ -553,7 +579,9 @@ const AppContent = () => {
                         if (!isActiveChatRun(runId) || event?.type !== 'stage') return;
                         setChatMessages(prev => {
                             const updated = [...prev];
-                            const idx = updated.findIndex(m => m.role === 'assistant' && m.pending);
+                            const idx = localId
+                                ? updated.findIndex(m => m.localId === localId && m.pending)
+                                : updated.findIndex(m => m.role === 'assistant' && m.pending);
                             if (idx !== -1) updated[idx] = { ...updated[idx], stage: event.stage, stageLabel: event.label };
                             return updated;
                         });
@@ -562,7 +590,7 @@ const AppContent = () => {
                 });
                 if (!isActiveChatRun(runId)) return;
                 if (data) {
-                    applyChatResponse(data, null);
+                    applyChatResponse(data, pending.question || null, localId);
                     clearPendingMessage(sessionId);
                     clearRecoveryTimer();
                     setChatNotice(null);
@@ -606,18 +634,19 @@ const AppContent = () => {
     // Typing effect: reveal each new assistant message character by character
     useEffect(() => {
         chatMessages.forEach((msg, idx) => {
+            const key = msg.localId ?? idx;
             if (msg.role === 'assistant' && !msg.pending && msg.content &&
-                displayedTexts[idx] === undefined && !typingIntervalsRef.current[idx]) {
+                displayedTexts[key] === undefined && !typingIntervalsRef.current[key]) {
                 let charIdx = 0;
                 const fullText = cleanAnswerText(msg.content);
-                typingIntervalsRef.current[idx] = setInterval(() => {
+                typingIntervalsRef.current[key] = setInterval(() => {
                     charIdx += 4;
                     if (charIdx >= fullText.length) {
                         charIdx = fullText.length;
-                        clearInterval(typingIntervalsRef.current[idx]);
-                        delete typingIntervalsRef.current[idx];
+                        clearInterval(typingIntervalsRef.current[key]);
+                        delete typingIntervalsRef.current[key];
                     }
-                    setDisplayedTexts(prev => ({ ...prev, [idx]: fullText.slice(0, charIdx) }));
+                    setDisplayedTexts(prev => ({ ...prev, [key]: fullText.slice(0, charIdx) }));
                 }, 16);
             }
         });
@@ -700,7 +729,7 @@ const AppContent = () => {
                     setDisplayedTexts(
                         (parsed.messages || []).reduce((acc, msg, idx) => {
                             if (msg?.role === 'assistant' && msg?.content) {
-                                acc[idx] = cleanAnswerText(msg.content);
+                                acc[msg.localId ?? idx] = cleanAnswerText(msg.content);
                             }
                             return acc;
                         }, {})
@@ -919,13 +948,16 @@ const AppContent = () => {
 
     // Renders a completed LLM response into chatMessages (replaces the pending placeholder).
     // question is stored on the msg for follow-up navigation; uses preTokenizeCitations from outer scope.
-    function applyChatResponse(data, question) {
+    function applyChatResponse(data, question, localId = null) {
         setChatMessages(prev => {
             const { content, citationBlocks } = preTokenizeCitations(data.answer || '');
             const updated = [...prev];
-            const idx = updated.findIndex(item => item.role === 'assistant' && item.pending);
+            const idx = localId
+                ? updated.findIndex(item => item.localId === localId && item.pending)
+                : updated.findIndex(item => item.role === 'assistant' && item.pending);
             const msg = {
                 role: 'assistant',
+                localId: localId ?? undefined,
                 content,
                 citationBlocks,
                 follow_up_questions: data.follow_up_questions || [],
@@ -936,6 +968,7 @@ const AppContent = () => {
                 rawAnswer: data.answer || '',
             };
             if (idx !== -1) { updated[idx] = msg; return updated; }
+            if (localId) return updated; // turn already resolved — idempotent no-op
             return [...updated, msg];
         });
 
@@ -963,10 +996,14 @@ const AppContent = () => {
         setLlmLoading(true);
         setLlmError(null);
         setChatNotice(null);
+        // Stable local ID for this turn — ties the user bubble and assistant bubble together
+        // across re-renders, recovery, and array shifts. Never sent to the server.
+        const localId = crypto.randomUUID();
+        activeStreamLocalIdRef.current = localId; // claim ownership of this turn
         setChatMessages(prev => [
             ...prev,
-            { role: 'user', content: message },
-            { role: 'assistant', pending: true, stage: 'understanding', stageLabel: 'Understanding your question' }
+            { role: 'user', content: message, localId },
+            { role: 'assistant', pending: true, stage: 'understanding', stageLabel: 'Understanding your question', localId }
         ]);
         setChatInput('');
         setChatInputVisible(false);
@@ -975,7 +1012,7 @@ const AppContent = () => {
             if (!isActiveChatRun(runId) || event?.type !== 'stage') return;
             setChatMessages(prev => {
                 const updated = [...prev];
-                const idx = updated.findIndex(item => item.role === 'assistant' && item.pending);
+                const idx = updated.findIndex(item => item.localId === localId && item.pending);
                 if (idx !== -1) {
                     updated[idx] = {
                         ...updated[idx],
@@ -991,7 +1028,14 @@ const AppContent = () => {
         const streamForSession = async (targetSessionId, clientMsgId) => {
             const pendingKey = `pending_msg_${targetSessionId}`;
             const saveCursor = (lastEventId) => {
-                try { localStorage.setItem(pendingKey, JSON.stringify({ messageId: clientMsgId, lastEventId })); } catch {}
+                try {
+                    localStorage.setItem(pendingKey, JSON.stringify({
+                        messageId: clientMsgId,
+                        lastEventId,
+                        question: message,
+                        localId,
+                    }));
+                } catch {}
             };
 
             // Optimistically record that a message is in-flight BEFORE submitting,
@@ -1031,8 +1075,8 @@ const AppContent = () => {
                     resetTypingState();
                     setChatSessionId(null);
                     setChatMessages([
-                        { role: 'user', content: message },
-                        { role: 'assistant', pending: true, stage: 'understanding', stageLabel: 'Understanding your question' }
+                        { role: 'user', content: message, localId },
+                        { role: 'assistant', pending: true, stage: 'understanding', stageLabel: 'Understanding your question', localId }
                     ]);
                 });
                 setChatNotice('Previous session expired. Starting a new session…');
@@ -1048,7 +1092,7 @@ const AppContent = () => {
             if (!isActiveChatRun(runId)) return;
             if (!data) throw new Error('No response received from server.');
 
-            applyChatResponse(data, message);
+            applyChatResponse(data, message, localId);
             setChatNotice(null);
 
             // Clear the in-flight marker — response successfully delivered
@@ -1075,6 +1119,7 @@ const AppContent = () => {
                 }
             }
         } finally {
+            if (activeStreamLocalIdRef.current === localId) activeStreamLocalIdRef.current = null;
             if (isActiveChatRun(runId)) setLlmLoading(false);
         }
     }
@@ -2076,18 +2121,21 @@ const AppContent = () => {
                                         <div className="flex flex-col max-w-4xl mx-auto w-full min-h-[calc(100vh-240px)]">
                                             {/* Messages */}
                                             <div className="flex-1 py-4 space-y-6">
-                                                {chatMessages.map((msg, idx) => {
-                                                    const lastUserIdx = chatMessages.reduce((last, m, i) => m.role === 'user' ? i : last, -1);
+                                                {(() => {
+                                                    const lastUserMsg = [...chatMessages].reverse().find(m => m.role === 'user');
+                                                    return chatMessages.map((msg, idx) => {
+                                                    const key = msg.localId ?? idx;
+                                                    const isLastUser = msg.role === 'user' && msg === lastUserMsg;
                                                     const isStreaming = msg.role === 'assistant' && (
                                                         msg.pending || (
-                                                            displayedTexts[idx] !== undefined &&
-                                                            displayedTexts[idx] !== cleanAnswerText(msg.content)
+                                                            displayedTexts[key] !== undefined &&
+                                                            displayedTexts[key] !== cleanAnswerText(msg.content)
                                                         )
                                                     );
                                                     return (
-                                                    <div key={`${msg.role}-${idx}`}>
+                                                    <div key={msg.localId ? `${msg.role}-${msg.localId}` : `${msg.role}-${idx}`}>
                                                         {msg.role === 'user' ? (
-                                                            <div ref={idx === lastUserIdx ? latestUserBubbleRef : null} className="flex justify-end">
+                                                            <div ref={isLastUser ? latestUserBubbleRef : null} className="flex justify-end">
                                                                 <div className="bg-sky-600 shadow-sm rounded-lg rounded-tr-none px-4 py-2.5 max-w-[72%] text-white text-base">
                                                                     {msg.content}
                                                                 </div>
@@ -2118,30 +2166,30 @@ const AppContent = () => {
                                                                             </div>
                                                                         </div>
                                                                         <div className="max-w-3xl">
-                                                                            <div className={`text-slate-900 leading-relaxed text-base ${displayedTexts[idx] === cleanAnswerText(msg.content) && shouldCollapseAnswer(msg.content) && expandedAnswers[idx] === false ? 'max-h-72 overflow-hidden' : ''}`}
+                                                                            <div className={`text-slate-900 leading-relaxed text-base ${displayedTexts[key] === cleanAnswerText(msg.content) && shouldCollapseAnswer(msg.content) && expandedAnswers[key] === false ? 'max-h-72 overflow-hidden' : ''}`}
                                                                                 dangerouslySetInnerHTML={{ __html: formatAnswerHtml(
                                                                                     resolveChunkQuotes(
-                                                                                        displayedTexts[idx] !== undefined ? displayedTexts[idx] : msg.content || '',
+                                                                                        displayedTexts[key] !== undefined ? displayedTexts[key] : msg.content || '',
                                                                                         msg.citations,
                                                                                         chunkTextsCache
                                                                                     ),
                                                                                     msg.citationBlocks
                                                                                 )}} />
-                                                                            {displayedTexts[idx] === cleanAnswerText(msg.content) && shouldCollapseAnswer(msg.content) && (
+                                                                            {displayedTexts[key] === cleanAnswerText(msg.content) && shouldCollapseAnswer(msg.content) && (
                                                                                 <button
-                                                                                    onClick={() => setExpandedAnswers(prev => ({ ...prev, [idx]: prev[idx] === false }))}
+                                                                                    onClick={() => setExpandedAnswers(prev => ({ ...prev, [key]: prev[key] === false }))}
                                                                                     className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-sky-700 hover:text-sky-800 transition-colors"
                                                                                 >
-                                                                                    {expandedAnswers[idx] === false ? 'Show more' : 'Show less'}
+                                                                                    {expandedAnswers[key] === false ? 'Show more' : 'Show less'}
                                                                                 </button>
                                                                             )}
                                                                         </div>
-                                                                        {displayedTexts[idx] === cleanAnswerText(msg.content) && msg.content && (
+                                                                        {displayedTexts[key] === cleanAnswerText(msg.content) && msg.content && (
                                                                             <div className="mt-4 w-full flex justify-end">
                                                                                 <CopyAnswerButton text={cleanAnswerText(msg.content)} />
                                                                             </div>
                                                                         )}
-                                                                        {displayedTexts[idx] === cleanAnswerText(msg.content) && msg.follow_up_questions && msg.follow_up_questions.length > 0 && (
+                                                                        {displayedTexts[key] === cleanAnswerText(msg.content) && msg.follow_up_questions && msg.follow_up_questions.length > 0 && (
                                                                             <div className="mt-8 w-full rounded-md border border-sky-200 bg-sky-50 p-4">
                                                                                 <p className="text-xs font-bold uppercase tracking-wide text-sky-800 mb-2.5">
                                                                                     💡 Suggested Follow up questions
@@ -2160,7 +2208,7 @@ const AppContent = () => {
                                                                                 </div>
                                                                             </div>
                                                                         )}
-                                                                        {displayedTexts[idx] === cleanAnswerText(msg.content) && msg.references && msg.references.length > 0 && (
+                                                                        {displayedTexts[key] === cleanAnswerText(msg.content) && msg.references && msg.references.length > 0 && (
                                                                             <div className="mt-5 w-full rounded-md border border-sky-200 bg-sky-50 p-4">
                                                                                 <h4 className="text-xs font-bold uppercase tracking-wide text-sky-800 mb-3">📖 References</h4>
                                                                                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -2229,7 +2277,7 @@ const AppContent = () => {
                                                                                 </div>
                                                                             </div>
                                                                         )}
-                                                                        {displayedTexts[idx] === cleanAnswerText(msg.content) && msg.content && msg.question && (
+                                                                        {displayedTexts[key] === cleanAnswerText(msg.content) && msg.content && msg.question && (
                                                                             <FeedbackButtons
                                                                                 requestId={msg.tool_trace_id}
                                                                                 question={msg.question || ''}
@@ -2247,7 +2295,8 @@ const AppContent = () => {
                                                         )}
                                                     </div>
                                                     );
-                                                })}
+                                                });
+                                                })()}
                                                 {llmError && <div className="text-red-600 text-sm">{llmError}</div>}
                                                 <div ref={messagesEndRef} />
                                                 {/* Spacer while loading so the new user bubble can always reach the top of the viewport */}
