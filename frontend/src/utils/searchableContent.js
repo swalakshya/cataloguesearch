@@ -251,6 +251,7 @@ export const searchableGranths = [
   {
     name: "Aaradhansaar",
     author: "Acharya Devsen",
+    tikakaar: "Pandit Ratnakeerti Dev",
     status: "searchable"
   },
   {
@@ -281,6 +282,7 @@ export const searchableGranths = [
   {
     name: "Atmanushashan",
     author: "Acharya Gunbhadra",
+    tikakaar: "Pandit Todarmal",
     status: "searchable"
   },
   {
@@ -296,6 +298,7 @@ export const searchableGranths = [
   {
     name: "Bruhad Dravya Sangrah",
     author: "Acharya Nemichand Siddhant Chakravarti",
+    tikakaar: "Acharya Brahmadev",
     status: "searchable"
   },
   {
@@ -346,6 +349,7 @@ export const searchableGranths = [
   {
     name: "Ishtopadesh",
     author: "Shrimad Pujyapad Swami",
+    tikakaar: "Pandit Ashadhar",
     status: "searchable"
   },
   {
@@ -386,26 +390,31 @@ export const searchableGranths = [
   {
     name: "Moksha Shastra",
     author: "Acharya Umaswami",
+    tikakaar: "Shri Ramji Manekchand Doshi",
     status: "searchable"
   },
   {
     name: "Niyamsaar",
     author: "Acharya Kund Kund",
+    tikakaar: "Muni Padmaprabhmal Dhari Dev",
     status: "searchable"
   },
   {
     name: "Padmanandi Panchvinchhati",
     author: "Acharya Padmanandi",
+    tikakaar: "Pandit Gajadharlal Nyayateerth",
     status: "searchable"
   },
   {
     name: "Panchastikaya",
     author: "Acharya Kund Kund",
+    tikakaar: "Acharya Amritchandra",
     status: "searchable"
   },
   {
     name: "Panchastikaya — Tattparyavratti",
-    author: "Acharya Jaysen",
+    author: "Acharya Kund Kund",
+    tikakaar: "Acharya Jaysen",
     status: "searchable"
   },
   {
@@ -421,6 +430,7 @@ export const searchableGranths = [
   {
     name: "Parmatma Prakash",
     author: "Shrimad Yogindu Dev",
+    tikakaar: "Shrimad Brahma Dev",
     status: "searchable"
   },
   {
@@ -431,21 +441,25 @@ export const searchableGranths = [
   {
     name: "Pravachansaar",
     author: "Acharya Kund Kund",
+    tikakaar: "Acharya Amritchandra",
     status: "searchable"
   },
   {
     name: "Pravachansaar — Tattparyavratti",
     author: "Acharya Kund Kund",
+    tikakaar: "Acharya Jaysen",
     status: "searchable"
   },
   {
     name: "Purusharth Siddhi Upay",
     author: "Acharya Amritchandra",
+    tikakaar: "Pandit Todarmal",
     status: "searchable"
   },
   {
     name: "Ratnakarand Shravakachar",
     author: "Acharya Samant Bhadra",
+    tikakaar: "Pandit Sadasukhdas Kasliwal",
     status: "searchable"
   },
   {
@@ -456,11 +470,13 @@ export const searchableGranths = [
   {
     name: "Samadhi Tantra",
     author: "Shrimad Pujyapaad Swami",
+    tikakaar: "Pandit Prabhachandra",
     status: "searchable"
   },
   {
     name: "Samaysaar",
     author: "Acharya Kund Kund",
+    tikakaar: "Acharya Amritchandra",
     status: "searchable"
   },
   {

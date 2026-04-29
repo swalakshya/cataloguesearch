@@ -174,6 +174,7 @@ const SearchIndex = () => {
               <tr>
                 <th>Granth</th>
                 <th>Author</th>
+                <th>Tikakaar / Bhasha Vachanika</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -182,6 +183,7 @@ const SearchIndex = () => {
                 <tr key={`${item.name}-${index}`}>
                   <td className="granth-cell">{item.name}</td>
                   <td className="series-cell">{item.author}</td>
+                  <td className="series-cell">{item.tikakaar || '-'}</td>
                   <td className="status-cell">
                     {renderStatusBadge(item.status)}
                   </td>
