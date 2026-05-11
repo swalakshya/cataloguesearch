@@ -26,6 +26,12 @@ const WhatsNew = () => {
 
     const updates = [
         {
+            date: "April 30, 2026",
+            newContent: [
+                "Pravachans: Samaysaar 1971-74 (17th time) in Gujarati — 639 Pravachans",
+            ],
+        },
+        {
             date: "April 28, 2026",
             newContent: [
                 "Granths: Yogsaar by Acharya Amitgati",

@@ -4,8 +4,9 @@ crawler:
   base_text_path: "{HOME}/cataloguesearch/text"
   base_ocr_path: "{HOME}/cataloguesearch/ocr"
   sqlite_db_path: "{HOME}/cataloguesearch/db/cataloguesearch.db"
-  bookmark_extractor_llm: "gemini"
+  bookmark_extractor_llm: "ollama"
   ocr_engine: "tesseract"
+  tessdata_dir: "{BASE_DIR}/tessdata"
   default_llm_model: "gemini-2.5-flash"
   secondary_llm_model: "gemini-3-flash-preview"
   llm_workers: 10

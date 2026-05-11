@@ -134,6 +134,13 @@ export const searchableContent = [
   },
   {
     granth: "Samaysaar",
+    series: "1971-74 (17th time)",
+    count: 639,
+    hindi: null,
+    gujarati: "searchable"
+  },
+  {
+    granth: "Samaysaar",
     series: "1966-68 (15th time)",
     count: 595,
     hindi: null,

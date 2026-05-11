@@ -266,7 +266,10 @@ class SingleFileProcessor:
 
         try:
             file_metadata = self._get_metadata()
-            self._scan_config["language"] = file_metadata.get("language", "hi")
+            # scan_config language takes priority over config.json (allows per-directory
+            # OCR language override without touching the metadata config)
+            if "language" not in self._scan_config:
+                self._scan_config["language"] = file_metadata.get("language", "hi")
 
             # Get PDF processor based on chunk_strategy
             pdf_processor = self._get_pdf_processor()

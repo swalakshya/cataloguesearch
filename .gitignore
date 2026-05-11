@@ -136,6 +136,8 @@ indic_nlp_*
 
 models
 
+tessdata/
+
 .vscode
 
 .env.*

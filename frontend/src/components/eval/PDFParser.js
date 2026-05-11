@@ -495,26 +495,26 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
 
                         <div className="flex items-center gap-1">
                             <label className="text-xs text-slate-500 whitespace-nowrap">Top %</label>
-                            <input type="number" step="0.1" min="0" max="50" value={cropTop}
-                                onChange={(e) => setCropTop(parseFloat(e.target.value) || 0)}
+                            <input type="number" step="1" min="0" max="50" value={cropTop}
+                                onChange={(e) => setCropTop(parseInt(e.target.value) || 0)}
                                 className="w-16 text-xs px-2 py-1 border border-slate-300 rounded-md focus:outline-none focus:ring-sky-500 focus:border-sky-500" />
                         </div>
                         <div className="flex items-center gap-1">
                             <label className="text-xs text-slate-500 whitespace-nowrap">Bottom %</label>
-                            <input type="number" step="0.1" min="0" max="50" value={cropBottom}
-                                onChange={(e) => setCropBottom(parseFloat(e.target.value) || 0)}
+                            <input type="number" step="1" min="0" max="50" value={cropBottom}
+                                onChange={(e) => setCropBottom(parseInt(e.target.value) || 0)}
                                 className="w-16 text-xs px-2 py-1 border border-slate-300 rounded-md focus:outline-none focus:ring-sky-500 focus:border-sky-500" />
                         </div>
                         <div className="flex items-center gap-1">
                             <label className="text-xs text-slate-500 whitespace-nowrap">Left %</label>
-                            <input type="number" step="0.1" min="0" max="50" value={cropLeft}
-                                onChange={(e) => setCropLeft(parseFloat(e.target.value) || 0)}
+                            <input type="number" step="1" min="0" max="50" value={cropLeft}
+                                onChange={(e) => setCropLeft(parseInt(e.target.value) || 0)}
                                 className="w-16 text-xs px-2 py-1 border border-slate-300 rounded-md focus:outline-none focus:ring-sky-500 focus:border-sky-500" />
                         </div>
                         <div className="flex items-center gap-1">
                             <label className="text-xs text-slate-500 whitespace-nowrap">Right %</label>
-                            <input type="number" step="0.1" min="0" max="50" value={cropRight}
-                                onChange={(e) => setCropRight(parseFloat(e.target.value) || 0)}
+                            <input type="number" step="1" min="0" max="50" value={cropRight}
+                                onChange={(e) => setCropRight(parseInt(e.target.value) || 0)}
                                 className="w-16 text-xs px-2 py-1 border border-slate-300 rounded-md focus:outline-none focus:ring-sky-500 focus:border-sky-500" />
                         </div>
                         <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
@@ -559,11 +559,15 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                         <div className="flex items-center gap-2">
                             {isPDF && pdfDoc && (
                                 <>
+                                    <button onClick={() => pdfViewer.jumpToPage(1, cropTop, cropBottom, () => setResults(null))} disabled={currentPage === 1}
+                                        className="px-2 py-1 text-xs bg-slate-200 text-slate-700 rounded disabled:opacity-40 hover:bg-slate-300">⇤</button>
                                     <button onClick={() => handlePageNavigation('prev')} disabled={currentPage === 1}
                                         className="px-2 py-1 text-xs bg-slate-200 text-slate-700 rounded disabled:opacity-40 hover:bg-slate-300">←</button>
                                     <span className="text-xs text-slate-600">{currentPage} / {totalPages}</span>
                                     <button onClick={() => handlePageNavigation('next')} disabled={currentPage === totalPages}
                                         className="px-2 py-1 text-xs bg-slate-200 text-slate-700 rounded disabled:opacity-40 hover:bg-slate-300">→</button>
+                                    <button onClick={() => pdfViewer.jumpToPage(totalPages, cropTop, cropBottom, () => setResults(null))} disabled={currentPage === totalPages}
+                                        className="px-2 py-1 text-xs bg-slate-200 text-slate-700 rounded disabled:opacity-40 hover:bg-slate-300">⇥</button>
                                     <input type="number" min="1" max={totalPages} value={jumpPageNumber}
                                         onChange={(e) => setJumpPageNumber(e.target.value)}
                                         onKeyDown={(e) => e.key === 'Enter' && jumpToPage()}

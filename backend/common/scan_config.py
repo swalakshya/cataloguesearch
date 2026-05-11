@@ -115,6 +115,10 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
                 if "ignore_bookmarks" in default_config:
                     scan_meta["ignore_bookmarks"] = default_config["ignore_bookmarks"]
 
+                # Update language setting from default config (if present)
+                if "language" in default_config:
+                    scan_meta["language"] = default_config["language"]
+
                 # Update ocr_engine setting from default config (if present)
                 if "ocr_engine" in default_config:
                     scan_meta["ocr_engine"] = default_config["ocr_engine"]
@@ -183,6 +187,10 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
         # Update ignore_bookmarks setting from file-specific config (overrides default)
         if "ignore_bookmarks" in file_config:
             scan_meta["ignore_bookmarks"] = file_config["ignore_bookmarks"]
+
+        # Update language setting from file-specific config (overrides default)
+        if "language" in file_config:
+            scan_meta["language"] = file_config["language"]
 
         # Update ocr_engine setting from file-specific config (overrides default)
         if "ocr_engine" in file_config:

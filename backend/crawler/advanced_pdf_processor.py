@@ -10,6 +10,10 @@ from backend.crawler.pdf_processor import PDFProcessor
 # Setup logging for this module
 log_handle = logging.getLogger(__name__)
 
+# Set by AdvancedPDFProcessor.__init__ from config.TESSDATA_DIR.
+# Empty string means use the system default tessdata.
+_TESSDATA_FLAG = ""
+
 
 class AdvancedPDFProcessor(PDFProcessor):
     """
@@ -19,6 +23,13 @@ class AdvancedPDFProcessor(PDFProcessor):
     extracts raw line data (text + position metadata) and saves it as JSON files
     for later processing with the paragraph generation algorithm.
     """
+
+    def __init__(self, config):
+        super().__init__(config)
+        global _TESSDATA_FLAG
+        tessdata_dir = config.TESSDATA_DIR
+        _TESSDATA_FLAG = f'--tessdata-dir "{tessdata_dir}"' if tessdata_dir else ""
+        log_handle.info(f"Tessdata: {tessdata_dir if tessdata_dir else 'system default'}")
 
     def get_output_file_extension(self) -> str:
         """
@@ -117,7 +128,7 @@ class AdvancedPDFProcessor(PDFProcessor):
         try:
             ocr_data = pytesseract.image_to_data(
                 image, lang=language_code, output_type=pytesseract.Output.DATAFRAME,
-                config=f'--psm {psm}'
+                config=f'--psm {psm} {_TESSDATA_FLAG}'.strip()
             )
 
             ocr_data = ocr_data.dropna(subset=['text'])

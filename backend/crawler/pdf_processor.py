@@ -131,8 +131,11 @@ class PDFProcessor:
             pdf_file, page_list, scan_config
         )
 
-        pyt_lang = self._pytesseract_language_map.get(language)
-        log_handle.info(f"Scanning total pages: {len(page_list)}")
+        pyt_lang = "+".join(
+            self._pytesseract_language_map.get(part, part)
+            for part in language.split("+")
+        )
+        log_handle.info(f"Scanning total pages: {len(page_list)}, language: {language} → tesseract: {pyt_lang}")
 
         # Extract PSM from scan_config if present
         psm = scan_config.get("psm")

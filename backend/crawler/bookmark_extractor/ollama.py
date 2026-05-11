@@ -73,7 +73,7 @@ Example format: [{{"index": 0, "page": 5, "pravachan_no": "244-A", "date": "07-1
             response = requests.post(
                 self.api_url,
                 json=payload,
-                timeout=300
+                timeout=600
             )
             response.raise_for_status()
 

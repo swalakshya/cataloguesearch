@@ -192,6 +192,8 @@ class Config:
             return self._settings.get("crawler", {}).get("bookmark_extractor_llm", "gemini")
         elif name == "OCR_ENGINE":
             return self._settings.get("crawler", {}).get("ocr_engine", "tesseract")
+        elif name == "TESSDATA_DIR":
+            return self._settings.get("crawler", {}).get("tessdata_dir", "")
         elif name == "DEFAULT_LLM_MODEL":
             return self._settings.get("crawler", {}).get("default_llm_model", "gemini-2.5-flash")
         elif name == "SECONDARY_LLM_MODEL":

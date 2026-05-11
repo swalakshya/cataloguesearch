@@ -92,7 +92,7 @@ class IndexGenerator:
         os.makedirs(output_text_dir, exist_ok=True)
 
         # Write paragraphs to the text directory
-        self._write_paragraphs(output_text_dir, processed_paras)
+        self._write_paragraphs(output_text_dir, processed_paras, metadata)
 
         if dry_run:
             log_handle.info(
@@ -150,7 +150,7 @@ class IndexGenerator:
             f"Finished full indexing for document {document_id}: total_chunks: {len(chunks)}.")
 
 
-    def _write_paragraphs(self, output_dir, paragraphs):
+    def _write_paragraphs(self, output_dir, paragraphs, metadata=None):
         page_paras = {}
         for page_num, para in paragraphs:
             if page_num not in page_paras:
@@ -168,6 +168,15 @@ class IndexGenerator:
             except IOError:
                 traceback.print_exc()
                 log_handle.error(f"Failed to write {fname}")
+            if metadata is not None:
+                meta_fname = f"{output_dir}/page_{page_num:04d}_meta.json"
+                try:
+                    with open(meta_fname, 'w', encoding='utf-8') as fh:
+                        json.dump({"metadata": metadata, "paragraphs": para_list},
+                                  fh, ensure_ascii=False, indent=2)
+                except IOError:
+                    traceback.print_exc()
+                    log_handle.error(f"Failed to write {meta_fname}")
 
     def _reindex_metadata_only(self, document_id, metadata, page_to_pravachan_data, timestamp):
         """Handles the logic for updating metadata and pravachan fields of existing documents."""
