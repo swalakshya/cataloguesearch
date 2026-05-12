@@ -33,7 +33,7 @@ log_handle = logging.getLogger(__name__)
 # Metadata filter fields that are valid per category.
 # Prevents cross-category filters (e.g. a Granth filter) from zeroing out Books results.
 _CATEGORY_FILTER_FIELDS: Dict[str, set] = {
-    "Pravachan": {"Name", "Anuyog"},
+    "Pravachan": {"Name", "Anuyog", "Series", "volume", "pravachan_number"},
     "Granth":    {"Name", "Anuyog", "Author"},
     "Books":     {"Name", "Author"},
 }
@@ -110,7 +110,8 @@ async def lifespan(app: FastAPI):
                 parts = composite_key.rsplit('_', 1)
                 if len(parts) == 2:
                     field_name = parts[0]
-                    if field_name in config.FILTERED_METADATA_FIELDS:
+                    _always_include = {"pravachan_series_cascade"}
+                    if field_name in _always_include or field_name in config.FILTERED_METADATA_FIELDS:
                         filtered_metadata[content_type][composite_key] = values
         app.state.metadata_cache["data"] = filtered_metadata
         app.state.metadata_cache["timestamp"] = time.time()
@@ -185,8 +186,9 @@ async def get_metadata_api(request: Request):
                 if len(parts) == 2:
                     field_name = parts[0]
                     log_handle.info(f"Checking field {field_name} against filtered fields: {request.app.state.config.FILTERED_METADATA_FIELDS}")
-                    # Only include if field is in the filtered list
-                    if field_name in request.app.state.config.FILTERED_METADATA_FIELDS:
+                    # Always pass through cascade fields; otherwise check the allowlist
+                    _always_include = {"pravachan_series_cascade"}
+                    if field_name in _always_include or field_name in request.app.state.config.FILTERED_METADATA_FIELDS:
                         filtered_metadata[content_type][composite_key] = values
                         log_handle.info(f"Including {composite_key} with {len(values)} values")
                     else:

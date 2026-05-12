@@ -47,19 +47,35 @@ class IndexSearcher:
 
         log_handle.info("Initialized IndexSearcher")
 
+    # Fields stored on chunk_labels (not metadata) — different path, no .keyword needed
+    _CHUNK_LABEL_FILTER_FIELDS = {"pravachan_number"}
+    # Integer fields stored on metadata — no .keyword suffix
+    _INTEGER_METADATA_FILTER_FIELDS = {"volume"}
+
     def _build_category_filters(self, categories: Dict[str, List[str]]) -> List[Dict[str, Any]]:
         filters = []
         for category_key, values in categories.items():
             if not values:
                 continue
 
-            field_name = f"{self._metadata_prefix}.{category_key}.keyword"
-            filters.append({
-                "terms": {
-                    field_name: values
-                }
-            })
-            log_handle.debug(f"Added metadata filter: {field_name} with values {values}")
+            if category_key in self._CHUNK_LABEL_FILTER_FIELDS:
+                field_name = f"chunk_labels.{category_key}"
+                filters.append({"terms": {field_name: values}})
+            elif category_key in self._INTEGER_METADATA_FILTER_FIELDS:
+                field_name = f"{self._metadata_prefix}.{category_key}"
+                int_values = []
+                for v in values:
+                    try:
+                        int_values.append(int(v))
+                    except (ValueError, TypeError):
+                        pass
+                if int_values:
+                    filters.append({"terms": {field_name: int_values}})
+            else:
+                field_name = f"{self._metadata_prefix}.{category_key}.keyword"
+                filters.append({"terms": {field_name: values}})
+
+            log_handle.debug(f"Added filter: {field_name} with values {values}")
         return filters
 
     def _build_date_range_filter(self, start_year: int | None, end_year: int | None) -> Dict[str, Any] | None:

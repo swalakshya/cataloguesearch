@@ -18,7 +18,7 @@ from datetime import datetime
 from threading import Event
 
 from backend.common.opensearch import get_opensearch_client, get_metadata, delete_documents_by_filename
-from backend.common.opensearch import create_indices_if_not_exists
+from backend.common.opensearch import create_indices_if_not_exists, refresh_pravachan_series_metadata
 from backend.common import opensearch
 from backend.config import Config
 from backend.crawler.discovery import Discovery
@@ -357,7 +357,8 @@ def main():
     parser.add_argument('--force', '-f', action='store_true', default=False,
                         help='Force re-processing: clears ocr_checksum if --crawl is set, '
                              'config_hash if --index is set, before running.')
-
+    parser.add_argument('--refresh-metadata', action='store_true', default=False,
+                        help='Refresh the Pravachan series cascade in the metadata index and exit.')
 
     args = parser.parse_args()
 
@@ -372,8 +373,15 @@ def main():
         logging.error(f"Failed to load config: {e}")
         sys.exit(1)
 
+    if args.refresh_metadata:
+        client = get_opensearch_client(config)
+        refresh_pravachan_series_metadata(config, client)
+        sys.exit(0)
+
     if args.cleanup:
         cleanup_files(config, args.cleanup)
+        client = get_opensearch_client(config)
+        refresh_pravachan_series_metadata(config, client)
         sys.exit(0) # Exit after cleanup is done
 
     if args.command == 'discover':

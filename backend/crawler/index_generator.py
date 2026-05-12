@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from opensearchpy import OpenSearch, helpers
 
 from backend.common.embedding_models import get_embedding_model_factory
-from backend.common.opensearch import delete_documents_by_document_id, update_metadata_index
+from backend.common.opensearch import delete_documents_by_document_id, update_metadata_index, refresh_pravachan_series_metadata
 from backend.config import Config
 from backend.crawler.pdf_factory import create_pdf_processor
 from backend.crawler.paragraph_generator.factory import create_paragraph_generator
@@ -145,6 +145,8 @@ class IndexGenerator:
 
         # 5. Update the metadata index with the new metadata
         update_metadata_index(self._config, self._opensearch_client, metadata)
+        if metadata.get("category") == "Pravachan":
+            refresh_pravachan_series_metadata(self._config, self._opensearch_client)
 
         log_handle.info(
             f"Finished full indexing for document {document_id}: total_chunks: {len(chunks)}.")
@@ -234,6 +236,8 @@ class IndexGenerator:
 
             # Also update the dedicated metadata index
             update_metadata_index(self._config, self._opensearch_client, metadata)
+            if metadata.get("category") == "Pravachan":
+                refresh_pravachan_series_metadata(self._config, self._opensearch_client)
 
             log_handle.info(f"Metadata and pravachan fields re-indexed for document {document_id}.")
         except Exception as e:

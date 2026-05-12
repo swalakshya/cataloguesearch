@@ -53,6 +53,7 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
     const [showBookmarksModal, setShowBookmarksModal] = useState(false);
     const [bookmarks, setBookmarks] = useState([]);
     const [parsedBookmarks, setParsedBookmarks] = useState([]);
+    const [subSections, setSubSections] = useState([]);
 
     // PDF page rendering
     const [pdfPageDataUrl, setPdfPageDataUrl] = useState(null);
@@ -194,7 +195,7 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
                 const [mappingData, bookmarkData, parsedBookmarkData] = await Promise.all([
                     fetch(`${API_BASE_URL}/eval/pdf/page-mapping?ocr_relative_path=${encodeURIComponent(ocrRelPath)}`).then(r => r.ok ? r.json() : null),
                     fetch(`${API_BASE_URL}/eval/pdf/bookmarks?ocr_relative_path=${encodeURIComponent(ocrRelPath)}`).then(r => r.ok ? r.json() : null),
-                    fetch(`${API_BASE_URL}/eval/pdf/parsed-bookmarks?ocr_relative_path=${encodeURIComponent(ocrRelPath)}`).then(r => r.ok ? r.json() : null),
+                    fetch(`${API_BASE_URL}/eval/pdf/metadata?ocr_relative_path=${encodeURIComponent(ocrRelPath)}`).then(r => r.ok ? r.json() : null),
                 ]);
                 const mapping = mappingData?.page_mapping || null;
                 setPageMapping(mapping);
@@ -207,12 +208,14 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
                 }));
                 setBookmarks(adapted);
                 setParsedBookmarks(parsedBookmarkData?.bookmarks || []);
+                setSubSections(parsedBookmarkData?.sub_sections || []);
             } catch (e) {
                 console.warn('Could not load page-mapping/bookmarks from backend:', e);
                 setPageMapping(null);
                 pageMappingRef.current = null;
                 setBookmarks([]);
                 setParsedBookmarks([]);
+                setSubSections([]);
             }
 
             // Load and display files
@@ -895,12 +898,19 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                                 const activeBookmark = parsedBookmarks.length && !isNaN(currentPage)
                                     ? parsedBookmarks.filter(b => b.page <= currentPage).at(-1) ?? null
                                     : null;
-                                if (!activeBookmark) return null;
+                                const activeSubSection = subSections.length && !isNaN(currentPage)
+                                    ? subSections.find(ss => currentPage >= ss.start_page && currentPage <= ss.end_page) ?? null
+                                    : null;
                                 const LABELS = { pravachan_no: 'Pravachan', date: 'Date', gatha: 'Gatha', kalash: 'Kalash', shlok: 'Shlok', doha: 'Doha', kavya: 'Kavya', sutra: 'Sutra' };
-                                const fields = Object.entries(LABELS).filter(([k]) => activeBookmark[k] != null);
-                                if (!fields.length) return null;
+                                const fields = activeBookmark ? Object.entries(LABELS).filter(([k]) => activeBookmark[k] != null) : [];
+                                if (!activeSubSection && !fields.length) return null;
                                 return (
                                     <div className="flex items-center gap-1 flex-wrap flex-1">
+                                        {activeSubSection && (
+                                            <span key="sub_section" className="bg-violet-100 text-violet-800 text-sm font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap">
+                                                {activeSubSection.name}
+                                            </span>
+                                        )}
                                         {fields.map(([k, label]) => (
                                             <span key={k} className="bg-indigo-100 text-indigo-800 text-sm font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap">
                                                 {label}: {activeBookmark[k]}

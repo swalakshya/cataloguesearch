@@ -1113,35 +1113,43 @@ async def get_classifier_bookmarks(ocr_relative_path: str):
         raise HTTPException(status_code=500, detail=f"Error extracting bookmarks: {str(e)}")
 
 
-@router.get("/pdf/parsed-bookmarks")
-async def get_parsed_bookmarks(ocr_relative_path: str):
+@router.get("/pdf/metadata")
+async def get_metadata(ocr_relative_path: str):
     """
-    Return the parsed bookmark metadata stored in index_state for this document.
-    These are LLM-extracted fields (pravachan_no, date, gatha, etc.) per bookmark page.
+    Return bookmark metadata and sub-section info for this document.
+    bookmarks: LLM-extracted fields (pravachan_no, date, gatha, etc.) per page.
+    sub_sections: list of {name, start_page, end_page} from scan_config (may be empty).
     """
     try:
         config = Config("configs/config.yaml")
         db_path = config.SQLITE_DB_PATH
 
-        if not db_path or not os.path.isfile(db_path):
-            return {"bookmarks": []}
+        bookmarks = []
+        if db_path and os.path.isfile(db_path):
+            relative_path = ocr_relative_path + ".pdf"
+            doc_id = str(uuid.uuid5(uuid.NAMESPACE_URL, relative_path))
+            index_state = IndexState(db_path)
+            state = index_state.get_state(doc_id)
+            raw = state.get("parsed_bookmarks")
+            if raw:
+                bookmarks = json.loads(raw) if isinstance(raw, str) else raw
 
-        relative_path = ocr_relative_path + ".pdf"
-        doc_id = str(uuid.uuid5(uuid.NAMESPACE_URL, relative_path))
+        sub_sections = []
+        if config.BASE_PDF_PATH:
+            pdf_path = os.path.join(config.BASE_PDF_PATH, ocr_relative_path + ".pdf")
+            if os.path.isfile(pdf_path):
+                scan_cfg = get_scan_config(pdf_path, config.BASE_PDF_PATH)
+                sub_sections = [
+                    {"name": ss.get("name", ""), "start_page": ss.get("start_page"), "end_page": ss.get("end_page")}
+                    for ss in scan_cfg.get("sub_sections", [])
+                    if ss.get("name") and ss.get("start_page") is not None and ss.get("end_page") is not None
+                ]
 
-        index_state = IndexState(db_path)
-        state = index_state.get_state(doc_id)
-
-        raw = state.get("parsed_bookmarks")
-        if not raw:
-            return {"bookmarks": []}
-
-        bookmarks = json.loads(raw) if isinstance(raw, str) else raw
-        return {"bookmarks": bookmarks}
+        return {"bookmarks": bookmarks, "sub_sections": sub_sections}
 
     except Exception as e:
-        log_handle.error(f"Error fetching parsed bookmarks: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error fetching parsed bookmarks: {str(e)}")
+        log_handle.error(f"Error fetching metadata: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error fetching metadata: {str(e)}")
 
 
 @router.get("/pdf/page-image")

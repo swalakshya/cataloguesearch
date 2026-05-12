@@ -7,7 +7,7 @@ import { GoogleReCaptchaProvider } from 'react-google-recaptcha-v3';
 import { Navigation, Header } from './components/Navigation';
 import AdminLoginPage from './components/admin/AdminLogin';
 import AdminPageComponent from './components/admin/AdminPage';
-import { SearchBar, MetadataFilters, AdvancedSearch, SearchOptions } from './components/SearchInterface';
+import { SearchBar, MetadataFilters, SearchFilters, AdvancedSearch, SearchOptions } from './components/SearchInterface';
 import { ResultsList, SuggestionsCard, Tabs, SimilarSourceInfoCard, SkeletonResultsList } from './components/SearchResults';
 import { ExpandModal, GranthVerseModal, GranthProseModal, WelcomeModal } from './components/Modals';
 import { FeedbackForm } from './components/Feedback';
@@ -1863,8 +1863,8 @@ const AppContent = () => {
                                         {showFilters && (
                                             <div className="mt-4 border-t border-slate-200 pt-4">
                                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                                                    <MetadataFilters
-                                                        metadata={allMetadata}
+                                                    <SearchFilters
+                                                        allMetadata={allMetadata}
                                                         activeFilters={activeFilters}
                                                         onAddFilter={addFilter}
                                                         onRemoveFilter={removeFilter}

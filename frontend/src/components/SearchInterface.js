@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import TransliterationInput from './TransliterationInput';
 
 // --- UTILITY FUNCTIONS ---
@@ -542,6 +542,548 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
                         </div>
                     </div>
                 </>
+            )}
+        </div>
+    );
+};
+
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+const PRAVACHAN_FILTER_KEYS = ['Series', 'volume', 'pravachan_number'];
+
+const extractPravachanYears = (cascade) => {
+    const years = new Set();
+    cascade.forEach(s => {
+        const start = s.start_date ? parseInt(s.start_date.substring(0, 4)) : null;
+        const end   = s.end_date   ? parseInt(s.end_date.substring(0, 4))   : null;
+        if (start && end) for (let y = start; y <= end; y++) years.add(y);
+    });
+    return Array.from(years).sort((a, b) => a - b);
+};
+
+const sortPravachanNumbers = (nums) =>
+    [...nums].sort((a, b) => {
+        const na = parseInt(a), nb = parseInt(b);
+        return (!isNaN(na) && !isNaN(nb)) ? na - nb : String(a).localeCompare(String(b));
+    });
+
+// Small chip used inside the modal header breadcrumbs
+const BreadcrumbChip = ({ label }) => (
+    <span className="bg-sky-100 text-sky-700 text-xs font-semibold px-2 py-0.5 rounded-full">{label}</span>
+);
+
+// Compact toggleable number/string button used in volume and pravachan# grids
+const GridToggle = ({ value, selected, onToggle }) => (
+    <button
+        onClick={() => onToggle(value)}
+        className={`rounded text-sm py-1.5 font-medium transition-colors border ${
+            selected
+                ? 'bg-sky-600 border-sky-600 text-white'
+                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+        }`}
+    >
+        {value}
+    </button>
+);
+
+// ─── PravachanFilter ─────────────────────────────────────────────────────────
+
+const PravachanFilter = ({
+    allMetadata, activeFilters, onAddFilter, onRemoveFilter,
+    language, startYear, setStartYear, endYear, setEndYear,
+}) => {
+    const [isOpen, setIsOpen]         = useState(false);
+    const [step, setStep]             = useState(1);
+    const [pendingSeries, setPendingSeries]   = useState([]);
+    const [pendingVolumes, setPendingVolumes] = useState([]);
+    const [pendingNumbers, setPendingNumbers] = useState([]);
+
+    const cascade = allMetadata?.Pravachan?.hindi?.pravachan_series_cascade || [];
+
+    // Sync pending state from activeFilters when opening
+    useEffect(() => {
+        if (!isOpen) return;
+        setPendingSeries(activeFilters.filter(f => f.key === 'Series').map(f => f.value));
+        setPendingVolumes(activeFilters.filter(f => f.key === 'volume').map(f => Number(f.value)));
+        setPendingNumbers(activeFilters.filter(f => f.key === 'pravachan_number').map(f => f.value));
+        setStep(1);
+    }, [isOpen]); // eslint-disable-line
+
+    // Close on Escape
+    useEffect(() => {
+        if (!isOpen) return;
+        const onKey = (e) => { if (e.key === 'Escape') setIsOpen(false); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [isOpen]);
+
+    const availableVolumes = useMemo(() => {
+        if (!pendingSeries.length) return [];
+        const vols = new Set();
+        cascade.filter(s => pendingSeries.includes(s.name))
+               .forEach(s => s.volumes.forEach(v => vols.add(v.volume)));
+        return Array.from(vols).sort((a, b) => a - b);
+    }, [cascade, pendingSeries]);
+
+    const availableNumbers = useMemo(() => {
+        if (!pendingSeries.length || !pendingVolumes.length) return [];
+        const nums = new Set();
+        cascade.filter(s => pendingSeries.includes(s.name))
+               .forEach(s => s.volumes
+                   .filter(v => pendingVolumes.includes(v.volume))
+                   .forEach(v => v.pravachan_numbers.forEach(n => nums.add(n))));
+        return sortPravachanNumbers(Array.from(nums));
+    }, [cascade, pendingSeries, pendingVolumes]);
+
+    const toggleSeries = (name) => {
+        setPendingSeries(prev => {
+            const next = prev.includes(name) ? prev.filter(x => x !== name) : [...prev, name];
+            // Drop volumes/numbers that no longer have a valid parent series
+            const validVols = new Set();
+            cascade.filter(s => next.includes(s.name)).forEach(s => s.volumes.forEach(v => validVols.add(v.volume)));
+            setPendingVolumes(pv => pv.filter(v => validVols.has(v)));
+            setPendingNumbers([]);
+            return next;
+        });
+    };
+
+    const toggleVolume = (vol) => {
+        setPendingVolumes(prev => {
+            const next = prev.includes(vol) ? prev.filter(x => x !== vol) : [...prev, vol];
+            setPendingNumbers([]);
+            return next;
+        });
+    };
+
+    const toggleNumber = (num) =>
+        setPendingNumbers(prev => prev.includes(num) ? prev.filter(x => x !== num) : [...prev, num]);
+
+    const handleApply = () => {
+        const toRemove = [];
+        activeFilters.forEach((f, i) => { if (PRAVACHAN_FILTER_KEYS.includes(f.key)) toRemove.push(i); });
+        toRemove.reverse().forEach(i => onRemoveFilter(i));
+        pendingSeries.forEach(v => onAddFilter({ key: 'Series', value: v }));
+        pendingVolumes.forEach(v => onAddFilter({ key: 'volume', value: String(v) }));
+        pendingNumbers.forEach(v => onAddFilter({ key: 'pravachan_number', value: v }));
+        // Series selection implies a known date range — year filter would conflict
+        if (pendingSeries.length > 0) { setStartYear(null); setEndYear(null); }
+        setIsOpen(false);
+    };
+
+    const handleClear = () => {
+        setPendingSeries([]); setPendingVolumes([]); setPendingNumbers([]);
+        setStartYear(null); setEndYear(null); setStep(1);
+    };
+
+    const activeCount = activeFilters.filter(f => PRAVACHAN_FILTER_KEYS.includes(f.key)).length
+        + (startYear || endYear ? 1 : 0);
+
+    const pravachanYears = useMemo(() => extractPravachanYears(cascade), [cascade]);
+    const endYearOptions = startYear ? pravachanYears.filter(y => y >= startYear) : pravachanYears;
+
+    const canGoToStep2 = pendingSeries.length > 0 && availableVolumes.length > 0;
+    const canGoToStep3 = pendingVolumes.length > 0 && availableNumbers.length > 0;
+
+    const stepTitles = ['Select Series', 'Select Volume', 'Select Pravachan #'];
+
+    return (
+        <>
+            <button
+                onClick={() => setIsOpen(true)}
+                className={`flex-1 py-1.5 px-3 border rounded text-sm font-medium flex items-center justify-between transition-colors ${
+                    activeCount > 0
+                        ? 'border-sky-500 bg-sky-50 text-sky-700'
+                        : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+                style={{ backgroundColor: activeCount > 0 ? undefined : 'var(--bg-surface, white)' }}
+            >
+                <span>🎙️ Pravachan{activeCount > 0 ? ` (${activeCount})` : ''}</span>
+                <svg className="w-3.5 h-3.5 ml-1 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+
+            {isOpen && (
+                <>
+                    <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={() => setIsOpen(false)} />
+                    <div className="fixed inset-x-0 bottom-0 md:inset-0 md:flex md:items-center md:justify-center z-50">
+                        <div className="bg-white rounded-t-lg md:rounded-lg shadow-2xl w-full md:max-w-lg md:max-h-[85vh] flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+
+                            {/* Header */}
+                            <div className="p-4 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white rounded-t-lg">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    {step > 1 && (
+                                        <button onClick={() => setStep(s => s - 1)} className="text-slate-400 hover:text-slate-600 mr-1 flex-shrink-0">
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                            </svg>
+                                        </button>
+                                    )}
+                                    <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                                        <span className="font-bold text-slate-800 text-sm">{stepTitles[step - 1]}</span>
+                                        {step >= 2 && pendingSeries.map(s => <BreadcrumbChip key={s} label={s} />)}
+                                        {step >= 3 && pendingVolumes.map(v => <BreadcrumbChip key={v} label={`Vol ${v}`} />)}
+                                    </div>
+                                </div>
+                                <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-slate-600 flex-shrink-0 ml-2">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            {/* Body */}
+                            <div className="overflow-y-auto flex-1 p-4">
+
+                                {/* ── Step 1: Series ── */}
+                                {step === 1 && (
+                                    <div className="space-y-4">
+                                        <div className="border border-slate-200 rounded-lg overflow-hidden">
+                                            {cascade.length === 0 && (
+                                                <p className="p-4 text-sm text-slate-500 text-center">No series data available</p>
+                                            )}
+                                            {cascade.map((s) => (
+                                                <label key={s.name}
+                                                    className="flex items-center gap-3 p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-b-0">
+                                                    <input type="checkbox"
+                                                        checked={pendingSeries.includes(s.name)}
+                                                        onChange={() => toggleSeries(s.name)}
+                                                        className="form-checkbox h-4 w-4 text-sky-600 rounded" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-medium text-slate-800">{s.name}</p>
+                                                        {s.start_date && s.end_date && (
+                                                            <p className="text-xs text-slate-400">
+                                                                {s.start_date.substring(0, 7)} – {s.end_date.substring(0, 7)}
+                                                                {' · '}{s.volumes.length} vol{s.volumes.length !== 1 ? 's' : ''}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    {pendingSeries.includes(s.name) && (
+                                                        <svg className="w-4 h-4 text-sky-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                    )}
+                                                </label>
+                                            ))}
+                                        </div>
+
+                                        {/* Year range — only show when no series selected, since series implies date range */}
+                                        {pendingSeries.length === 0 && (
+                                            <div>
+                                                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Year Range (Optional)</h4>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <select value={startYear || ''} onChange={e => { const y = e.target.value ? parseInt(e.target.value) : null; setStartYear(y); if (endYear && y && endYear < y) setEndYear(null); }}
+                                                        className="p-2 bg-white border border-slate-300 rounded text-slate-800 text-sm focus:ring-2 focus:ring-sky-500">
+                                                        <option value="">From year</option>
+                                                        {pravachanYears.map(y => <option key={y} value={y}>{y}</option>)}
+                                                    </select>
+                                                    <select value={endYear || ''} onChange={e => setEndYear(e.target.value ? parseInt(e.target.value) : null)}
+                                                        disabled={!startYear}
+                                                        className="p-2 bg-white border border-slate-300 rounded text-slate-800 text-sm focus:ring-2 focus:ring-sky-500 disabled:opacity-50">
+                                                        <option value="">To year</option>
+                                                        {endYearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* ── Step 2: Volumes ── */}
+                                {step === 2 && (
+                                    <div className="space-y-3">
+                                        <p className="text-xs text-slate-500">
+                                            {availableVolumes.length} volume{availableVolumes.length !== 1 ? 's' : ''} across selected series
+                                        </p>
+                                        <div className="grid grid-cols-6 gap-1.5">
+                                            {availableVolumes.map(v => (
+                                                <GridToggle key={v} value={v} selected={pendingVolumes.includes(v)} onToggle={toggleVolume} />
+                                            ))}
+                                        </div>
+                                        {pendingVolumes.length > 0 && (
+                                            <p className="text-xs text-sky-700 font-medium">{pendingVolumes.length} selected</p>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* ── Step 3: Pravachan Numbers ── */}
+                                {step === 3 && (
+                                    <div className="space-y-3">
+                                        <p className="text-xs text-slate-500">
+                                            {availableNumbers.length} pravachan{availableNumbers.length !== 1 ? 's' : ''} in selected volumes
+                                        </p>
+                                        <div className="grid grid-cols-6 gap-1 max-h-72 overflow-y-auto pr-1"
+                                            style={{ scrollbarWidth: 'thin', scrollbarColor: '#94a3b8 #f1f5f9' }}>
+                                            {availableNumbers.map(n => (
+                                                <GridToggle key={n} value={n} selected={pendingNumbers.includes(n)} onToggle={toggleNumber} />
+                                            ))}
+                                        </div>
+                                        {pendingNumbers.length > 0 && (
+                                            <p className="text-xs text-sky-700 font-medium">{pendingNumbers.length} selected</p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Footer */}
+                            <div className="p-4 border-t border-slate-200 flex gap-2 sticky bottom-0 bg-white rounded-b-lg">
+                                <button onClick={handleClear}
+                                    className="px-4 py-1.5 border border-slate-300 rounded text-slate-700 text-sm font-semibold hover:bg-slate-50">
+                                    Clear
+                                </button>
+                                <div className="flex-1" />
+                                {step < 3 && canGoToStep2 && step === 1 && (
+                                    <button onClick={() => setStep(2)}
+                                        className="px-4 py-1.5 border border-sky-400 text-sky-700 rounded text-sm font-semibold hover:bg-sky-50 flex items-center gap-1">
+                                        Volumes
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        </svg>
+                                    </button>
+                                )}
+                                {step === 2 && canGoToStep3 && (
+                                    <button onClick={() => setStep(3)}
+                                        className="px-4 py-1.5 border border-sky-400 text-sky-700 rounded text-sm font-semibold hover:bg-sky-50 flex items-center gap-1">
+                                        Pravachan #
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        </svg>
+                                    </button>
+                                )}
+                                <button onClick={handleApply}
+                                    className="px-4 py-1.5 bg-sky-600 text-white rounded text-sm font-semibold hover:bg-sky-700">
+                                    Apply
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
+        </>
+    );
+};
+
+// ─── GranthFilter ────────────────────────────────────────────────────────────
+
+const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, language }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [pending, setPending]   = useState([]);
+    const [search, setSearch]     = useState('');
+
+    const allNames = useMemo(() => {
+        const items = new Set();
+        ['Pravachan', 'Granth', 'Books'].forEach(cat => {
+            (allMetadata?.[cat]?.[language]?.Name || []).forEach(n => items.add(n));
+        });
+        return Array.from(items).sort();
+    }, [allMetadata, language]);
+
+    const filtered = allNames.filter(n => n.toLowerCase().includes(search.toLowerCase()));
+
+    useEffect(() => {
+        if (!isOpen) return;
+        setPending(activeFilters.filter(f => f.key === 'Name').map(f => f.value));
+        setSearch('');
+    }, [isOpen]); // eslint-disable-line
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const onKey = (e) => { if (e.key === 'Escape') setIsOpen(false); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [isOpen]);
+
+    const toggle = (name) =>
+        setPending(prev => prev.includes(name) ? prev.filter(x => x !== name) : [...prev, name]);
+
+    const handleApply = () => {
+        const toRemove = [];
+        activeFilters.forEach((f, i) => { if (f.key === 'Name') toRemove.push(i); });
+        toRemove.reverse().forEach(i => onRemoveFilter(i));
+        pending.forEach(v => onAddFilter({ key: 'Name', value: v }));
+        setIsOpen(false);
+    };
+
+    const handleClear = () => { setPending([]); setSearch(''); };
+
+    const activeCount = activeFilters.filter(f => f.key === 'Name').length;
+
+    return (
+        <>
+            <button
+                onClick={() => setIsOpen(true)}
+                className={`flex-1 py-1.5 px-3 border rounded text-sm font-medium flex items-center justify-between transition-colors ${
+                    activeCount > 0
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                        : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+                style={{ backgroundColor: activeCount > 0 ? undefined : 'var(--bg-surface, white)' }}
+            >
+                <span>📜 Granth{activeCount > 0 ? ` (${activeCount})` : ''}</span>
+                <svg className="w-3.5 h-3.5 ml-1 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+
+            {isOpen && (
+                <>
+                    <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={() => setIsOpen(false)} />
+                    <div className="fixed inset-x-0 bottom-0 md:inset-0 md:flex md:items-center md:justify-center z-50">
+                        <div className="bg-white rounded-t-lg md:rounded-lg shadow-2xl w-full md:max-w-lg md:max-h-[85vh] flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+
+                            {/* Header */}
+                            <div className="p-4 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white rounded-t-lg">
+                                <h3 className="text-base font-bold text-slate-800">Filter by Granth</h3>
+                                <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-slate-600">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            {/* Search */}
+                            <div className="px-4 pt-3 pb-2">
+                                <input
+                                    type="text"
+                                    value={search}
+                                    onChange={e => setSearch(e.target.value)}
+                                    placeholder="Search granths..."
+                                    className="w-full px-3 py-1.5 border border-slate-300 rounded text-sm text-slate-800 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 bg-white"
+                                />
+                            </div>
+
+                            {/* List */}
+                            <div className="overflow-y-auto flex-1 px-4 pb-2" style={{ scrollbarWidth: 'thin', scrollbarColor: '#94a3b8 #f1f5f9' }}>
+                                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                                    {filtered.length === 0 && (
+                                        <p className="p-4 text-sm text-slate-500 text-center">No granths found</p>
+                                    )}
+                                    {filtered.map((name) => (
+                                        <label key={name}
+                                            className="flex items-center gap-3 p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-b-0">
+                                            <input type="checkbox"
+                                                checked={pending.includes(name)}
+                                                onChange={() => toggle(name)}
+                                                className="form-checkbox h-4 w-4 text-emerald-600 rounded" />
+                                            <span className="text-sm text-slate-800 flex-1">{name}</span>
+                                            {pending.includes(name) && (
+                                                <svg className="w-4 h-4 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            )}
+                                        </label>
+                                    ))}
+                                </div>
+                                {pending.length > 0 && (
+                                    <p className="text-xs text-emerald-700 font-medium mt-2">{pending.length} selected</p>
+                                )}
+                            </div>
+
+                            {/* Footer */}
+                            <div className="p-4 border-t border-slate-200 flex gap-2 sticky bottom-0 bg-white rounded-b-lg">
+                                <button onClick={handleClear}
+                                    className="flex-1 px-4 py-1.5 border border-slate-300 rounded text-slate-700 text-sm font-semibold hover:bg-slate-50">
+                                    Clear
+                                </button>
+                                <button onClick={handleApply}
+                                    className="flex-1 px-4 py-1.5 bg-emerald-600 text-white rounded text-sm font-semibold hover:bg-emerald-700">
+                                    Apply{pending.length > 0 ? ` (${pending.length})` : ''}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
+        </>
+    );
+};
+
+// ─── SearchFilters (public wrapper) ──────────────────────────────────────────
+
+const CHIP_COLORS = {
+    Series:           'bg-violet-100 text-violet-800 border-violet-200',
+    volume:           'bg-blue-100 text-blue-800 border-blue-200',
+    pravachan_number: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+    Name:             'bg-sky-100 text-sky-800 border-sky-200',
+};
+const CHIP_LABELS = {
+    Series: 'Series',
+    volume: 'Vol',
+    pravachan_number: '#',
+    Name: '',
+};
+
+export const SearchFilters = ({
+    allMetadata, activeFilters, onAddFilter, onRemoveFilter,
+    language, startYear, setStartYear, endYear, setEndYear,
+    activeCategories = ['Pravachan', 'Granth'],
+    // kept for compat but not used — content type handled separately
+    contentTypes, setContentTypes,
+}) => {
+    const hasYearFilter = startYear || endYear;
+    const hasAnyFilter  = activeFilters.length > 0 || hasYearFilter;
+
+    return (
+        <div className="space-y-2">
+            <p className="text-xs text-slate-900 font-semibold uppercase tracking-wide">Refine search</p>
+
+            <div className="flex gap-2">
+                {activeCategories.includes('Pravachan') && (
+                    <PravachanFilter
+                        allMetadata={allMetadata}
+                        activeFilters={activeFilters}
+                        onAddFilter={onAddFilter}
+                        onRemoveFilter={onRemoveFilter}
+                        language={language}
+                        startYear={startYear}
+                        setStartYear={setStartYear}
+                        endYear={endYear}
+                        setEndYear={setEndYear}
+                    />
+                )}
+                {(activeCategories.includes('Granth') || activeCategories.includes('Books')) && (
+                    <GranthFilter
+                        allMetadata={allMetadata}
+                        activeFilters={activeFilters}
+                        onAddFilter={onAddFilter}
+                        onRemoveFilter={onRemoveFilter}
+                        language={language}
+                    />
+                )}
+            </div>
+
+            {/* Active filter chips */}
+            {hasAnyFilter && (
+                <div className="flex flex-wrap gap-1.5 items-center">
+                    {activeFilters.map((f, i) => {
+                        const color = CHIP_COLORS[f.key] || 'bg-slate-100 text-slate-700 border-slate-200';
+                        const prefix = CHIP_LABELS[f.key];
+                        const label = prefix ? `${prefix}: ${f.value}` : f.value;
+                        return (
+                            <span key={i} className={`${color} border text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1`}>
+                                {label}
+                                <button onClick={() => onRemoveFilter(i)} className="opacity-60 hover:opacity-100 font-bold leading-none">&times;</button>
+                            </span>
+                        );
+                    })}
+                    {hasYearFilter && (
+                        <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
+                            {startYear || '?'} – {endYear || '?'}
+                            <button onClick={() => { setStartYear(null); setEndYear(null); }} className="opacity-60 hover:opacity-100 font-bold leading-none">&times;</button>
+                        </span>
+                    )}
+                    {hasAnyFilter && (
+                        <button
+                            onClick={() => {
+                                [...activeFilters].map((_, i) => i).reverse().forEach(i => onRemoveFilter(i));
+                                setStartYear(null); setEndYear(null);
+                            }}
+                            className="text-xs text-slate-400 hover:text-slate-600 underline ml-1"
+                        >
+                            Clear all
+                        </button>
+                    )}
+                </div>
             )}
         </div>
     );
