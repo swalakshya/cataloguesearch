@@ -9,15 +9,17 @@ pydantic==2.8.2              # Data validation and settings management
 opensearch-py==2.5.0         # Python client for OpenSearch
 
 ## NLP & Embeddings
-sentence-transformers==2.7.0 # For creating sentence and text embeddings
-optimum[onnxruntime]==1.19.1 # For ONNX model optimization and inference
+sentence-transformers==3.3.1  # For creating sentence and text embeddings
+optimum[onnxruntime]==1.23.3  # For ONNX model optimization and inference
+onnxscript                    # Required for PyTorch → ONNX export
 langdetect==1.0.9            # Language detection library
 indic-nlp-library==0.92      # Core library for Indian language NLP tasks
 
 ## Dependencies for NLP Libraries
 morfessor==2.0.6             # Dependency for indic-nlp-library
-numpy==1.26.4                # Fundamental package for scientific computing
-pandas==2.2.2                # Data analysis and manipulation library
+numpy>=1.26.4                # Fundamental package for scientific computing
+ml-dtypes>=0.5.0             # Required by onnx 1.19+ (float4_e2m1fn dtype)
+pandas>=2.2.3                # Data analysis and manipulation library
 
 ## Configuration & Utilities
 pyyaml==6.0.1                # For parsing YAML configuration files

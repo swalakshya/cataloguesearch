@@ -34,6 +34,9 @@ opensearch:
 vector_embeddings:
   embedding_model: BAAI/bge-m3
   reranking_model: BAAI/bge-reranker-base
+  # Set to false to skip loading the reranker model entirely (saves ~500MB RAM).
+  # When disabled, all reranking is bypassed regardless of per-request flags.
+  enable_reranker: true
   # Path to the optimized ONNX model directory inside the container.
   # If this path exists, the application will use the faster ONNX model.
   reranker_onnx_path: "{BASE_DIR}/models/bge-reranker-base-onnx"

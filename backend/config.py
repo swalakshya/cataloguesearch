@@ -148,6 +148,8 @@ class Config:
             return self._settings.get("vector_embeddings", {}).get("embedding_model_type", "base")
         elif name == "RERANKER_ONNX_PATH":
             return self._settings.get("vector_embeddings", {}).get("reranker_onnx_path", None)
+        elif name == "ENABLE_RERANKER":
+            return self._settings.get("vector_embeddings", {}).get("enable_reranker", True)
         elif name == "FILTERED_METADATA_FIELDS":
             return self._settings.get("search", {}).get("filtered_metadata_fields", {})
         elif name == "METRICS_DB_PATH":

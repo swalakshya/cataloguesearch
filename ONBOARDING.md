@@ -30,11 +30,23 @@ Verify Tesseract has Hindi and Gujarati:
 tesseract --list-langs    # should include hin and guj
 ```
 
-### Python 3.12+
+### Python 3.13+
 
 ```bash
-python3 --version    # must be 3.12+
+python3 --version    # must be 3.13+
 ```
+
+### Tessdata (Hindi & Gujarati)
+
+Download high-quality trained models from `tesseract-ocr/tessdata_best` into the repo's `tessdata/` directory:
+
+```bash
+mkdir -p tessdata
+curl -L -o tessdata/hin.traineddata https://github.com/tesseract-ocr/tessdata_best/raw/main/hin.traineddata
+curl -L -o tessdata/guj.traineddata https://github.com/tesseract-ocr/tessdata_best/raw/main/guj.traineddata
+```
+
+These are used automatically — `configs/config.yaml` already points `tessdata_dir` to this folder.
 
 ### Indic NLP Resources
 
@@ -125,12 +137,13 @@ pip install -r requirements.txt
 **Required before the first Docker build.** The API image bundles this model at build time.
 
 ```bash
-cd models/
-python ../scripts/convert_reranking_model.py
+mkdir -p models && cd models
+optimum-cli export onnx --model BAAI/bge-reranker-base bge-reranker-base-onnx
+cd ..
 # produces: models/bge-reranker-base-onnx/
 ```
 
-This downloads `BAAI/bge-reranker-base` from HuggingFace and converts it to ONNX. Only needs to be done once (or when the model changes).
+This downloads `BAAI/bge-reranker-base` from HuggingFace (~1.1GB) and converts it to ONNX. Only needs to be done once (or when the model changes).
 
 ### 5. Build Docker images
 
@@ -261,12 +274,15 @@ python scripts/discovery_cli.py discover \
 
 ## Running Tests
 
+Tests use Gemini for bookmark extraction — ensure `GEMINI_API_KEY` is set in `tests/.env` before running.
+
 ```bash
 # Start test OpenSearch (separate instance on port 19200)
-docker compose -f docker-compose.test.yml --env-file .env.local up -d
+docker compose -f docker-compose.test.yml --env-file .env.local up opensearch -d
 
 # Run tests
 source venv/bin/activate
+export PYTHONPATH=~/github/swalakshya/cataloguesearch
 pytest
 ```
 

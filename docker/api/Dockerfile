@@ -1,7 +1,6 @@
-# Use Python 3.12 as base image
 # --- Stage 1: Builder ---
 # This stage installs all build-time dependencies and Python packages.
-FROM python:3.12-slim AS builder
+FROM python:3.13-slim AS builder
 
 WORKDIR /app
 
@@ -25,7 +24,7 @@ RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/wh
 # --- Stage 2: Final Image ---
 # This stage creates the final, smaller runtime image by copying
 # only the necessary artifacts from the builder stage.
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 
@@ -35,7 +34,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy only the Python packages and essential binaries from the builder stage
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
 # Only copy essential Python binaries, not build tools
   COPY --from=builder /usr/local/bin/python* /usr/local/bin/
   COPY --from=builder /usr/local/bin/pip* /usr/local/bin/

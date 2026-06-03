@@ -178,6 +178,7 @@ def test_cache_fix_extractor_is_wrapped(initialise):
     log_handle.info("✅ create_bookmark_extractor correctly returns CachedBookmarkExtractor")
 
 
+@pytest.mark.skip(reason="requires phi4:14b locally")
 def test_bookmark_extraction(ollama_extractor, gemini_extractor):
     """
     Tests call_llm parsing using real PDF bookmark strings.
@@ -194,6 +195,7 @@ def test_bookmark_extraction(ollama_extractor, gemini_extractor):
     _run_parallel(tasks)
 
 
+@pytest.mark.skip(reason="requires phi4:14b locally")
 def test_pdf_bookmarks(ollama_extractor, gemini_extractor):
     """
     Tests parse_bookmarks on real PDF files.

@@ -4,6 +4,7 @@ import requests
 from typing import List, Dict, Any, Optional
 
 from .base import BookmarkExtractor
+from backend.utils import json_dumps
 
 log_handle = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ class OllamaBookmarkExtractor(BookmarkExtractor):
         Returns:
             List of dictionaries with extracted data, or None if failed
         """
-        indexed_titles_json = json.dumps(indexed_titles)
+        indexed_titles_json = json_dumps(indexed_titles)
         log_handle.info(f"{indexed_titles_json}")
 
         # NuExtract expects a specific format - combine system prompt with user message

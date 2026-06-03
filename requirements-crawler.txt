@@ -4,7 +4,7 @@
 -r requirements-base.txt
 
 ## PDF Processing & Document Handling
-PyMuPDF==1.24.5              # For PDF parsing and text extraction
+PyMuPDF==1.27.2.3            # For PDF parsing and text extraction
 pdf2image==1.17.0            # Converts PDF files to images for OCR
 
 ## OCR & Image Processing

@@ -64,7 +64,9 @@ class BaseEmbeddingModel:
         self.reranker_onnx_path = config.RERANKER_ONNX_PATH
         # Eagerly load models on initialization
         self._embedding_model = self._load_embedding_model()
-        self._reranker_model = self._load_reranker_model()
+        self._reranker_model = self._load_reranker_model() if config.ENABLE_RERANKER else None
+        if not config.ENABLE_RERANKER:
+            log_handle.info("Reranker disabled via config (enable_reranker: false). Model not loaded.")
 
     def get_class(self, config: Dict[str, Any]) -> 'BaseEmbeddingModel':
         """Returns an instance of this class with the given config."""
@@ -109,8 +111,8 @@ class BaseEmbeddingModel:
             # Return a list of zero vectors matching the input length
             return [[0.0] * self.get_embedding_dimension()] * len(texts)
 
-    def get_reranking_model(self) -> ONNXReranker:
-        """Get the reranking model instance."""
+    def get_reranking_model(self) -> ONNXReranker | None:
+        """Get the reranking model instance, or None if disabled via config."""
         return self._reranker_model
 
     def get_embedding_dimension(self) -> int:
