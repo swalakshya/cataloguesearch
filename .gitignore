@@ -141,5 +141,6 @@ tessdata/
 .vscode
 
 .env.*
+!.env.example
 
 .claude

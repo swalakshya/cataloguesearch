@@ -312,7 +312,8 @@ class IndexGenerator:
         log_handle.info(f"Generating embeddings for {len(texts_to_embed)} chunks in batches...")
 
         # Generate all embeddings in a single, optimized batch call
-        embeddings = embedding_model.get_embeddings_batch(texts_to_embed, batch_size=8)
+        embeddings = embedding_model.get_embeddings_batch(
+            texts_to_embed, batch_size=self._config.EMBEDDING_BATCH_SIZE)
 
         # Assign the generated embeddings back to their corresponding chunks
         for i, chunk in enumerate(all_chunks):

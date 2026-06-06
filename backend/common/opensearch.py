@@ -22,6 +22,8 @@ _OPENSEARCH_SETTINGS = None
 _LANG_KEYS_MAP = {
     "hi": "hi",
     "gu": "gu",
+    "gu+hi": "gu",
+    "hi+gu": "hi",
     "gujarati": "gu",
     "hindi": "hi"
 }

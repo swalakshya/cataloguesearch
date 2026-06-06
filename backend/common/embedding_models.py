@@ -52,6 +52,11 @@ def _get_device():
                                "For GPU support, please install torch.")
             _DEVICE = 'cpu'
 
+    n = int(os.environ.get("TORCH_NUM_THREADS", "0"))
+    if n > 0 and _TORCH_AVAILABLE and torch is not None:
+        torch.set_num_threads(n)
+        log_handle.info("Limiting PyTorch CPU threads to %d.", n)
+
     return _DEVICE
 
 class BaseEmbeddingModel:

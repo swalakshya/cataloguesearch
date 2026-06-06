@@ -166,6 +166,20 @@ search_index:
           date:
             type: date
             format: "yyyy-MM-dd||strict_date_optional_time||epoch_millis"
+          pravachan_number:
+            type: keyword
+          gatha:
+            type: keyword
+          kalash:
+            type: keyword
+          shlok:
+            type: keyword
+          doha:
+            type: keyword
+          kavya:
+            type: keyword
+          sutra:
+            type: keyword
       verse_type:
         type: keyword
       verse_id:

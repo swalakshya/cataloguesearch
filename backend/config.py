@@ -192,6 +192,15 @@ class Config:
             return self._settings.get("transliteration", {}).get("timeout", 10)
         elif name == "BOOKMARK_EXTRACTOR_LLM":
             return self._settings.get("crawler", {}).get("bookmark_extractor_llm", "gemini")
+        elif name == "OCR_MAX_WORKERS":
+            raw = self._settings.get("crawler", {}).get("ocr_max_workers", "")
+            return int(raw) if raw else 8
+        elif name == "EMBEDDING_BATCH_SIZE":
+            raw = self._settings.get("vector_embeddings", {}).get("embedding_batch_size", "")
+            return int(raw) if raw else 8
+        elif name == "TORCH_NUM_THREADS":
+            raw = self._settings.get("vector_embeddings", {}).get("torch_num_threads", "")
+            return int(raw) if raw else 0
         elif name == "OCR_ENGINE":
             return self._settings.get("crawler", {}).get("ocr_engine", "tesseract")
         elif name == "TESSDATA_DIR":

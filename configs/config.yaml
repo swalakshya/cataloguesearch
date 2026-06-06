@@ -10,6 +10,7 @@ crawler:
   default_llm_model: "gemini-2.5-flash"
   secondary_llm_model: "gemini-3-flash-preview"
   llm_workers: 10
+  ocr_max_workers: "{OCR_MAX_WORKERS}"
 
 index:
   opensearch_config: "{BASE_DIR}/configs/opensearch-config.yaml"
@@ -42,6 +43,8 @@ vector_embeddings:
   reranker_onnx_path: "{BASE_DIR}/models/bge-reranker-base-onnx"
   # Supported types: base, fp16, quantized_8bit
   embedding_model_type: fp16
+  embedding_batch_size: "{EMBEDDING_BATCH_SIZE}"
+  torch_num_threads: "{TORCH_NUM_THREADS}"
 
 transliteration:
   api_url: "http://localhost:8500"

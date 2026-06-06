@@ -103,6 +103,11 @@ FEEDBACK_FROM_EMAIL=contact@swalakshya.me
 FEEDBACK_TO_EMAIL=contact@swalakshya.me
 GEMINI_API_KEY=<key>
 BROWSER=none
+
+# Optional: throttle CPU/heat during indexing (tune for your machine)
+OCR_MAX_WORKERS=4        # parallel Tesseract processes; 2 for fanless, 4-8 for fan-cooled
+EMBEDDING_BATCH_SIZE=4   # texts per embedding batch; lower = less CPU burst
+TORCH_NUM_THREADS=4      # PyTorch CPU threads; 0 = PyTorch decides (all cores)
 ```
 
 Create a symlink inside `frontend/` so that `npm start` picks up the same file:

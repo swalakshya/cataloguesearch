@@ -152,7 +152,7 @@ class PDFProcessor:
             return []
 
         extracted_data = []
-        with ProcessPoolExecutor(max_workers=8) as executor:
+        with ProcessPoolExecutor(max_workers=self._config.OCR_MAX_WORKERS) as executor:
             results = list(tqdm(
                 executor.map(self.__class__._process_single_page, tasks),
                 total=len(tasks), desc="Processing Pages"))
