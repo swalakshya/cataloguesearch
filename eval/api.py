@@ -27,7 +27,7 @@ from PIL import Image
 
 from backend.config import Config
 from backend.crawler.advanced_pdf_processor import AdvancedPDFProcessor
-from backend.common.scan_config import get_scan_config
+from backend.common.scan_config import get_scan_config, get_ignore_bookmarks
 from backend.common.utils import get_merged_config
 from backend.crawler.index_state import IndexState
 from backend.crawler.bookmark_extractor.factory import create_bookmark_extractor_by_name
@@ -611,6 +611,135 @@ async def extract_bookmarks(request: BookmarkExtractionRequest):
     except Exception as e:
         log_handle.error(f"Error parsing bookmarks: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error parsing bookmarks: {str(e)}")
+
+
+# --- Bookmark Backfill Models ---
+class BackfillCandidatesResponse(BaseModel):
+    files: List[str]
+    total: int
+
+class RawBookmarksResponse(BaseModel):
+    indexed_titles: List[Dict[str, Any]]
+    total: int
+
+class BookmarkSaveRequest(BaseModel):
+    file_path: str = Field(..., description="Relative PDF path from BASE_PDF_PATH")
+    bookmarks: List[Dict[str, Any]] = Field(..., description="Parsed bookmark array from Gemini/LLM")
+
+class BookmarkSaveResponse(BaseModel):
+    saved: bool
+    count: int
+
+
+@router.get("/bookmarks/backfill-candidates", response_model=BackfillCandidatesResponse)
+async def get_backfill_candidates():
+    """
+    Returns PDF files that have no parsed bookmarks in the DB AND have
+    ignore_bookmarks=false in their effective scan_config.
+    """
+    try:
+        config = Config("configs/config.yaml")
+        index_state = IndexState(config.SQLITE_DB_PATH)
+        base_pdf_path = config.BASE_PDF_PATH
+
+        # Step 1: Get all files with empty/null bookmarks from DB
+        candidates = index_state.get_files_without_bookmarks()
+
+        # Step 2: Filter out files where ignore_bookmarks=true in scan_config
+        filtered = []
+        for relative_path in candidates:
+            # Strip sub-section suffixes (e.g. "file.pdf#field:name")
+            clean_path = relative_path.split('#')[0] if '#' in relative_path else relative_path
+            abs_path = os.path.join(base_pdf_path, clean_path)
+            if not os.path.isfile(abs_path):
+                continue
+            try:
+                if get_ignore_bookmarks(abs_path, base_pdf_path):
+                    continue
+            except Exception:
+                continue
+            filtered.append(clean_path)
+
+        # Deduplicate (sub-sections share the same base file)
+        filtered = sorted(set(filtered))
+
+        return BackfillCandidatesResponse(files=filtered, total=len(filtered))
+
+    except Exception as e:
+        log_handle.error(f"Error fetching backfill candidates: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/bookmarks/raw", response_model=RawBookmarksResponse)
+async def get_raw_bookmarks(file_path: str):
+    """
+    Extracts raw TOC bookmarks from a PDF and returns them as indexed_titles —
+    the exact format expected by the LLM (and suitable for pasting into Gemini).
+    """
+    try:
+        config = Config("configs/config.yaml")
+        abs_path = os.path.join(config.BASE_PDF_PATH, file_path)
+
+        if not os.path.isfile(abs_path):
+            raise HTTPException(status_code=404, detail=f"PDF not found: {file_path}")
+
+        # Use OllamaBookmarkExtractor purely for _extract_bookmarks_from_pdf —
+        # no LLM call is made here.
+        from backend.crawler.bookmark_extractor.ollama import OllamaBookmarkExtractor
+        extractor = OllamaBookmarkExtractor()
+        bookmark_json = extractor._extract_bookmarks_from_pdf(abs_path)
+
+        bookmarks = bookmark_json.get("bookmarks", [])
+        indexed_titles = [
+            {"index": i, "page": item.get("page"), "title": item.get("title", "")}
+            for i, item in enumerate(bookmarks)
+        ]
+
+        return RawBookmarksResponse(indexed_titles=indexed_titles, total=len(indexed_titles))
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_handle.error(f"Error extracting raw bookmarks for {file_path}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/bookmarks/save", response_model=BookmarkSaveResponse)
+async def save_bookmarks(request: BookmarkSaveRequest):
+    """
+    Saves a parsed bookmarks array (from Gemini or any LLM) back into the DB
+    for the given PDF file. Only updates parsed_bookmarks — nothing else.
+    """
+    try:
+        if not request.bookmarks:
+            raise HTTPException(status_code=400, detail="bookmarks array is empty")
+
+        config = Config("configs/config.yaml")
+        abs_path = os.path.join(config.BASE_PDF_PATH, request.file_path)
+
+        if not os.path.isfile(abs_path):
+            raise HTTPException(status_code=404, detail=f"PDF not found: {request.file_path}")
+
+        relative_path = os.path.relpath(abs_path, config.BASE_PDF_PATH)
+        document_id = str(uuid.uuid5(uuid.NAMESPACE_URL, relative_path))
+
+        index_state = IndexState(config.SQLITE_DB_PATH)
+        updated = index_state.update_parsed_bookmarks(document_id, request.bookmarks)
+
+        if not updated:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No DB record found for {request.file_path}. Has it been indexed yet?"
+            )
+
+        return BookmarkSaveResponse(saved=True, count=len(request.bookmarks))
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_handle.error(f"Error saving bookmarks for {request.file_path}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/pdf/proxy")
 async def proxy_pdf(url: str):

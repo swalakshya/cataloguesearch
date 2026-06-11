@@ -14,6 +14,56 @@ import fitz
 log_handle = logging.getLogger(__name__)
 
 
+def get_ignore_bookmarks(file_path: str, base_pdf_folder: str) -> bool:
+    """
+    Lightweight check for whether ignore_bookmarks is set for a given PDF file.
+    Walks the scan_config.json hierarchy from base_pdf_folder down to the file's
+    directory, returning the final effective value of ignore_bookmarks.
+
+    Does NOT open the PDF — safe to call in bulk without fitz overhead.
+
+    Args:
+        file_path: Absolute path to the PDF file
+        base_pdf_folder: Absolute path to the base PDF folder
+
+    Returns:
+        True if ignore_bookmarks is effectively true, False otherwise.
+    """
+    folders = []
+    current = os.path.dirname(file_path)
+    while True:
+        folders = [current] + folders
+        if os.path.samefile(current, base_pdf_folder):
+            break
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
+
+    ignore_bookmarks = False
+    filename = os.path.splitext(os.path.basename(file_path))[0]
+
+    for folder in folders:
+        scan_config_path = os.path.join(folder, "scan_config.json")
+        if not os.path.exists(scan_config_path):
+            continue
+        try:
+            with open(scan_config_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            # default section
+            default = data.get("default", {})
+            if "ignore_bookmarks" in default:
+                ignore_bookmarks = bool(default["ignore_bookmarks"])
+            # file-specific section overrides default
+            file_config = data.get(filename, {})
+            if "ignore_bookmarks" in file_config:
+                ignore_bookmarks = bool(file_config["ignore_bookmarks"])
+        except (json.JSONDecodeError, IOError) as e:
+            log_handle.warning(f"Could not read {scan_config_path}: {e}")
+
+    return ignore_bookmarks
+
+
 def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
     """
     Loads scan_config for a given PDF file by merging scan_config.json files

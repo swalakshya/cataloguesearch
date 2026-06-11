@@ -6,6 +6,7 @@ import FileBrowser from './FileBrowser';
 import ParaClassifier from './ParaClassifier';
 import UnindexedPDFs from './UnindexedPDFs';
 import LoadTest from './LoadTest';
+import BookmarkBackfill from './BookmarkBackfill';
 import { storeDirectoryHandles, getStoredDirectoryHandles, validateDirectoryHandles, requestStoredPermissions, clearStoredDirectoryHandles } from '../../utils/directoryHandlers';
 
 const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
@@ -256,6 +257,12 @@ const UIEval = () => {
                                         onClick={setActiveTab}
                                     />
                                     <NavButton
+                                        id="bookmark-backfill"
+                                        label="Bookmark Backfill"
+                                        isActive={activeTab === 'bookmark-backfill'}
+                                        onClick={setActiveTab}
+                                    />
+                                    <NavButton
                                         id="load-test"
                                         label="Load Test"
                                         isActive={activeTab === 'load-test'}
@@ -278,7 +285,7 @@ const UIEval = () => {
                             </div>
 
                             {/* Base Paths Info */}
-                            {basePaths && activeTab !== 'home' && activeTab !== 'load-test' && (
+                            {basePaths && activeTab !== 'home' && activeTab !== 'load-test' && activeTab !== 'bookmark-backfill' && (
                                 <div className="mt-4 pt-4 border-t border-slate-200">
                                     <div className="text-sm text-slate-600">
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -545,6 +552,10 @@ const UIEval = () => {
 
                         {activeTab === 'unindexed-pdfs' && (
                             <UnindexedPDFs />
+                        )}
+
+                        {activeTab === 'bookmark-backfill' && (
+                            <BookmarkBackfill />
                         )}
 
                         {activeTab === 'load-test' && (

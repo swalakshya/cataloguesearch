@@ -249,6 +249,48 @@ class IndexState:
         log_handle.info(f"Invalidated all states: {affected} row(s) affected. "
                         f"Fields cleared: {', '.join(fields)}")
 
+    def get_files_without_bookmarks(self) -> list[str]:
+        """
+        Returns a list of file_path values from the DB where parsed_bookmarks
+        is NULL or an empty JSON array.
+        """
+        conn = sqlite3.connect(self.state_db_path)
+        c = conn.cursor()
+        c.execute(
+            "SELECT file_path FROM indexed_files_state "
+            "WHERE parsed_bookmarks IS NULL OR parsed_bookmarks = '[]'"
+        )
+        rows = c.fetchall()
+        conn.close()
+        return [row[0] for row in rows if row[0]]
+
+    def update_parsed_bookmarks(self, document_id: str, bookmarks: list) -> bool:
+        """
+        Updates only the parsed_bookmarks column for a given document_id.
+        Does not touch any other column (config_hash, ocr_checksum, etc.).
+
+        Args:
+            document_id: The document's UUID
+            bookmarks: List of parsed bookmark dicts to store
+
+        Returns:
+            True if a row was updated, False if document_id not found.
+        """
+        conn = sqlite3.connect(self.state_db_path)
+        c = conn.cursor()
+        c.execute(
+            "UPDATE indexed_files_state SET parsed_bookmarks = ? WHERE document_id = ?",
+            (json.dumps(bookmarks, ensure_ascii=False), document_id)
+        )
+        updated = c.rowcount > 0
+        conn.commit()
+        conn.close()
+        if updated:
+            log_handle.info(f"update_parsed_bookmarks: saved {len(bookmarks)} bookmark(s) for {document_id}")
+        else:
+            log_handle.warning(f"update_parsed_bookmarks: document_id {document_id} not found in DB")
+        return updated
+
     def delete_index_state(self):
         """
         Deletes the entire index state from the SQLite DB.
