@@ -161,7 +161,7 @@ def prewarm_bookmark_cache(enable_bookmark_caching_for_tests):
 
 
 @pytest.fixture(scope="session")
-def build_index(ensure_ollama, prewarm_bookmark_cache):  # noqa: ensure_ollama kept for Ollama startup
+def build_index(prewarm_bookmark_cache):
     """
     Build the OpenSearch test index once per session.
     Shared by test_search_api.py and test_agent_api_integration.py.

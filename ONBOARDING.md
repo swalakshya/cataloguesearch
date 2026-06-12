@@ -48,14 +48,6 @@ curl -L -o tessdata/guj.traineddata https://github.com/tesseract-ocr/tessdata_be
 
 These are used automatically — `configs/config.yaml` already points `tessdata_dir` to this folder.
 
-### Indic NLP Resources
-
-```bash
-git clone https://github.com/anoopkunchukuttan/indic_nlp_resources.git /path/to/indic_nlp_resources
-echo 'export INDIC_RESOURCES_PATH="/path/to/indic_nlp_resources"' >> ~/.zshrc
-source ~/.zshrc
-```
-
 ### API Keys
 
 You will need the following keys. Get them from a colleague or create your own:
@@ -63,7 +55,6 @@ You will need the following keys. Get them from a colleague or create your own:
 | Key | Where used                                      |
 |-----|-------------------------------------------------|
 | `GEMINI_API_KEY` | Granth crawling (LLM OCR + bookmark extraction) |
-| `HF_TOKEN` | HuggingFace — downloading models for tests      |
 | `RECAPTCHA_SECRET_KEY` + `REACT_APP_RECAPTCHA_SITE_KEY` | Feedback form UI                                |
 | `BREVO_API_KEY` | Email delivery for feedback                     |
 
@@ -124,7 +115,6 @@ TEST_BASE_DIR=${ROOT_DIR}/tests
 TEST_DATA_DIR=${TEST_BASE_DIR}/data
 PATH=$PATH:/opt/homebrew/bin:/opt/homebrew/sbin
 INDEX_NAME="opensearch-index-pytest"
-HF_TOKEN=<key>
 GEMINI_API_KEY=<key>
 ```
 
@@ -141,14 +131,19 @@ pip install -r requirements.txt
 
 **Required before the first Docker build.** The API image bundles this model at build time.
 
+`optimum-cli` is installed as part of `requirements-base.txt` (via `optimum[onnxruntime]`), so activate your venv first:
+
 ```bash
+source venv/bin/activate
 mkdir -p models && cd models
-optimum-cli export onnx --model BAAI/bge-reranker-base bge-reranker-base-onnx
+optimum-cli export onnx --model BAAI/bge-reranker-base --opset 18 bge-reranker-base-onnx
 cd ..
 # produces: models/bge-reranker-base-onnx/
 ```
 
 This downloads `BAAI/bge-reranker-base` from HuggingFace (~1.1GB) and converts it to ONNX. Only needs to be done once (or when the model changes).
+
+> **Note:** The command may end with a `FileNotFoundError: model.onnx.data` traceback — this is a harmless bug in optimum's cleanup code (naming mismatch between the PyTorch dynamo exporter and optimum). The export itself completes successfully; ignore the error and verify with `ls models/bge-reranker-base-onnx/` — you should see `model.onnx`, `model.onnx_data`, and tokenizer files.
 
 ### 5. Build Docker images
 
