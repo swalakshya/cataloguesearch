@@ -27,6 +27,11 @@ class AgentSearchRequest(BaseModel):
     )
     anuyog: Optional[str] = Field(None, description="Anuyog classification")
     granth: Optional[str] = Field(None, description="Granth name")
+    gatha: Optional[str] = Field(None, description="Verse filter: gatha number (chunk_labels.gatha)")
+    shlok: Optional[str] = Field(None, description="Verse filter: shlok number (chunk_labels.shlok)")
+    doha: Optional[str] = Field(None, description="Verse filter: doha number (chunk_labels.doha)")
+    kavya: Optional[str] = Field(None, description="Verse filter: kavya number (chunk_labels.kavya)")
+    sutra: Optional[str] = Field(None, description="Verse filter: sutra number (chunk_labels.sutra)")
     contributor: Optional[str] = Field(
         None, description="Author/Tikakaar/Bhasha Vachanika name"
     )
@@ -280,6 +285,12 @@ def _build_filters(payload: AgentSearchRequest) -> List[Dict[str, Any]]:
     if payload.granth:
         filters.append({"term": {"metadata.Name.keyword": payload.granth}})
 
+    # Verse-level filters live on chunk_labels (keyword fields, no .keyword suffix).
+    for verse_field in ("gatha", "shlok", "doha", "kavya", "sutra"):
+        value = getattr(payload, verse_field, None)
+        if value is not None and value != "":
+            filters.append({"term": {f"chunk_labels.{verse_field}": str(value)}})
+
     if payload.contributor:
         contributor_should = []
         contributor_fields = [
@@ -361,6 +372,11 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
                 "rerank": payload.rerank,
                 "has_anuyog": bool(payload.anuyog),
                 "has_granth": bool(payload.granth),
+                "verse_filters": {
+                    vf: getattr(payload, vf)
+                    for vf in ("gatha", "shlok", "doha", "kavya", "sutra")
+                    if getattr(payload, vf)
+                },
                 "has_contributor": bool(payload.contributor),
                 "year_from": payload.year_from,
                 "year_to": payload.year_to,
