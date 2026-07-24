@@ -347,6 +347,28 @@ sudo certbot renew --force-renewal --dry-run
 
 Certbot's systemd timer handles auto-renewal — no cron needed.
 
+### Manual certificate renewal
+
+If auto-renewal fails or the cert is already expired, renew manually. The `standalone` plugin needs port 80 free, so stop the frontend first:
+
+```bash
+# Stop frontend to free port 80
+docker compose --env-file /root/.env.prod -f /root/docker-compose.prod.yml stop cataloguesearch-frontend
+
+# Force-renew (choose ECDSA when prompted)
+certbot certonly --standalone \
+  -d swalakshya.me -d www.swalakshya.me -d chat.swalakshya.me \
+  --force-renewal
+
+# Restart frontend (the deploy-hook may do this automatically)
+docker compose --env-file /root/.env.prod -f /root/docker-compose.prod.yml start cataloguesearch-frontend
+```
+
+Verify afterwards:
+```bash
+certbot certificates
+```
+
 ---
 
 ## LICENSE
