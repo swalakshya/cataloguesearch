@@ -133,38 +133,121 @@ const TipsModal = ({ onClose }) => {
 };
 
 
-// --- COPY ANSWER BUTTON ---
-const CopyAnswerButton = ({ text }) => {
+// --- CITATION HELPERS (shared by the on-screen HTML renderer and the plain-text share/copy path) ---
+const parseCitationAttrs = (attrStr) => {
+    const attrs = {};
+    const re = /(\w+)="([^"]*)"/g;
+    let m;
+    while ((m = re.exec(attrStr)) !== null) {
+        attrs[m[1]] = m[2].replace(/&quot;/g, '"');
+    }
+    return attrs;
+};
+
+const buildCitationLabel = (attrs) => {
+    const parts = [];
+    if (attrs.granth) parts.push(attrs.granth);
+    if (attrs.category === 'Pravachan') {
+        if (attrs.pravachankar) parts.push(`by ${attrs.pravachankar}`);
+        if (attrs.series) parts.push(attrs.series);
+        if (attrs.series_number) parts.push(`Series No. ${attrs.series_number}`);
+        if (attrs.volume) parts.push(`Vol ${attrs.volume}`);
+        if (attrs.pravachan_number) parts.push(`No. ${attrs.pravachan_number}`);
+    } else {
+        if (attrs.gatha) parts.push(`Gatha ${attrs.gatha}`);
+        if (attrs.shlok) parts.push(`Shlok ${attrs.shlok}`);
+        if (attrs.kalash) parts.push(`Kalash ${attrs.kalash}`);
+        if (attrs.dohra) parts.push(`Doha ${attrs.dohra}`);
+        if (attrs.kavya) parts.push(`Kavya ${attrs.kavya}`);
+    }
+    if (attrs.page) parts.push(`पृष्ठ ${attrs.page}`);
+    if (attrs.date) parts.push(attrs.date);
+    return parts.filter(Boolean).join(', ');
+};
+
+// --- SHARE ANSWER BUTTONS ---
+// Splits "> quote (citation)" into "> quote\n> (citation)" so WhatsApp keeps the
+// citation inside the same quote block but on its own line (every line needs its own ">").
+const splitCitationLines = (text) => {
+    if (!text) return text;
+    return text.replace(/^>[ \t]*(?=\S)([^\n]+?)[ \t]*(\([^)]+\))[ \t]*$/gm, (match, quote, citation) => `> ${quote}\n> ${citation}`);
+};
+
+// Resolves @@CITATION_n@@ tokens (from citationBlocks, used when ENABLE_FULL_CHUNKS_IN_CITATIONS
+// is on) into WhatsApp-style ">" quote lines — every line of the quote text gets its own ">",
+// plus a trailing "> (label)" citation line.
+const resolveCitationTokensToText = (text, citationBlocks) => {
+    if (!text || !citationBlocks || !citationBlocks.length) return text;
+    return text.replace(/@@CITATION_(\d+)@@/g, (match, idx) => {
+        const block = citationBlocks[Number(idx)];
+        if (!block) return '';
+        const attrs = parseCitationAttrs(block.attrStr);
+        const label = buildCitationLabel(attrs);
+        const quoteLines = block.innerText.trim().split(/\r?\n/)
+            .filter(line => line.trim() !== '')
+            .map(line => `> ${line}`);
+        if (label) quoteLines.push(`> (${label})`);
+        return quoteLines.join('\n');
+    });
+};
+
+const SHARE_FOOTER = '--\n*Get your Adhyatmic questions answered on Swalakshya:* https://chat.swalakshya.me/';
+
+const ShareAnswerButtons = ({ question, answer, citationBlocks }) => {
     const [copied, setCopied] = useState(false);
+    const resolvedAnswer = resolveCitationTokensToText(answer, citationBlocks);
+    const formattedAnswer = splitCitationLines(resolvedAnswer);
+    const shareText = `${question ? `*Question: ${question}*\n\n*Answer:*\n${formattedAnswer}` : formattedAnswer}\n\n${SHARE_FOOTER}`;
 
     const handleCopy = async () => {
-        const success = await copyToClipboard(text);
+        const success = await copyToClipboard(shareText);
         if (success) {
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         }
     };
 
+    const handleWhatsAppShare = () => {
+        const url = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+        window.open(url, '_blank', 'noopener,noreferrer');
+    };
+
     return (
-        <button
-            onClick={handleCopy}
-            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 bg-white border border-slate-200 hover:border-slate-300 rounded px-2 py-1 transition-colors"
-            title="Copy answer"
-        >
-            {copied ? (
-                <>
-                    <svg className="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span className="text-green-600">Copied</span>
-                </>
-            ) : (
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <rect x="8" y="8" width="12" height="14" rx="2" strokeWidth={2} />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2h2" />
+        <div className="flex items-center gap-2">
+            <button
+                onClick={handleCopy}
+                className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 bg-white border border-slate-200 hover:border-slate-300 rounded px-2 py-1 transition-colors"
+                title="Copy answer"
+            >
+                {copied ? (
+                    <>
+                        <svg className="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span className="text-green-600">Copied to clipboard</span>
+                    </>
+                ) : (
+                    <>
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <rect x="8" y="8" width="12" height="14" rx="2" strokeWidth={2} />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2h2" />
+                        </svg>
+                        <span>Copy</span>
+                    </>
+                )}
+            </button>
+            <button
+                onClick={handleWhatsAppShare}
+                className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-green-700 bg-white border border-slate-200 hover:border-green-300 rounded px-2 py-1 transition-colors"
+                title="Share on WhatsApp"
+            >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+                    <path d="M12.001 2C6.478 2 2 6.478 2 12c0 1.892.526 3.66 1.438 5.166L2 22l4.955-1.4A9.94 9.94 0 0012.001 22C17.523 22 22 17.522 22 12S17.523 2 12.001 2zm0 18.2a8.19 8.19 0 01-4.19-1.147l-.3-.178-3.11.878.83-3.03-.196-.31A8.176 8.176 0 013.8 12c0-4.522 3.679-8.2 8.201-8.2 4.521 0 8.199 3.678 8.199 8.2 0 4.522-3.678 8.2-8.199 8.2z"/>
                 </svg>
-            )}
-        </button>
+                <span>WhatsApp</span>
+            </button>
+        </div>
     );
 };
 
@@ -1543,35 +1626,6 @@ const AppContent = () => {
             return `<span class="llm-quote-block">${escapeHtml(content)}</span>`;
         });
 
-        const parseCitationAttrs = (attrStr) => {
-            const attrs = {};
-            const re = /(\w+)="([^"]*)"/g;
-            let m;
-            while ((m = re.exec(attrStr)) !== null) {
-                attrs[m[1]] = m[2].replace(/&quot;/g, '"');
-            }
-            return attrs;
-        };
-        const buildCitationLabel = (attrs) => {
-            const parts = [];
-            if (attrs.granth) parts.push(attrs.granth);
-            if (attrs.category === 'Pravachan') {
-                if (attrs.pravachankar) parts.push(`by ${attrs.pravachankar}`);
-                if (attrs.series) parts.push(attrs.series);
-                if (attrs.series_number) parts.push(`Series No. ${attrs.series_number}`);
-                if (attrs.volume) parts.push(`Vol ${attrs.volume}`);
-                if (attrs.pravachan_number) parts.push(`No. ${attrs.pravachan_number}`);
-            } else {
-                if (attrs.gatha) parts.push(`Gatha ${attrs.gatha}`);
-                if (attrs.shlok) parts.push(`Shlok ${attrs.shlok}`);
-                if (attrs.kalash) parts.push(`Kalash ${attrs.kalash}`);
-                if (attrs.dohra) parts.push(`Doha ${attrs.dohra}`);
-                if (attrs.kavya) parts.push(`Kavya ${attrs.kavya}`);
-            }
-            if (attrs.page) parts.push(`पृष्ठ ${attrs.page}`);
-            if (attrs.date) parts.push(attrs.date);
-            return parts.filter(Boolean).join(', ');
-        };
         html = html.replace(/@@CITATION_(\d+)@@/g, (match, idx) => {
             const block = citationBlocks[Number(idx)];
             if (!block) return '';
@@ -2186,7 +2240,7 @@ const AppContent = () => {
                                                                         </div>
                                                                         {displayedTexts[key] === cleanAnswerText(msg.content) && msg.content && (
                                                                             <div className="mt-4 w-full flex justify-end">
-                                                                                <CopyAnswerButton text={cleanAnswerText(msg.content)} />
+                                                                                <ShareAnswerButtons question={chatMessages[idx - 1]?.content} answer={cleanAnswerText(msg.content)} citationBlocks={msg.citationBlocks} />
                                                                             </div>
                                                                         )}
                                                                         {displayedTexts[key] === cleanAnswerText(msg.content) && msg.follow_up_questions && msg.follow_up_questions.length > 0 && (
