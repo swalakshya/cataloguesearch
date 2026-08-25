@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import string
@@ -51,11 +52,20 @@ class IndexSearcher:
     _CHUNK_LABEL_FILTER_FIELDS = {"pravachan_number"}
     # Integer fields stored on metadata — no .keyword suffix
     _INTEGER_METADATA_FILTER_FIELDS = {"volume"}
+    # Reserved category key carrying paired per-series Pravachan filters (see
+    # _build_pravachan_group_filter) instead of a plain terms filter.
+    _PRAVACHAN_GROUPS_KEY = "_pravachan_groups"
 
     def _build_category_filters(self, categories: Dict[str, List[str]]) -> List[Dict[str, Any]]:
         filters = []
         for category_key, values in categories.items():
             if not values:
+                continue
+
+            if category_key == self._PRAVACHAN_GROUPS_KEY:
+                group_filter = self._build_pravachan_group_filter(values)
+                if group_filter:
+                    filters.append(group_filter)
                 continue
 
             if category_key in self._CHUNK_LABEL_FILTER_FIELDS:
@@ -77,6 +87,50 @@ class IndexSearcher:
 
             log_handle.debug(f"Added filter: {field_name} with values {values}")
         return filters
+
+    def _build_pravachan_group_filter(self, group_json_list: List[str]) -> Dict[str, Any] | None:
+        """
+        Builds an OR-of-AND filter from paired per-series Pravachan selections.
+
+        Each entry in group_json_list is a JSON string like:
+          {"granth": "Niyamsaar", "series": "1979 Series", "volume": [3], "pravachan_number": ["80"]}
+
+        Plain flat `terms` filters on Series/volume/pravachan_number can't express
+        "Series A's volume 3, OR Series B's volume 8" — they'd AND all three fields
+        independently, matching only documents where a single doc satisfies every
+        value across every group at once (often zero). This builds one AND-clause
+        per group and ORs them together instead, so each series' own narrowing
+        stays scoped to that series.
+        """
+        should = []
+        for raw in group_json_list:
+            try:
+                group = json.loads(raw)
+            except (TypeError, ValueError):
+                continue
+            must = []
+            if group.get("granth"):
+                must.append({"term": {f"{self._metadata_prefix}.Name.keyword": group["granth"]}})
+            if group.get("series"):
+                must.append({"term": {f"{self._metadata_prefix}.Series.keyword": group["series"]}})
+            volumes = group.get("volume") or []
+            int_volumes = []
+            for v in volumes:
+                try:
+                    int_volumes.append(int(v))
+                except (ValueError, TypeError):
+                    pass
+            if int_volumes:
+                must.append({"terms": {f"{self._metadata_prefix}.volume": int_volumes}})
+            numbers = group.get("pravachan_number") or []
+            if numbers:
+                must.append({"terms": {"chunk_labels.pravachan_number": numbers}})
+            if must:
+                should.append({"bool": {"must": must}})
+
+        if not should:
+            return None
+        return {"bool": {"should": should, "minimum_should_match": 1}}
 
     def _build_date_range_filter(self, start_year: int | None, end_year: int | None) -> Dict[str, Any] | None:
         """

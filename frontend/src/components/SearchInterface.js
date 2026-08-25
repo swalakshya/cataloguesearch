@@ -549,7 +549,11 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-const PRAVACHAN_FILTER_KEYS = ['Series', 'volume', 'pravachan_number'];
+// _pravachan_groups carries paired per-series {granth, series, volume, pravachan_number}
+// filters (as JSON strings) — see backend/search/index_searcher.py's
+// _build_pravachan_group_filter for why a plain flat Series/volume/pravachan_number
+// filter can't express independently-narrowed series correctly.
+const PRAVACHAN_FILTER_KEYS = ['_pravachan_groups'];
 
 const extractPravachanYears = (cascade) => {
     const years = new Set();
@@ -593,98 +597,200 @@ const PravachanFilter = ({
     language, startYear, setStartYear, endYear, setEndYear,
 }) => {
     const [isOpen, setIsOpen]         = useState(false);
-    const [step, setStep]             = useState(1);
-    const [pendingSeries, setPendingSeries]   = useState([]);
-    const [pendingVolumes, setPendingVolumes] = useState([]);
-    const [pendingNumbers, setPendingNumbers] = useState([]);
+    const [pendingGranths, setPendingGranths] = useState([]);
+    const [pendingSeries, setPendingSeries]   = useState([]); // composite keys: seriesKey(granth, name)
+    const [pendingVolumesBySeries, setPendingVolumesBySeries] = useState({}); // { [seriesKey]: number[] }
+    const [pendingNumbersBySeries, setPendingNumbersBySeries] = useState({}); // { [seriesKey]: string[] }
+    const [expandedGranths, setExpandedGranths] = useState([]);
+    const [narrowingKey, setNarrowingKey] = useState(null); // seriesKey currently open in the popup, or null
+    const [narrowStep, setNarrowStep] = useState('volumes'); // 'volumes' | 'numbers', within the popup
 
     const cascade = allMetadata?.Pravachan?.hindi?.pravachan_series_cascade || [];
+
+    // Series names are only unique *within* a Granth (e.g. two different Granths can each
+    // have a "1979 Series") — every selection must be keyed by Granth+name, never name alone.
+    const seriesKey = (granth, name) => `${granth} :: ${name}`;
+
+    // Granths that actually have Pravachan content — the accordion list.
+    const granthOptions = useMemo(() => {
+        const names = new Set();
+        cascade.forEach(s => { if (s.granth) names.add(s.granth); });
+        return Array.from(names).sort();
+    }, [cascade]);
+
+    const seriesByGranth = useMemo(() => {
+        const map = {};
+        cascade.forEach(s => {
+            if (!s.granth) return;
+            (map[s.granth] = map[s.granth] || []).push(s);
+        });
+        return map;
+    }, [cascade]);
+
+    const seriesByKey = useMemo(() => {
+        const map = {};
+        cascade.forEach(s => { if (s.granth) map[seriesKey(s.granth, s.name)] = s; });
+        return map;
+    }, [cascade]);
 
     // Sync pending state from activeFilters when opening
     useEffect(() => {
         if (!isOpen) return;
-        setPendingSeries(activeFilters.filter(f => f.key === 'Series').map(f => f.value));
-        setPendingVolumes(activeFilters.filter(f => f.key === 'volume').map(f => Number(f.value)));
-        setPendingNumbers(activeFilters.filter(f => f.key === 'pravachan_number').map(f => f.value));
-        setStep(1);
+        const activeNames = activeFilters.filter(f => f.key === 'Name').map(f => f.value);
+        const activeGranths = activeNames.filter(n => granthOptions.includes(n));
+
+        const groups = activeFilters
+            .filter(f => f.key === '_pravachan_groups')
+            .map(f => { try { return JSON.parse(f.value); } catch { return null; } })
+            .filter(Boolean);
+
+        const keys = [];
+        const volsBySeries = {};
+        const numsBySeries = {};
+        groups.forEach(g => {
+            const key = seriesKey(g.granth, g.series);
+            keys.push(key);
+            if (g.volume?.length) volsBySeries[key] = g.volume;
+            if (g.pravachan_number?.length) numsBySeries[key] = g.pravachan_number;
+        });
+
+        setPendingGranths(activeGranths);
+        setPendingSeries(keys);
+        setPendingVolumesBySeries(volsBySeries);
+        setPendingNumbersBySeries(numsBySeries);
+
+        const seriesGranths = new Set(groups.map(g => g.granth));
+        setExpandedGranths([...new Set([...activeGranths, ...seriesGranths])]);
+        setNarrowingKey(null);
+        setNarrowStep('volumes');
     }, [isOpen]); // eslint-disable-line
 
-    // Close on Escape
+    // Close on Escape — closes the narrow popup first if it's open, else the whole modal.
     useEffect(() => {
         if (!isOpen) return;
-        const onKey = (e) => { if (e.key === 'Escape') setIsOpen(false); };
+        const onKey = (e) => {
+            if (e.key !== 'Escape') return;
+            if (narrowingKey) setNarrowingKey(null);
+            else setIsOpen(false);
+        };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [isOpen]);
+    }, [isOpen, narrowingKey]);
 
-    const availableVolumes = useMemo(() => {
-        if (!pendingSeries.length) return [];
-        const vols = new Set();
-        cascade.filter(s => pendingSeries.includes(s.name))
-               .forEach(s => s.volumes.forEach(v => vols.add(v.volume)));
-        return Array.from(vols).sort((a, b) => a - b);
-    }, [cascade, pendingSeries]);
+    const toggleExpand = (granth) =>
+        setExpandedGranths(prev => prev.includes(granth) ? prev.filter(x => x !== granth) : [...prev, granth]);
 
-    const availableNumbers = useMemo(() => {
-        if (!pendingSeries.length || !pendingVolumes.length) return [];
-        const nums = new Set();
-        cascade.filter(s => pendingSeries.includes(s.name))
-               .forEach(s => s.volumes
-                   .filter(v => pendingVolumes.includes(v.volume))
-                   .forEach(v => v.pravachan_numbers.forEach(n => nums.add(n))));
-        return sortPravachanNumbers(Array.from(nums));
-    }, [cascade, pendingSeries, pendingVolumes]);
+    // Checking a Granth means "all its series"; unchecking it clears its selection entirely.
+    const toggleGranth = (granth) => {
+        setPendingGranths(prev => {
+            if (prev.includes(granth)) return prev.filter(x => x !== granth);
+            const keysForGranth = new Set((seriesByGranth[granth] || []).map(s => seriesKey(granth, s.name)));
+            setPendingSeries(ps => ps.filter(k => !keysForGranth.has(k))); // now redundant/implied
+            return [...prev, granth];
+        });
+    };
 
-    const toggleSeries = (name) => {
+    // Checking/unchecking one series under a Granth. If the Granth was fully selected,
+    // unchecking one series demotes it to a partial (indeterminate) selection of the rest.
+    const toggleSeriesWithinGranth = (granth, name) => {
+        const key = seriesKey(granth, name);
+        if (pendingGranths.includes(granth)) {
+            const others = (seriesByGranth[granth] || [])
+                .filter(s => s.name !== name)
+                .map(s => seriesKey(granth, s.name));
+            setPendingGranths(prev => prev.filter(x => x !== granth));
+            setPendingSeries(prev => [...new Set([...prev, ...others])]);
+            return;
+        }
         setPendingSeries(prev => {
-            const next = prev.includes(name) ? prev.filter(x => x !== name) : [...prev, name];
-            // Drop volumes/numbers that no longer have a valid parent series
-            const validVols = new Set();
-            cascade.filter(s => next.includes(s.name)).forEach(s => s.volumes.forEach(v => validVols.add(v.volume)));
-            setPendingVolumes(pv => pv.filter(v => validVols.has(v)));
-            setPendingNumbers([]);
-            return next;
+            if (prev.includes(key)) {
+                setPendingVolumesBySeries(v => { const n = { ...v }; delete n[key]; return n; });
+                setPendingNumbersBySeries(v => { const n = { ...v }; delete n[key]; return n; });
+                return prev.filter(x => x !== key);
+            }
+            return [...prev, key];
         });
     };
 
-    const toggleVolume = (vol) => {
-        setPendingVolumes(prev => {
-            const next = prev.includes(vol) ? prev.filter(x => x !== vol) : [...prev, vol];
-            setPendingNumbers([]);
-            return next;
+    // ── Per-series "narrow" popup (Volumes → Pravachan#) ──────────────────────
+    const openNarrow = (granth, name) => { setNarrowingKey(seriesKey(granth, name)); setNarrowStep('volumes'); };
+    const closeNarrow = () => setNarrowingKey(null);
+
+    const narrowSeries = narrowingKey ? seriesByKey[narrowingKey] : null;
+    const narrowVolumes = narrowingKey ? (pendingVolumesBySeries[narrowingKey] || []) : [];
+    const narrowNumbers = narrowingKey ? (pendingNumbersBySeries[narrowingKey] || []) : [];
+
+    const narrowAvailableNumbers = useMemo(() => {
+        if (!narrowSeries || !narrowVolumes.length) return [];
+        const nums = new Set();
+        narrowSeries.volumes
+            .filter(v => narrowVolumes.includes(v.volume))
+            .forEach(v => v.pravachan_numbers.forEach(n => nums.add(n)));
+        return sortPravachanNumbers(Array.from(nums));
+    }, [narrowSeries, narrowVolumes]);
+
+    const toggleNarrowVolume = (vol) => {
+        setPendingVolumesBySeries(prev => {
+            const cur = prev[narrowingKey] || [];
+            const next = cur.includes(vol) ? cur.filter(x => x !== vol) : [...cur, vol];
+            return { ...prev, [narrowingKey]: next };
         });
+        setPendingNumbersBySeries(prev => { const n = { ...prev }; delete n[narrowingKey]; return n; });
     };
 
-    const toggleNumber = (num) =>
-        setPendingNumbers(prev => prev.includes(num) ? prev.filter(x => x !== num) : [...prev, num]);
+    const toggleNarrowNumber = (num) => {
+        setPendingNumbersBySeries(prev => {
+            const cur = prev[narrowingKey] || [];
+            const next = cur.includes(num) ? cur.filter(x => x !== num) : [...cur, num];
+            return { ...prev, [narrowingKey]: next };
+        });
+    };
 
     const handleApply = () => {
         const toRemove = [];
-        activeFilters.forEach((f, i) => { if (PRAVACHAN_FILTER_KEYS.includes(f.key)) toRemove.push(i); });
+        activeFilters.forEach((f, i) => {
+            if (PRAVACHAN_FILTER_KEYS.includes(f.key)) toRemove.push(i);
+            // Only clear Name filters that are actually Pravachan Granths — leaves Granth-tab
+            // selections for Books/Granth-category-only titles untouched.
+            if (f.key === 'Name' && granthOptions.includes(f.value)) toRemove.push(i);
+        });
         toRemove.reverse().forEach(i => onRemoveFilter(i));
-        pendingSeries.forEach(v => onAddFilter({ key: 'Series', value: v }));
-        pendingVolumes.forEach(v => onAddFilter({ key: 'volume', value: String(v) }));
-        pendingNumbers.forEach(v => onAddFilter({ key: 'pravachan_number', value: v }));
-        // Series selection implies a known date range — year filter would conflict
-        if (pendingSeries.length > 0) { setStartYear(null); setEndYear(null); }
+
+        pendingGranths.forEach(v => onAddFilter({ key: 'Name', value: v }));
+
+        // One group per selected series, each with its own volume/number narrowing —
+        // keeps independently-narrowed series from being incorrectly ANDed together.
+        pendingSeries.forEach(k => {
+            const s = seriesByKey[k];
+            if (!s) return;
+            const group = {
+                granth: s.granth,
+                series: s.name,
+                volume: pendingVolumesBySeries[k] || [],
+                pravachan_number: pendingNumbersBySeries[k] || [],
+            };
+            onAddFilter({ key: '_pravachan_groups', value: JSON.stringify(group) });
+        });
+
+        // Granth/Series selection implies a known date range — year filter would conflict
+        if (pendingGranths.length > 0 || pendingSeries.length > 0) { setStartYear(null); setEndYear(null); }
         setIsOpen(false);
     };
 
     const handleClear = () => {
-        setPendingSeries([]); setPendingVolumes([]); setPendingNumbers([]);
-        setStartYear(null); setEndYear(null); setStep(1);
+        setPendingGranths([]); setPendingSeries([]);
+        setPendingVolumesBySeries({}); setPendingNumbersBySeries({});
+        setExpandedGranths([]); setNarrowingKey(null);
+        setStartYear(null); setEndYear(null);
     };
 
-    const activeCount = activeFilters.filter(f => PRAVACHAN_FILTER_KEYS.includes(f.key)).length
-        + (startYear || endYear ? 1 : 0);
+    const activeCount = activeFilters.filter(f =>
+        PRAVACHAN_FILTER_KEYS.includes(f.key) || (f.key === 'Name' && granthOptions.includes(f.value))
+    ).length + (startYear || endYear ? 1 : 0);
 
+    // Year range is a Granth-independent fallback, so it's based on the full cascade.
     const pravachanYears = useMemo(() => extractPravachanYears(cascade), [cascade]);
     const endYearOptions = startYear ? pravachanYears.filter(y => y >= startYear) : pravachanYears;
-
-    const canGoToStep2 = pendingSeries.length > 0 && availableVolumes.length > 0;
-    const canGoToStep3 = pendingVolumes.length > 0 && availableNumbers.length > 0;
-
-    const stepTitles = ['Select Series', 'Select Volume', 'Select Pravachan #'];
 
     return (
         <>
@@ -712,17 +818,28 @@ const PravachanFilter = ({
                             {/* Header */}
                             <div className="p-4 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white rounded-t-lg">
                                 <div className="flex items-center gap-2 min-w-0">
-                                    {step > 1 && (
-                                        <button onClick={() => setStep(s => s - 1)} className="text-slate-400 hover:text-slate-600 mr-1 flex-shrink-0">
+                                    {narrowingKey && (
+                                        <button onClick={narrowStep === 'numbers' ? () => setNarrowStep('volumes') : closeNarrow}
+                                            className="text-slate-400 hover:text-slate-600 mr-1 flex-shrink-0">
                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                                             </svg>
                                         </button>
                                     )}
                                     <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                                        <span className="font-bold text-slate-800 text-sm">{stepTitles[step - 1]}</span>
-                                        {step >= 2 && pendingSeries.map(s => <BreadcrumbChip key={s} label={s} />)}
-                                        {step >= 3 && pendingVolumes.map(v => <BreadcrumbChip key={v} label={`Vol ${v}`} />)}
+                                        {narrowingKey ? (
+                                            <>
+                                                <span className="font-bold text-slate-800 text-sm truncate">{narrowSeries?.name}</span>
+                                                <span className="text-xs text-slate-400">{narrowSeries?.granth}</span>
+                                                <span className="text-xs text-slate-400">· {narrowStep === 'volumes' ? 'Volumes' : 'Pravachan #'}</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span className="font-bold text-slate-800 text-sm">Select Granth &amp; Series</span>
+                                                {pendingGranths.map(g => <BreadcrumbChip key={`g-${g}`} label={g} />)}
+                                                {pendingSeries.length > 0 && <BreadcrumbChip label={`${pendingSeries.length} series`} />}
+                                            </>
+                                        )}
                                     </div>
                                 </div>
                                 <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-slate-600 flex-shrink-0 ml-2">
@@ -735,40 +852,120 @@ const PravachanFilter = ({
                             {/* Body */}
                             <div className="overflow-y-auto flex-1 p-4">
 
-                                {/* ── Step 1: Series ── */}
-                                {step === 1 && (
-                                    <div className="space-y-4">
-                                        <div className="border border-slate-200 rounded-lg overflow-hidden">
-                                            {cascade.length === 0 && (
-                                                <p className="p-4 text-sm text-slate-500 text-center">No series data available</p>
-                                            )}
-                                            {cascade.map((s) => (
-                                                <label key={s.name}
-                                                    className="flex items-center gap-3 p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-b-0">
-                                                    <input type="checkbox"
-                                                        checked={pendingSeries.includes(s.name)}
-                                                        onChange={() => toggleSeries(s.name)}
-                                                        className="form-checkbox h-4 w-4 text-sky-600 rounded" />
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-sm font-medium text-slate-800">{s.name}</p>
-                                                        {s.start_date && s.end_date && (
-                                                            <p className="text-xs text-slate-400">
-                                                                {s.start_date.substring(0, 7)} – {s.end_date.substring(0, 7)}
-                                                                {' · '}{s.volumes.length} vol{s.volumes.length !== 1 ? 's' : ''}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                    {pendingSeries.includes(s.name) && (
-                                                        <svg className="w-4 h-4 text-sky-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                                                        </svg>
-                                                    )}
-                                                </label>
+                                {/* ── Narrow popup: Volumes → Pravachan# for one series ── */}
+                                {narrowingKey && narrowStep === 'volumes' && (
+                                    <div className="space-y-3">
+                                        <p className="text-xs text-slate-500">
+                                            {(narrowSeries?.volumes || []).length} volume{(narrowSeries?.volumes || []).length !== 1 ? 's' : ''}
+                                        </p>
+                                        <div className="grid grid-cols-6 gap-1.5">
+                                            {(narrowSeries?.volumes || []).map(v => (
+                                                <GridToggle key={v.volume} value={v.volume} selected={narrowVolumes.includes(v.volume)} onToggle={toggleNarrowVolume} />
                                             ))}
                                         </div>
+                                        {narrowVolumes.length > 0 && (
+                                            <p className="text-xs text-sky-700 font-medium">{narrowVolumes.length} selected</p>
+                                        )}
+                                    </div>
+                                )}
+                                {narrowingKey && narrowStep === 'numbers' && (
+                                    <div className="space-y-3">
+                                        <p className="text-xs text-slate-500">
+                                            {narrowAvailableNumbers.length} pravachan{narrowAvailableNumbers.length !== 1 ? 's' : ''} in selected volumes
+                                        </p>
+                                        <div className="grid grid-cols-6 gap-1 max-h-72 overflow-y-auto pr-1"
+                                            style={{ scrollbarWidth: 'thin', scrollbarColor: '#94a3b8 #f1f5f9' }}>
+                                            {narrowAvailableNumbers.map(n => (
+                                                <GridToggle key={n} value={n} selected={narrowNumbers.includes(n)} onToggle={toggleNarrowNumber} />
+                                            ))}
+                                        </div>
+                                        {narrowNumbers.length > 0 && (
+                                            <p className="text-xs text-sky-700 font-medium">{narrowNumbers.length} selected</p>
+                                        )}
+                                    </div>
+                                )}
 
-                                        {/* Year range — only show when no series selected, since series implies date range */}
-                                        {pendingSeries.length === 0 && (
+                                {/* ── Main accordion: Granth & Series ── */}
+                                {!narrowingKey && (
+                                    <div className="space-y-4">
+                                        <div className="border border-slate-200 rounded-lg overflow-hidden">
+                                            {granthOptions.length === 0 && (
+                                                <p className="p-4 text-sm text-slate-500 text-center">No Granth data available</p>
+                                            )}
+                                            {granthOptions.map((name) => {
+                                                const seriesForGranth = seriesByGranth[name] || [];
+                                                const granthChecked = pendingGranths.includes(name);
+                                                const selectedCount = seriesForGranth.filter(s => pendingSeries.includes(seriesKey(name, s.name))).length;
+                                                const isPartial = !granthChecked && selectedCount > 0 && selectedCount < seriesForGranth.length;
+                                                const isExpanded = expandedGranths.includes(name);
+                                                return (
+                                                    <div key={name} className="border-b border-slate-100 last:border-b-0">
+                                                        <div className="flex items-center gap-2 p-3 hover:bg-slate-50">
+                                                            <input type="checkbox"
+                                                                checked={granthChecked}
+                                                                ref={el => { if (el) el.indeterminate = isPartial; }}
+                                                                onChange={() => toggleGranth(name)}
+                                                                className="form-checkbox h-4 w-4 text-sky-600 rounded flex-shrink-0" />
+                                                            <button type="button" onClick={() => toggleGranth(name)}
+                                                                className="flex-1 min-w-0 text-left">
+                                                                <p className="text-sm font-medium text-slate-800">{name}</p>
+                                                            </button>
+                                                            {seriesForGranth.length > 0 && (
+                                                                <button type="button" onClick={() => toggleExpand(name)}
+                                                                    className="p-1 text-slate-400 hover:text-slate-600 flex-shrink-0"
+                                                                    aria-label={isExpanded ? `Collapse ${name} series` : `Browse ${name} series`}>
+                                                                    <svg className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                                    </svg>
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                        {isExpanded && (
+                                                            <div className="bg-slate-50 border-t border-slate-100">
+                                                                {seriesForGranth.map(s => {
+                                                                    const key = seriesKey(name, s.name);
+                                                                    const checked = granthChecked || pendingSeries.includes(key);
+                                                                    const nVols = (pendingVolumesBySeries[key] || []).length;
+                                                                    const nNums = (pendingNumbersBySeries[key] || []).length;
+                                                                    return (
+                                                                        <div key={s.name}
+                                                                            className="flex items-center gap-3 py-2 pl-10 pr-3 hover:bg-slate-100 border-b border-slate-100 last:border-b-0">
+                                                                            <input type="checkbox"
+                                                                                checked={checked}
+                                                                                onChange={() => toggleSeriesWithinGranth(name, s.name)}
+                                                                                className="form-checkbox h-3.5 w-3.5 text-sky-600 rounded flex-shrink-0" />
+                                                                            <label className="flex-1 min-w-0 cursor-pointer"
+                                                                                onClick={() => toggleSeriesWithinGranth(name, s.name)}>
+                                                                                <p className="text-sm text-slate-700">{s.name}</p>
+                                                                                {s.start_date && s.end_date && (
+                                                                                    <p className="text-xs text-slate-400">
+                                                                                        {s.start_date.substring(0, 7)} – {s.end_date.substring(0, 7)}
+                                                                                        {' · '}{s.volumes.length} vol{s.volumes.length !== 1 ? 's' : ''}
+                                                                                    </p>
+                                                                                )}
+                                                                            </label>
+                                                                            {checked && (
+                                                                                <button type="button" onClick={() => openNarrow(name, s.name)}
+                                                                                    className="text-xs text-sky-700 hover:text-sky-900 font-medium flex items-center gap-0.5 flex-shrink-0">
+                                                                                    {nVols > 0 ? `${nVols} vol${nVols !== 1 ? 's' : ''}` : 'Narrow'}
+                                                                                    {nNums > 0 && ` · ${nNums} #`}
+                                                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                                                    </svg>
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* Year range — only show when nothing selected, since a Granth/Series implies a date range */}
+                                        {pendingGranths.length === 0 && pendingSeries.length === 0 && (
                                             <div>
                                                 <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Year Range (Optional)</h4>
                                                 <div className="grid grid-cols-2 gap-2">
@@ -788,72 +985,40 @@ const PravachanFilter = ({
                                         )}
                                     </div>
                                 )}
-
-                                {/* ── Step 2: Volumes ── */}
-                                {step === 2 && (
-                                    <div className="space-y-3">
-                                        <p className="text-xs text-slate-500">
-                                            {availableVolumes.length} volume{availableVolumes.length !== 1 ? 's' : ''} across selected series
-                                        </p>
-                                        <div className="grid grid-cols-6 gap-1.5">
-                                            {availableVolumes.map(v => (
-                                                <GridToggle key={v} value={v} selected={pendingVolumes.includes(v)} onToggle={toggleVolume} />
-                                            ))}
-                                        </div>
-                                        {pendingVolumes.length > 0 && (
-                                            <p className="text-xs text-sky-700 font-medium">{pendingVolumes.length} selected</p>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* ── Step 3: Pravachan Numbers ── */}
-                                {step === 3 && (
-                                    <div className="space-y-3">
-                                        <p className="text-xs text-slate-500">
-                                            {availableNumbers.length} pravachan{availableNumbers.length !== 1 ? 's' : ''} in selected volumes
-                                        </p>
-                                        <div className="grid grid-cols-6 gap-1 max-h-72 overflow-y-auto pr-1"
-                                            style={{ scrollbarWidth: 'thin', scrollbarColor: '#94a3b8 #f1f5f9' }}>
-                                            {availableNumbers.map(n => (
-                                                <GridToggle key={n} value={n} selected={pendingNumbers.includes(n)} onToggle={toggleNumber} />
-                                            ))}
-                                        </div>
-                                        {pendingNumbers.length > 0 && (
-                                            <p className="text-xs text-sky-700 font-medium">{pendingNumbers.length} selected</p>
-                                        )}
-                                    </div>
-                                )}
                             </div>
 
                             {/* Footer */}
                             <div className="p-4 border-t border-slate-200 flex gap-2 sticky bottom-0 bg-white rounded-b-lg">
-                                <button onClick={handleClear}
-                                    className="px-4 py-1.5 border border-slate-300 rounded text-slate-700 text-sm font-semibold hover:bg-slate-50">
-                                    Clear
-                                </button>
-                                <div className="flex-1" />
-                                {step < 3 && canGoToStep2 && step === 1 && (
-                                    <button onClick={() => setStep(2)}
-                                        className="px-4 py-1.5 border border-sky-400 text-sky-700 rounded text-sm font-semibold hover:bg-sky-50 flex items-center gap-1">
-                                        Volumes
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                        </svg>
-                                    </button>
+                                {narrowingKey ? (
+                                    <>
+                                        <button onClick={closeNarrow}
+                                            className="px-4 py-1.5 border border-slate-300 rounded text-slate-700 text-sm font-semibold hover:bg-slate-50">
+                                            Done
+                                        </button>
+                                        <div className="flex-1" />
+                                        {narrowStep === 'volumes' && narrowVolumes.length > 0 && narrowAvailableNumbers.length > 0 && (
+                                            <button onClick={() => setNarrowStep('numbers')}
+                                                className="px-4 py-1.5 border border-sky-400 text-sky-700 rounded text-sm font-semibold hover:bg-sky-50 flex items-center gap-1">
+                                                Pravachan #
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                </svg>
+                                            </button>
+                                        )}
+                                    </>
+                                ) : (
+                                    <>
+                                        <button onClick={handleClear}
+                                            className="px-4 py-1.5 border border-slate-300 rounded text-slate-700 text-sm font-semibold hover:bg-slate-50">
+                                            Clear
+                                        </button>
+                                        <div className="flex-1" />
+                                        <button onClick={handleApply}
+                                            className="px-4 py-1.5 bg-sky-600 text-white rounded text-sm font-semibold hover:bg-sky-700">
+                                            Apply
+                                        </button>
+                                    </>
                                 )}
-                                {step === 2 && canGoToStep3 && (
-                                    <button onClick={() => setStep(3)}
-                                        className="px-4 py-1.5 border border-sky-400 text-sky-700 rounded text-sm font-semibold hover:bg-sky-50 flex items-center gap-1">
-                                        Pravachan #
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                        </svg>
-                                    </button>
-                                )}
-                                <button onClick={handleApply}
-                                    className="px-4 py-1.5 bg-sky-600 text-white rounded text-sm font-semibold hover:bg-sky-700">
-                                    Apply
-                                </button>
                             </div>
                         </div>
                     </div>
@@ -1001,16 +1166,24 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
 // ─── SearchFilters (public wrapper) ──────────────────────────────────────────
 
 const CHIP_COLORS = {
-    Series:           'bg-violet-100 text-violet-800 border-violet-200',
-    volume:           'bg-blue-100 text-blue-800 border-blue-200',
-    pravachan_number: 'bg-indigo-100 text-indigo-800 border-indigo-200',
-    Name:             'bg-sky-100 text-sky-800 border-sky-200',
+    _pravachan_groups: 'bg-violet-100 text-violet-800 border-violet-200',
+    Name:              'bg-sky-100 text-sky-800 border-sky-200',
 };
 const CHIP_LABELS = {
-    Series: 'Series',
-    volume: 'Vol',
-    pravachan_number: '#',
     Name: '',
+};
+
+// Builds a human label for a _pravachan_groups chip, e.g. "1979 Series (Vol 3)".
+const pravachanGroupChipLabel = (jsonValue) => {
+    try {
+        const g = JSON.parse(jsonValue);
+        const parts = [g.series];
+        if (g.volume?.length) parts.push(`Vol ${g.volume.join(', ')}`);
+        if (g.pravachan_number?.length) parts.push(`# ${g.pravachan_number.join(', ')}`);
+        return `${parts[0]}${parts.length > 1 ? ` (${parts.slice(1).join(' · ')})` : ''}`;
+    } catch {
+        return jsonValue;
+    }
 };
 
 export const SearchFilters = ({
@@ -1058,7 +1231,9 @@ export const SearchFilters = ({
                     {activeFilters.map((f, i) => {
                         const color = CHIP_COLORS[f.key] || 'bg-slate-100 text-slate-700 border-slate-200';
                         const prefix = CHIP_LABELS[f.key];
-                        const label = prefix ? `${prefix}: ${f.value}` : f.value;
+                        const label = f.key === '_pravachan_groups'
+                            ? pravachanGroupChipLabel(f.value)
+                            : (prefix ? `${prefix}: ${f.value}` : f.value);
                         return (
                             <span key={i} className={`${color} border text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1`}>
                                 {label}

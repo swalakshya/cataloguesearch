@@ -351,7 +351,7 @@ def delete_documents_by_document_id(config: Config, document_id: str):
 def refresh_pravachan_series_metadata(config: Config, opensearch_client: OpenSearch):
     """
     Rebuilds the Pravachan series cascade doc in the metadata index via a single
-    3-level aggregation (Series → Volume → PravachanNumber) against the main index.
+    4-level aggregation (Granth → Series → Volume → PravachanNumber) against the main index.
 
     Idempotent — overwrites the previous cascade doc. Call after any Pravachan
     index_document(), after cleanup, or standalone via --refresh-metadata.
@@ -363,19 +363,24 @@ def refresh_pravachan_series_metadata(config: Config, opensearch_client: OpenSea
         "size": 0,
         "query": {"term": {"metadata.category.keyword": "Pravachan"}},
         "aggs": {
-            "by_series": {
-                "terms": {"field": "metadata.Series.keyword", "size": 200},
+            "by_granth": {
+                "terms": {"field": "metadata.Name.keyword", "size": 100},
                 "aggs": {
-                    "series_start": {"min": {"field": "metadata.series_start_date"}},
-                    "series_end":   {"max": {"field": "metadata.series_end_date"}},
-                    "by_volume": {
-                        "terms": {"field": "metadata.volume", "size": 100, "missing": -1},
+                    "by_series": {
+                        "terms": {"field": "metadata.Series.keyword", "size": 200},
                         "aggs": {
-                            "by_pravachan_number": {
-                                "terms": {
-                                    "field": "chunk_labels.pravachan_number",
-                                    "size": 2000,
-                                    "missing": "__none__"
+                            "series_start": {"min": {"field": "metadata.series_start_date"}},
+                            "series_end":   {"max": {"field": "metadata.series_end_date"}},
+                            "by_volume": {
+                                "terms": {"field": "metadata.volume", "size": 100, "missing": -1},
+                                "aggs": {
+                                    "by_pravachan_number": {
+                                        "terms": {
+                                            "field": "chunk_labels.pravachan_number",
+                                            "size": 2000,
+                                            "missing": "__none__"
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -387,33 +392,38 @@ def refresh_pravachan_series_metadata(config: Config, opensearch_client: OpenSea
 
     try:
         response = opensearch_client.search(index=main_index, body=agg_body)
-        series_buckets = response.get("aggregations", {}).get("by_series", {}).get("buckets", [])
+        granth_buckets = response.get("aggregations", {}).get("by_granth", {}).get("buckets", [])
 
         series_list = []
-        for s_bucket in series_buckets:
-            series_name = s_bucket["key"]
-            start_date = s_bucket.get("series_start", {}).get("value_as_string")
-            end_date   = s_bucket.get("series_end",   {}).get("value_as_string")
+        for g_bucket in granth_buckets:
+            granth_name = g_bucket["key"]
+            series_buckets = g_bucket.get("by_series", {}).get("buckets", [])
 
-            volumes = []
-            for v_bucket in s_bucket.get("by_volume", {}).get("buckets", []):
-                vol = v_bucket["key"]
-                if vol == -1:
-                    continue
-                pn_buckets = v_bucket.get("by_pravachan_number", {}).get("buckets", [])
-                pravachan_numbers = sorted(
-                    [b["key"] for b in pn_buckets if b["key"] != "__none__"],
-                    key=lambda x: (0, int(x)) if str(x).isdigit() else (1, str(x))
-                )
-                volumes.append({"volume": int(vol), "pravachan_numbers": pravachan_numbers})
+            for s_bucket in series_buckets:
+                series_name = s_bucket["key"]
+                start_date = s_bucket.get("series_start", {}).get("value_as_string")
+                end_date   = s_bucket.get("series_end",   {}).get("value_as_string")
 
-            volumes.sort(key=lambda v: v["volume"])
-            series_list.append({
-                "name": series_name,
-                "start_date": start_date,
-                "end_date": end_date,
-                "volumes": volumes,
-            })
+                volumes = []
+                for v_bucket in s_bucket.get("by_volume", {}).get("buckets", []):
+                    vol = v_bucket["key"]
+                    if vol == -1:
+                        continue
+                    pn_buckets = v_bucket.get("by_pravachan_number", {}).get("buckets", [])
+                    pravachan_numbers = sorted(
+                        [b["key"] for b in pn_buckets if b["key"] != "__none__"],
+                        key=lambda x: (0, int(x)) if str(x).isdigit() else (1, str(x))
+                    )
+                    volumes.append({"volume": int(vol), "pravachan_numbers": pravachan_numbers})
+
+                volumes.sort(key=lambda v: v["volume"])
+                series_list.append({
+                    "name": series_name,
+                    "granth": granth_name,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "volumes": volumes,
+                })
 
         doc = {
             "key": "pravachan_series_cascade",
