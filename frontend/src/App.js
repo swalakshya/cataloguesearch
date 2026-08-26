@@ -717,6 +717,22 @@ const AppContent = () => {
         api.checkLlmHealth().then(setLlmAvailable);
     }, []);
 
+    // Keep activeTab pointed at a category that actually has (or is loading) results,
+    // e.g. when a content-type filter narrows results down to just Granth.
+    useEffect(() => {
+        if (!searchData || activeTab === 'similar') return;
+        const counts = {
+            pravachan: searchData.pravachan_results?.total_hits || 0,
+            granth: searchData.granth_results?.total_hits || 0,
+            books: searchData.books_results?.total_hits || 0,
+        };
+        const categoryLabel = { pravachan: 'Pravachan', granth: 'Granth', books: 'Books' };
+        const isAvailable = (tab) => counts[tab] > 0 || loadingCategories.has(categoryLabel[tab]);
+        if (isAvailable(activeTab)) return;
+        const firstAvailable = ['pravachan', 'granth', 'books'].find(isAvailable);
+        if (firstAvailable) setActiveTab(firstAvailable);
+    }, [searchData, loadingCategories, activeTab]);
+
     // Typing effect: reveal each new assistant message character by character
     useEffect(() => {
         chatMessages.forEach((msg, idx) => {
@@ -932,6 +948,22 @@ const AppContent = () => {
         setActiveFilters(prevFilters => prevFilters.filter((_, i) => i !== index));
     };
 
+    // Auto-disable the untouched side when only Pravachan or only Granth has been
+    // narrowed — e.g. picking a Pravachan series shouldn't also pull in unrelated,
+    // unfiltered Granth results. Both stay on when either both sides are filtered
+    // (a deliberate mix) or neither is (the default browse-everything state). This is
+    // a pure derivation (not stored in `contentTypes` state) so it can't trigger the
+    // "clear filters when contentTypes changes" effect below and wipe what was just set.
+    const effectiveContentTypes = useMemo(() => {
+        const hasPravachanFilter = activeFilters.some(f => f.key === '_pravachan_groups');
+        const hasGranthFilter = activeFilters.some(f => f.key === 'Name');
+        return {
+            ...contentTypes,
+            pravachans: contentTypes.pravachans && (hasPravachanFilter || !hasGranthFilter),
+            granths: contentTypes.granths && (hasGranthFilter || !hasPravachanFilter),
+        };
+    }, [activeFilters, contentTypes]);
+
     // Single source of truth for building search payload
     const buildSearchPayload = useCallback((pravachanPage = 1, granthPage = 1) => {
         return {
@@ -943,12 +975,12 @@ const AppContent = () => {
             language: language,
             search_types: {
                 "Pravachan": {
-                    "enabled": contentTypes.pravachans,
+                    "enabled": effectiveContentTypes.pravachans,
                     "page_size": PAGE_SIZE,
                     "page_number": pravachanPage
                 },
                 "Granth": {
-                    "enabled": contentTypes.granths,
+                    "enabled": effectiveContentTypes.granths,
                     "page_size": PAGE_SIZE,
                     "page_number": granthPage
                 },
@@ -963,7 +995,7 @@ const AppContent = () => {
             ...(startYear && { start_year: startYear }),
             ...(endYear && { end_year: endYear })
         };
-    }, [query, activeFilters, contentTypes, language, textSearch, exactMatch, excludeWords, searchType, startYear, endYear, booksPage]);
+    }, [query, activeFilters, contentTypes, effectiveContentTypes, language, textSearch, exactMatch, excludeWords, searchType, startYear, endYear, booksPage]);
 
     function buildLlmFilters() {
         const filters = {};
@@ -1925,7 +1957,7 @@ const AppContent = () => {
                                                         activeFilters={activeFilters}
                                                         onAddFilter={addFilter}
                                                         onRemoveFilter={removeFilter}
-                                                        contentTypes={contentTypes}
+                                                        contentTypes={effectiveContentTypes}
                                                         setContentTypes={setContentTypes}
                                                         language={language}
                                                         startYear={startYear}
