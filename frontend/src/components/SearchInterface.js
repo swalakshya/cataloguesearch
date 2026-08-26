@@ -525,20 +525,12 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
                             </div>
 
                             {/* Footer */}
-                            <div className="p-4 border-t border-slate-200 flex gap-2 sticky bottom-0 bg-white rounded-b-lg md:rounded-b-lg">
-                                <button
-                                    onClick={handleClearAll}
-                                    className="flex-1 px-4 py-1.5 border border-slate-300 rounded text-slate-700 font-semibold hover:bg-slate-50 transition-colors"
-                                >
-                                    Clear All
-                                </button>
-                                <button
-                                    onClick={handleApply}
-                                    className="flex-1 px-4 py-1.5 bg-sky-600 text-white rounded font-semibold hover:bg-sky-700 transition-colors"
-                                >
-                                    Apply {granthMode === 'specific' && selectedGranths.length > 0 && `(${selectedGranths.length})`}
-                                </button>
-                            </div>
+                            <FilterFooter
+                                onClear={handleClearAll}
+                                clearLabel="Clear All"
+                                onApply={handleApply}
+                                applyLabel={`Apply${granthMode === 'specific' && selectedGranths.length > 0 ? ` (${selectedGranths.length})` : ''}`}
+                            />
                         </div>
                     </div>
                 </>
@@ -590,11 +582,28 @@ const GridToggle = ({ value, selected, onToggle }) => (
     </button>
 );
 
+// Standard Clear/Apply footer for filter dialogs (PravachanFilter, GranthFilter, MetadataFilters) —
+// single source of truth for their color/shape so the three don't drift from each other again.
+const FilterFooter = ({ onClear, clearLabel = 'Clear', onApply, applyLabel = 'Apply' }) => (
+    <div className="p-4 border-t border-slate-200 flex gap-2 sticky bottom-0 bg-white rounded-b-lg">
+        <button onClick={onClear}
+            className="px-4 py-1.5 border border-slate-300 rounded text-slate-700 text-sm font-semibold hover:bg-slate-50">
+            {clearLabel}
+        </button>
+        <div className="flex-1" />
+        <button onClick={onApply}
+            className="px-4 py-1.5 bg-sky-600 text-white rounded text-sm font-semibold hover:bg-sky-700">
+            {applyLabel}
+        </button>
+    </div>
+);
+
 // ─── PravachanFilter ─────────────────────────────────────────────────────────
 
 const PravachanFilter = ({
     allMetadata, activeFilters, onAddFilter, onRemoveFilter,
     language, startYear, setStartYear, endYear, setEndYear,
+    onOpenChange,
 }) => {
     const [isOpen, setIsOpen]         = useState(false);
     const [pendingGranths, setPendingGranths] = useState([]);
@@ -632,6 +641,11 @@ const PravachanFilter = ({
         cascade.forEach(s => { if (s.granth) map[seriesKey(s.granth, s.name)] = s; });
         return map;
     }, [cascade]);
+
+    // Let the parent know this modal is open, so it can e.g. hide FABs that would collide with it.
+    useEffect(() => {
+        onOpenChange?.(isOpen);
+    }, [isOpen]); // eslint-disable-line
 
     // Sync pending state from activeFilters when opening
     useEffect(() => {
@@ -988,38 +1002,26 @@ const PravachanFilter = ({
                             </div>
 
                             {/* Footer */}
-                            <div className="p-4 border-t border-slate-200 flex gap-2 sticky bottom-0 bg-white rounded-b-lg">
-                                {narrowingKey ? (
-                                    <>
-                                        <button onClick={closeNarrow}
-                                            className="px-4 py-1.5 border border-slate-300 rounded text-slate-700 text-sm font-semibold hover:bg-slate-50">
-                                            Done
+                            {narrowingKey ? (
+                                <div className="p-4 border-t border-slate-200 flex gap-2 sticky bottom-0 bg-white rounded-b-lg">
+                                    <button onClick={closeNarrow}
+                                        className="px-4 py-1.5 border border-slate-300 rounded text-slate-700 text-sm font-semibold hover:bg-slate-50">
+                                        Done
+                                    </button>
+                                    <div className="flex-1" />
+                                    {narrowStep === 'volumes' && narrowVolumes.length > 0 && narrowAvailableNumbers.length > 0 && (
+                                        <button onClick={() => setNarrowStep('numbers')}
+                                            className="px-4 py-1.5 border border-sky-400 text-sky-700 rounded text-sm font-semibold hover:bg-sky-50 flex items-center gap-1">
+                                            Pravachan #
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                            </svg>
                                         </button>
-                                        <div className="flex-1" />
-                                        {narrowStep === 'volumes' && narrowVolumes.length > 0 && narrowAvailableNumbers.length > 0 && (
-                                            <button onClick={() => setNarrowStep('numbers')}
-                                                className="px-4 py-1.5 border border-sky-400 text-sky-700 rounded text-sm font-semibold hover:bg-sky-50 flex items-center gap-1">
-                                                Pravachan #
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                                </svg>
-                                            </button>
-                                        )}
-                                    </>
-                                ) : (
-                                    <>
-                                        <button onClick={handleClear}
-                                            className="px-4 py-1.5 border border-slate-300 rounded text-slate-700 text-sm font-semibold hover:bg-slate-50">
-                                            Clear
-                                        </button>
-                                        <div className="flex-1" />
-                                        <button onClick={handleApply}
-                                            className="px-4 py-1.5 bg-sky-600 text-white rounded text-sm font-semibold hover:bg-sky-700">
-                                            Apply
-                                        </button>
-                                    </>
-                                )}
-                            </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <FilterFooter onClear={handleClear} onApply={handleApply} />
+                            )}
                         </div>
                     </div>
                 </>
@@ -1030,10 +1032,15 @@ const PravachanFilter = ({
 
 // ─── GranthFilter ────────────────────────────────────────────────────────────
 
-const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, language }) => {
+const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, language, onOpenChange }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [pending, setPending]   = useState([]);
     const [search, setSearch]     = useState('');
+
+    // Let the parent know this modal is open, so it can e.g. hide FABs that would collide with it.
+    useEffect(() => {
+        onOpenChange?.(isOpen);
+    }, [isOpen]); // eslint-disable-line
 
     const allNames = useMemo(() => {
         const items = new Set();
@@ -1145,16 +1152,11 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
                             </div>
 
                             {/* Footer */}
-                            <div className="p-4 border-t border-slate-200 flex gap-2 sticky bottom-0 bg-white rounded-b-lg">
-                                <button onClick={handleClear}
-                                    className="flex-1 px-4 py-1.5 border border-slate-300 rounded text-slate-700 text-sm font-semibold hover:bg-slate-50">
-                                    Clear
-                                </button>
-                                <button onClick={handleApply}
-                                    className="flex-1 px-4 py-1.5 bg-emerald-600 text-white rounded text-sm font-semibold hover:bg-emerald-700">
-                                    Apply{pending.length > 0 ? ` (${pending.length})` : ''}
-                                </button>
-                            </div>
+                            <FilterFooter
+                                onClear={handleClear}
+                                onApply={handleApply}
+                                applyLabel={`Apply${pending.length > 0 ? ` (${pending.length})` : ''}`}
+                            />
                         </div>
                     </div>
                 </>
@@ -1192,9 +1194,18 @@ export const SearchFilters = ({
     activeCategories = ['Pravachan', 'Granth'],
     // kept for compat but not used — content type handled separately
     contentTypes, setContentTypes,
+    onFilterModalOpenChange,
 }) => {
     const hasYearFilter = startYear || endYear;
     const hasAnyFilter  = activeFilters.length > 0 || hasYearFilter;
+
+    // Pravachan and Granth each own their modal's open state independently —
+    // combine them so the parent only needs a single "is any filter modal open" signal.
+    const [pravachanOpen, setPravachanOpen] = useState(false);
+    const [granthOpen, setGranthOpen]       = useState(false);
+    useEffect(() => {
+        onFilterModalOpenChange?.(pravachanOpen || granthOpen);
+    }, [pravachanOpen, granthOpen]); // eslint-disable-line
 
     return (
         <div className="space-y-2">
@@ -1212,6 +1223,7 @@ export const SearchFilters = ({
                         setStartYear={setStartYear}
                         endYear={endYear}
                         setEndYear={setEndYear}
+                        onOpenChange={setPravachanOpen}
                     />
                 )}
                 {(activeCategories.includes('Granth') || activeCategories.includes('Books')) && (
@@ -1221,6 +1233,7 @@ export const SearchFilters = ({
                         onAddFilter={onAddFilter}
                         onRemoveFilter={onRemoveFilter}
                         language={language}
+                        onOpenChange={setGranthOpen}
                     />
                 )}
             </div>

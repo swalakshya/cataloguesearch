@@ -508,6 +508,9 @@ const AppContent = () => {
     const [isGranthProseLoading, setIsGranthProseLoading] = useState(false);
     const [showWelcomePopup, setShowWelcomePopup] = useState(false);
     const [showTipsModal, setShowTipsModal] = useState(false);
+    // True while the Pravachan/Granth filter modal (SearchFilters) is open — used to
+    // hide the mobile FABs below so they don't collide with the modal's Apply button.
+    const [filterModalOpen, setFilterModalOpen] = useState(false);
     const [llmAnswer, setLlmAnswer] = useState(null);
     const [llmReferences, setLlmReferences] = useState([]);
     const [llmCitations, setLlmCitations] = useState([]);
@@ -1930,6 +1933,7 @@ const AppContent = () => {
                                                         endYear={endYear}
                                                         setEndYear={setEndYear}
                                                         activeCategories={activeCategories}
+                                                        onFilterModalOpenChange={setFilterModalOpen}
                                                     />
                                                     <SearchOptions language={language} setLanguage={setLanguage} />
                                                     <AdvancedSearch
@@ -2489,8 +2493,9 @@ const AppContent = () => {
                 </div>
             </div>
             
-            {/* Mobile Navigation Buttons - Only visible on mobile */}
-            {currentPage !== 'feedback' && (
+            {/* Mobile Navigation Buttons - Only visible on mobile, hidden while a filter modal is open
+                so they don't collide with the modal's Apply button (both are fixed to the same corner). */}
+            {currentPage !== 'feedback' && !filterModalOpen && (
                 <button
                     onClick={() => setCurrentPage('feedback')}
                     className="md:hidden fixed bottom-6 right-6 bg-sky-600 text-white p-3 rounded-full shadow-lg hover:bg-sky-700 transition-colors duration-200 z-50"
@@ -2502,8 +2507,8 @@ const AppContent = () => {
                     </svg>
                 </button>
             )}
-            
-            {currentPage !== 'home' && (
+
+            {currentPage !== 'home' && !filterModalOpen && (
                 <button
                     onClick={() => setCurrentPage('home')}
                     className="md:hidden fixed bottom-6 left-6 bg-slate-600 text-white p-3 rounded-full shadow-lg hover:bg-slate-700 transition-colors duration-200 z-50"
