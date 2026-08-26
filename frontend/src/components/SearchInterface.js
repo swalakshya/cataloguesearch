@@ -603,7 +603,7 @@ const FilterFooter = ({ onClear, clearLabel = 'Clear', onApply, applyLabel = 'Ap
 const PravachanFilter = ({
     allMetadata, activeFilters, onAddFilter, onRemoveFilter,
     language, startYear, setStartYear, endYear, setEndYear,
-    onOpenChange,
+    onOpenChange, disabled,
 }) => {
     const [isOpen, setIsOpen]         = useState(false);
     const [pendingGranths, setPendingGranths] = useState([]);
@@ -830,13 +830,16 @@ const PravachanFilter = ({
             <button
                 onClick={() => setIsOpen(true)}
                 className={`flex-1 py-1.5 px-3 border rounded text-sm font-medium flex items-center justify-between transition-colors ${
-                    activeCount > 0
-                        ? 'border-sky-500 bg-sky-50 text-sky-700'
-                        : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                    disabled
+                        ? 'border-slate-200 bg-slate-50 text-slate-400'
+                        : activeCount > 0
+                            ? 'border-sky-500 bg-sky-50 text-sky-700'
+                            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
                 }`}
-                style={{ backgroundColor: activeCount > 0 ? undefined : 'var(--bg-surface, white)' }}
+                style={{ backgroundColor: (disabled || activeCount > 0) ? undefined : 'var(--bg-surface, white)' }}
+                title={disabled ? 'Not searched — a Granth-only filter is active. Pick a Pravachan filter to include Pravachan results again.' : undefined}
             >
-                <span>🎙️ Pravachan{activeCount > 0 ? ` (${activeCount})` : ''}</span>
+                <span>🎙️ Pravachan{activeCount > 0 ? ` (${activeCount})` : ''}{disabled ? ' (off)' : ''}</span>
                 <svg className="w-3.5 h-3.5 ml-1 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
@@ -1051,7 +1054,7 @@ const PravachanFilter = ({
 
 // ─── GranthFilter ────────────────────────────────────────────────────────────
 
-const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, language, onOpenChange }) => {
+const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, language, onOpenChange, disabled }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [pending, setPending]   = useState([]);
     const [search, setSearch]     = useState('');
@@ -1104,13 +1107,16 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
             <button
                 onClick={() => setIsOpen(true)}
                 className={`flex-1 py-1.5 px-3 border rounded text-sm font-medium flex items-center justify-between transition-colors ${
-                    activeCount > 0
-                        ? 'border-sky-500 bg-sky-50 text-sky-700'
-                        : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                    disabled
+                        ? 'border-slate-200 bg-slate-50 text-slate-400'
+                        : activeCount > 0
+                            ? 'border-sky-500 bg-sky-50 text-sky-700'
+                            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
                 }`}
-                style={{ backgroundColor: activeCount > 0 ? undefined : 'var(--bg-surface, white)' }}
+                style={{ backgroundColor: (disabled || activeCount > 0) ? undefined : 'var(--bg-surface, white)' }}
+                title={disabled ? 'Not searched — a Pravachan-only filter is active. Pick a Granth filter to include Granth results again.' : undefined}
             >
-                <span>📜 Granth{activeCount > 0 ? ` (${activeCount})` : ''}</span>
+                <span>📜 Granth{activeCount > 0 ? ` (${activeCount})` : ''}{disabled ? ' (off)' : ''}</span>
                 <svg className="w-3.5 h-3.5 ml-1 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
@@ -1212,7 +1218,9 @@ export const SearchFilters = ({
     allMetadata, activeFilters, onAddFilter, onRemoveFilter,
     language, startYear, setStartYear, endYear, setEndYear,
     activeCategories = ['Pravachan', 'Granth'],
-    // kept for compat but not used — content type handled separately
+    // contentTypes is auto-derived by App.js from activeFilters (disabling the side
+    // that has no filter when only the other is narrowed) — used here just to show
+    // the disabled state; setContentTypes itself isn't called from this component.
     contentTypes, setContentTypes,
     onFilterModalOpenChange,
 }) => {
@@ -1244,6 +1252,7 @@ export const SearchFilters = ({
                         endYear={endYear}
                         setEndYear={setEndYear}
                         onOpenChange={setPravachanOpen}
+                        disabled={contentTypes && !contentTypes.pravachans}
                     />
                 )}
                 {(activeCategories.includes('Granth') || activeCategories.includes('Books')) && (
@@ -1254,6 +1263,7 @@ export const SearchFilters = ({
                         onRemoveFilter={onRemoveFilter}
                         language={language}
                         onOpenChange={setGranthOpen}
+                        disabled={contentTypes && !contentTypes.granths}
                     />
                 )}
             </div>
