@@ -33,7 +33,11 @@ log_handle = logging.getLogger(__name__)
 # Metadata filter fields that are valid per category.
 # Prevents cross-category filters (e.g. a Granth filter) from zeroing out Books results.
 _CATEGORY_FILTER_FIELDS: Dict[str, set] = {
-    "Pravachan": {"Name", "Anuyog", "Series", "volume", "pravachan_number", "_pravachan_groups"},
+    # "Name" is deliberately absent here: a Granth/Book title picked for Pravachan
+    # filtering goes through "_pravachan_groups" (which carries granth/series/volume
+    # scoped to Pravachan only) so it doesn't also narrow Granth/Books results — see
+    # PravachanFilter.handleApply in the frontend.
+    "Pravachan": {"Anuyog", "Series", "volume", "pravachan_number", "_pravachan_groups"},
     "Granth":    {"Name", "Anuyog", "Author"},
     "Books":     {"Name", "Author"},
 }

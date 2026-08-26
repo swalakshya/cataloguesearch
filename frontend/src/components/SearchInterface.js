@@ -266,14 +266,14 @@ export const MetadataFilters = ({ metadata, activeFilters, onAddFilter, onRemove
 
                     {/* Year Filter Chip */}
                     {(startYear || endYear) && (
-                        <div className="bg-emerald-100 text-emerald-800 px-2 py-1 rounded-full flex items-center gap-2 text-sm font-medium">
+                        <div className="bg-sky-100 text-sky-800 px-2 py-1 rounded-full flex items-center gap-2 text-sm font-medium">
                             <span>📅 {startYear || '?'} - {endYear || '?'}</span>
                             <button
                                 onClick={() => {
                                     setStartYear(null);
                                     setEndYear(null);
                                 }}
-                                className="text-emerald-600 hover:text-emerald-800 font-bold"
+                                className="text-sky-600 hover:text-sky-800 font-bold"
                             >
                                 &times;
                             </button>
@@ -647,21 +647,26 @@ const PravachanFilter = ({
         onOpenChange?.(isOpen);
     }, [isOpen]); // eslint-disable-line
 
-    // Sync pending state from activeFilters when opening
+    // Sync pending state from activeFilters when opening. Our own selections live
+    // entirely under "_pravachan_groups" — a whole-Granth pick is a group with no
+    // "series" (see handleApply) — so this never has to look at 'Name' filters,
+    // which belong to the Granth picker.
     useEffect(() => {
         if (!isOpen) return;
-        const activeNames = activeFilters.filter(f => f.key === 'Name').map(f => f.value);
-        const activeGranths = activeNames.filter(n => granthOptions.includes(n));
-
         const groups = activeFilters
             .filter(f => f.key === '_pravachan_groups')
             .map(f => { try { return JSON.parse(f.value); } catch { return null; } })
             .filter(Boolean);
 
+        const wholeGranthGroups = groups.filter(g => !g.series);
+        const seriesGroups = groups.filter(g => g.series);
+
+        const activeGranths = [...new Set(wholeGranthGroups.map(g => g.granth).filter(Boolean))];
+
         const keys = [];
         const volsBySeries = {};
         const numsBySeries = {};
-        groups.forEach(g => {
+        seriesGroups.forEach(g => {
             const key = seriesKey(g.granth, g.series);
             keys.push(key);
             if (g.volume?.length) volsBySeries[key] = g.volume;
@@ -673,7 +678,7 @@ const PravachanFilter = ({
         setPendingVolumesBySeries(volsBySeries);
         setPendingNumbersBySeries(numsBySeries);
 
-        const seriesGranths = new Set(groups.map(g => g.granth));
+        const seriesGranths = new Set(seriesGroups.map(g => g.granth));
         setExpandedGranths([...new Set([...activeGranths, ...seriesGranths])]);
         setNarrowingKey(null);
         setNarrowStep('volumes');
@@ -727,7 +732,18 @@ const PravachanFilter = ({
     };
 
     // ── Per-series "narrow" popup (Volumes → Pravachan#) ──────────────────────
-    const openNarrow = (granth, name) => { setNarrowingKey(seriesKey(granth, name)); setNarrowStep('volumes'); };
+    // Narrowing a series that's only checked implicitly (via its whole Granth being
+    // checked) needs a real pendingSeries entry to attach the volume/number to —
+    // otherwise the narrowed selection has nothing to hang off of and Apply drops it.
+    const openNarrow = (granth, name) => {
+        if (pendingGranths.includes(granth)) {
+            const allKeys = (seriesByGranth[granth] || []).map(s => seriesKey(granth, s.name));
+            setPendingGranths(prev => prev.filter(x => x !== granth));
+            setPendingSeries(prev => [...new Set([...prev, ...allKeys])]);
+        }
+        setNarrowingKey(seriesKey(granth, name));
+        setNarrowStep('volumes');
+    };
     const closeNarrow = () => setNarrowingKey(null);
 
     const narrowSeries = narrowingKey ? seriesByKey[narrowingKey] : null;
@@ -764,13 +780,16 @@ const PravachanFilter = ({
         const toRemove = [];
         activeFilters.forEach((f, i) => {
             if (PRAVACHAN_FILTER_KEYS.includes(f.key)) toRemove.push(i);
-            // Only clear Name filters that are actually Pravachan Granths — leaves Granth-tab
-            // selections for Books/Granth-category-only titles untouched.
-            if (f.key === 'Name' && granthOptions.includes(f.value)) toRemove.push(i);
         });
         toRemove.reverse().forEach(i => onRemoveFilter(i));
 
-        pendingGranths.forEach(v => onAddFilter({ key: 'Name', value: v }));
+        // A whole-Granth pick is its own group with no "series" — keeps it scoped to
+        // Pravachan only (via "_pravachan_groups") instead of a shared 'Name' filter
+        // that would also narrow Granth/Books results for the same title.
+        pendingGranths.forEach(v => onAddFilter({
+            key: '_pravachan_groups',
+            value: JSON.stringify({ granth: v, series: null, volume: [], pravachan_number: [] }),
+        }));
 
         // One group per selected series, each with its own volume/number narrowing —
         // keeps independently-narrowed series from being incorrectly ANDed together.
@@ -799,7 +818,7 @@ const PravachanFilter = ({
     };
 
     const activeCount = activeFilters.filter(f =>
-        PRAVACHAN_FILTER_KEYS.includes(f.key) || (f.key === 'Name' && granthOptions.includes(f.value))
+        PRAVACHAN_FILTER_KEYS.includes(f.key)
     ).length + (startYear || endYear ? 1 : 0);
 
     // Year range is a Granth-independent fallback, so it's based on the full cascade.
@@ -1086,7 +1105,7 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
                 onClick={() => setIsOpen(true)}
                 className={`flex-1 py-1.5 px-3 border rounded text-sm font-medium flex items-center justify-between transition-colors ${
                     activeCount > 0
-                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                        ? 'border-sky-500 bg-sky-50 text-sky-700'
                         : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
                 }`}
                 style={{ backgroundColor: activeCount > 0 ? undefined : 'var(--bg-surface, white)' }}
@@ -1136,10 +1155,10 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
                                             <input type="checkbox"
                                                 checked={pending.includes(name)}
                                                 onChange={() => toggle(name)}
-                                                className="form-checkbox h-4 w-4 text-emerald-600 rounded" />
+                                                className="form-checkbox h-4 w-4 text-sky-600 rounded" />
                                             <span className="text-sm text-slate-800 flex-1">{name}</span>
                                             {pending.includes(name) && (
-                                                <svg className="w-4 h-4 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <svg className="w-4 h-4 text-sky-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                                                 </svg>
                                             )}
@@ -1147,7 +1166,7 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
                                     ))}
                                 </div>
                                 {pending.length > 0 && (
-                                    <p className="text-xs text-emerald-700 font-medium mt-2">{pending.length} selected</p>
+                                    <p className="text-xs text-sky-700 font-medium mt-2">{pending.length} selected</p>
                                 )}
                             </div>
 
@@ -1168,7 +1187,7 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
 // ─── SearchFilters (public wrapper) ──────────────────────────────────────────
 
 const CHIP_COLORS = {
-    _pravachan_groups: 'bg-violet-100 text-violet-800 border-violet-200',
+    _pravachan_groups: 'bg-sky-100 text-sky-800 border-sky-200',
     Name:              'bg-sky-100 text-sky-800 border-sky-200',
 };
 const CHIP_LABELS = {
@@ -1179,7 +1198,8 @@ const CHIP_LABELS = {
 const pravachanGroupChipLabel = (jsonValue) => {
     try {
         const g = JSON.parse(jsonValue);
-        const parts = [g.series];
+        // A whole-Granth pick (no series narrowed) has no series name — fall back to the Granth itself.
+        const parts = [g.series || g.granth];
         if (g.volume?.length) parts.push(`Vol ${g.volume.join(', ')}`);
         if (g.pravachan_number?.length) parts.push(`# ${g.pravachan_number.join(', ')}`);
         return `${parts[0]}${parts.length > 1 ? ` (${parts.slice(1).join(' · ')})` : ''}`;
@@ -1255,7 +1275,7 @@ export const SearchFilters = ({
                         );
                     })}
                     {hasYearFilter && (
-                        <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <span className="bg-sky-100 text-sky-800 border border-sky-200 text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
                             {startYear || '?'} – {endYear || '?'}
                             <button onClick={() => { setStartYear(null); setEndYear(null); }} className="opacity-60 hover:opacity-100 font-bold leading-none">&times;</button>
                         </span>

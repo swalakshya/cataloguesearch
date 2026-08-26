@@ -717,6 +717,22 @@ const AppContent = () => {
         api.checkLlmHealth().then(setLlmAvailable);
     }, []);
 
+    // Keep activeTab pointed at a category that actually has (or is loading) results,
+    // e.g. when a content-type filter narrows results down to just Granth.
+    useEffect(() => {
+        if (!searchData || activeTab === 'similar') return;
+        const counts = {
+            pravachan: searchData.pravachan_results?.total_hits || 0,
+            granth: searchData.granth_results?.total_hits || 0,
+            books: searchData.books_results?.total_hits || 0,
+        };
+        const categoryLabel = { pravachan: 'Pravachan', granth: 'Granth', books: 'Books' };
+        const isAvailable = (tab) => counts[tab] > 0 || loadingCategories.has(categoryLabel[tab]);
+        if (isAvailable(activeTab)) return;
+        const firstAvailable = ['pravachan', 'granth', 'books'].find(isAvailable);
+        if (firstAvailable) setActiveTab(firstAvailable);
+    }, [searchData, loadingCategories, activeTab]);
+
     // Typing effect: reveal each new assistant message character by character
     useEffect(() => {
         chatMessages.forEach((msg, idx) => {
