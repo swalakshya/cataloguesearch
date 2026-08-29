@@ -77,6 +77,13 @@ export const searchableContent = [
     gujarati: null
   },
   {
+    granth: "Parmatma Prakash",
+    series: "1965-66",
+    count: 214,
+    hindi: "searchable",
+    gujarati: null
+  },
+  {
     granth: "Samadhi Tantra",
     series: "1974",
     count: 110,

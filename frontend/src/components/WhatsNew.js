@@ -35,6 +35,7 @@ const WhatsNew = () => {
                 "Pravachans: Pravachan Navneet (142 Pravachans, Hindi)",
                 "Pravachans: Asht Pahud 1973-74 Series (198 Pravachans, Hindi)",
                 "Pravachans: Bahinshree Nu Vachanamrut 1980 Series (50 Pravachans, Hindi)",
+                "Pravachans: Parmatma Prakash 1965-66 Series (214 Pravachans, Hindi)",
             ],
         },
         {
