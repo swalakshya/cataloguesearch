@@ -25,7 +25,7 @@ index:
 
 search:
   filtered_metadata_fields: ["Granth_date_ranges", "Pravachan", "Name", "Anuyog", "Author"]
-  active_categories: ["Pravachan", "Granth"]
+  active_categories: ["Pravachan", "Granth", "Books"]
 
 opensearch:
   host: "{OPENSEARCH_HOST}"
