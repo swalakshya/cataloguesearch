@@ -334,6 +334,18 @@ export const searchableGranths = [
     status: "searchable"
   },
   {
+    name: "Gommatsaar Jeevkand",
+    author: "Acharya Nemichand Siddhant Chakravarti",
+    tikakaar: "Pandit Keshav Varni",
+    status: "searchable"
+  },
+  {
+    name: "Gommatsaar Karmkand",
+    author: "Acharya Nemichand Siddhant Chakravarti",
+    tikakaar: "Pandit Keshav Varni",
+    status: "searchable"
+  },
+  {
     name: "Gurudevshri ke Vachanamrut",
     author: "Shri Kanji Swami",
     status: "searchable"
@@ -404,6 +416,12 @@ export const searchableGranths = [
     name: "Niyamsaar",
     author: "Acharya Kund Kund",
     tikakaar: "Muni Padmaprabhmal Dhari Dev",
+    status: "searchable"
+  },
+  {
+    name: "Padma Puran",
+    author: "Acharya Ravisen",
+    tikakaar: "Pandit Daulatram",
     status: "searchable"
   },
   {
@@ -492,8 +510,27 @@ export const searchableGranths = [
     status: "searchable"
   },
   {
-    name: "Samyag Gyan Chandrika",
-    author: "Pandit Todarmal",
+    name: "Samyag Gyan Chandrika Jeevkand",
+    author: "Acharya Nemichand Siddhant Chakravarti",
+    tikakaar: "Pandit Todarmal",
+    status: "searchable"
+  },
+  {
+    name: "Samyag Gyan Chandrika Karmkand",
+    author: "Acharya Nemichand Siddhant Chakravarti",
+    tikakaar: "Pandit Todarmal",
+    status: "searchable"
+  },
+  {
+    name: "Samyag Gyan Chandrika Kshapanasaar",
+    author: "Acharya Nemichand Siddhant Chakravarti",
+    tikakaar: "Pandit Todarmal",
+    status: "searchable"
+  },
+  {
+    name: "Samyag Gyan Chandrika Labdhisaar",
+    author: "Acharya Nemichand Siddhant Chakravarti",
+    tikakaar: "Pandit Todarmal",
     status: "searchable"
   },
   {

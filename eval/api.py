@@ -1643,4 +1643,14 @@ async def startup():
         logs_dir=logs_dir, console_level=VERBOSE_LEVEL_NUM,
         file_level=VERBOSE_LEVEL_NUM,
         console_only=False)
+    try:
+        from dotenv import load_dotenv
+        if load_dotenv('.env.local'):
+            log_handle.info("Loaded environment variables from .env.local")
+        else:
+            log_handle.warning(
+                ".env.local not found; relying on process environment for API keys (e.g. GEMINI_API_KEY)")
+    except ImportError:
+        log_handle.warning(
+            "python-dotenv not installed; relying on process environment for API keys (e.g. GEMINI_API_KEY)")
     log_handle.info("Eval app started.")

@@ -26,6 +26,14 @@ const WhatsNew = () => {
 
     const updates = [
         {
+            date: "August 29, 2026",
+            newContent: [
+                "Granths: Padma Puran (Gujarati) by Acharya Ravisen (Tikakaar: Pandit Daulatram)",
+                "Granths: Gommatsaar Jeevkand by Acharya Nemichand Siddhant Chakravarti (Tikakaar: Pandit Keshav Varni)",
+                "Granths: Gommatsaar Karmkand by Acharya Nemichand Siddhant Chakravarti (Tikakaar: Pandit Keshav Varni)",
+            ],
+        },
+        {
             date: "April 30, 2026",
             newContent: [
                 "Pravachans: Samaysaar 1971-74 (17th time) in Gujarati — 639 Pravachans",
