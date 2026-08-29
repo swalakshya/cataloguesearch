@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
+// Cap auto-grow height so a long paste doesn't take over the page -- past
+// this the textarea scrolls internally instead of growing further.
+const MAX_TEXTAREA_HEIGHT = 160;
+const MAX_QUERY_LENGTH = 500;
+
 /**
  * TransliterationInput - A standalone, reusable input component with real-time transliteration
  *
@@ -94,6 +99,16 @@ const TransliterationInput = ({
             inputRef.current.focus();
         }
     }, [autoFocus]);
+
+    // Auto-grow the textarea to fit its content, up to MAX_TEXTAREA_HEIGHT,
+    // then let it scroll internally. Re-runs on every value change, including
+    // programmatic clears (e.g. after submit), so it shrinks back down too.
+    useEffect(() => {
+        const el = inputRef.current;
+        if (!el) return;
+        el.style.height = 'auto';
+        el.style.height = `${Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT)}px`;
+    }, [value]);
 
     // Press '/' anywhere to focus the search input
     useEffect(() => {
@@ -270,10 +285,30 @@ const TransliterationInput = ({
 
     // Handle key down events
     const handleKeyDown = (e) => {
-        // Enter key
+        // Enter submits (matches the old single-line input); Shift+Enter inserts
+        // a newline instead, same convention as most chat inputs.
         if (e.key === 'Enter') {
-            if (showDropdown && suggestions.length > 0) {
+            if (e.shiftKey) {
+                return;
+            }
+            // Browsers insert a newline for Shift+Enter in a <textarea> natively,
+            // but there's no such default for Cmd/Ctrl+Enter -- has to be done by hand.
+            if (e.metaKey || e.ctrlKey) {
                 e.preventDefault();
+                const el = e.target;
+                const start = el.selectionStart;
+                const end = el.selectionEnd;
+                const newValue = value.substring(0, start) + '\n' + value.substring(end);
+                onChange(newValue);
+                setTimeout(() => {
+                    if (inputRef.current) {
+                        inputRef.current.setSelectionRange(start + 1, start + 1);
+                    }
+                }, 0);
+                return;
+            }
+            e.preventDefault();
+            if (showDropdown && suggestions.length > 0) {
                 replaceWithSuggestion(suggestions[selectedIndex]);
             } else if (onSearch) {
                 onSearch();
@@ -325,16 +360,17 @@ const TransliterationInput = ({
     return (
         <div className="relative w-full">
             <div className="relative">
-                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm pointer-events-none select-none">🔍</span>
-                <input
+                <span className="absolute left-2.5 top-2 text-sm pointer-events-none select-none">🔍</span>
+                <textarea
                     ref={inputRef}
-                    type="text"
+                    rows={1}
                     value={value}
                     onChange={handleInputChange}
                     onKeyDown={handleKeyDown}
                     placeholder={placeholder}
                     disabled={disabled}
-                    className={`w-full h-8 pl-8 pr-3 text-sm bg-white border border-slate-400 shadow-sm rounded-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-600 text-slate-900 font-sans disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-300 disabled:cursor-not-allowed ${className}`}
+                    maxLength={MAX_QUERY_LENGTH}
+                    className={`w-full min-h-8 pl-8 pr-3 py-1.5 text-sm bg-white border border-slate-400 shadow-sm rounded-sm resize-none overflow-y-auto leading-normal focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-600 text-slate-900 font-sans disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-300 disabled:cursor-not-allowed ${className}`}
                 />
             </div>
 

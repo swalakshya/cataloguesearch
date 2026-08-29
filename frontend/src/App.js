@@ -1915,7 +1915,7 @@ const AppContent = () => {
                                 <>
                                     <SearchableContentWidget />
                                     <div style={{ backgroundColor: 'var(--bg-card)' }} className="bg-white p-3 rounded shadow-sm border border-slate-200 mb-4">
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-end gap-2">
                                             <div className="flex-grow">
                                                 <SearchBar
                                                     query={query}
@@ -1927,7 +1927,7 @@ const AppContent = () => {
                                             <button
                                                 onClick={() => handleSearch(1)}
                                                 disabled={isLoading}
-                                                className="bg-sky-600 text-white font-semibold h-8 px-4 rounded text-sm hover:bg-sky-700 active:bg-sky-800 transition duration-200 disabled:bg-slate-300 flex items-center justify-center whitespace-nowrap"
+                                                className="bg-sky-600 text-white font-semibold h-8 px-4 rounded text-sm hover:bg-sky-700 active:bg-sky-800 transition duration-200 disabled:bg-slate-300 flex items-center justify-center whitespace-nowrap shrink-0"
                                             >
                                                 {isLoading ? <Spinner /> : 'Search'}
                                             </button>
@@ -2138,7 +2138,7 @@ const AppContent = () => {
                                                 </div>
                                                 <div className="w-full">
                                                     <div className="rounded-lg border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3 transition-colors focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100">
-                                                        <div className="flex items-center gap-2">
+                                                        <div className="flex items-end gap-2">
                                                             <div className="relative shrink-0 group">
                                                                 <button
                                                                     onClick={handleNewChat}
@@ -2414,7 +2414,7 @@ const AppContent = () => {
                                                     </div>
                                                 )}
                                                 <div className="rounded-lg border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3 transition-colors focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100">
-                                                    <div className="flex items-center gap-2">
+                                                    <div className="flex items-end gap-2">
                                                         <div className="relative shrink-0 group">
                                                             <button
                                                                 onClick={handleNewChat}

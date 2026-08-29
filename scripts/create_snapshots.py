@@ -1,9 +1,11 @@
 """
 Automated OpenSearch snapshot creation script.
 
-Replaces create_snapshots.sh with fully automated Python using only stdlib.
-Docker operations use the Docker Unix socket API directly (no subprocess).
-OpenSearch operations use urllib (no curl).
+Replaces create_snapshots.sh with fully automated Python, using stdlib wherever
+possible. Docker operations use the Docker Unix socket API directly (no subprocess).
+OpenSearch operations use urllib (no curl). The one external dependency is
+`zstandard`, used to write the dated .tar.zst archive with multi-threaded
+compression via a Python library instead of a `tar | zstd` shell pipe.
 
 Usage:
     # Create a local tarball (parallel compression via zstd/pigz if available):
@@ -35,7 +37,10 @@ import tarfile
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime
 from pathlib import Path
+
+import zstandard
 
 # ---------------------------------------------------------------------------
 # Logging setup — same pattern as backend/ (getLogger), also writes to file
@@ -256,22 +261,23 @@ def _confirm(local_dir: Path, server: str | None, ssh_key: str | None, location:
     print("  5. Create snapshot: cataloguesearch_prod_metadata")
     print("  6. Verify both snapshots have state=SUCCESS")
     print("  7. Verify snapshot files exist on disk")
+    tarball_name = f"snapshots_{datetime.now():%Y%m%d}.tar.zst"
+    print(f"  8. Create {tarball_name} alongside the snapshots folder")
+    print("     (multi-threaded zstd compression; overwrites same-named file if present)")
     if server:
         remote_path = f"{display_loc}/{local_dir.name}"
-        print(f"  8. Stream snapshots → {server}:{remote_path}")
+        print(f"  9. Stream snapshots → {server}:{remote_path}")
         print(f"     (wipes {remote_path} on remote first, then extracts)")
-        print("  9. Verify checksums of all transferred files")
-    else:
-        print("  8. Create tarball alongside the snapshots folder")
-        print("     (parallel compression via zstd/pigz if available)")
+        print(" 10. Verify checksums of all transferred files")
     print()
     print(f"⚠️  WARNING: Step 2 will CLEAR all existing files in:")
     print(f"           {local_dir}")
     print("         Make sure you do not need any files currently there.")
     print("⚠️  WARNING: OpenSearch will be briefly stopped and restarted.")
+    print(f"⚠️  WARNING: Step 8 will DELETE an existing {tarball_name} if one is already there.")
     if server:
         remote_path = f"{display_loc}/{local_dir.name}"
-        print(f"⚠️  WARNING: Step 8 will DELETE {remote_path} on {server} before extracting.")
+        print(f"⚠️  WARNING: Step 9 will DELETE {remote_path} on {server} before extracting.")
     print()
 
     answer = input("Do you want to proceed? (yes/no): ").strip().lower()
@@ -536,50 +542,28 @@ def step7_verify_files_on_disk(local_dir: Path):
 
 
 # ---------------------------------------------------------------------------
-# Step 8a: Create tarball of the snapshots directory (local mode)
+# Step 8: Create dated .tar.zst of the snapshots directory (always, local file)
 # ---------------------------------------------------------------------------
 
 def step8_create_tarball(local_dir: Path) -> Path:
-    compressor, comp_args = _detect_compressor()
-    ext = ".tar.zst" if compressor == "zstd" else ".tar.gz"
-    tarball_path = local_dir.parent / (local_dir.name + ext)
-    log_handle.info("🔄 Step 8: Creating %s (compressor=%s)...", tarball_path.name, compressor)
+    """
+    Write local_dir into a snapshots_YYYYMMDD.tar.zst archive next to it,
+    using the `zstandard` library directly (tarfile streamed into a
+    multi-threaded ZstdCompressor) rather than a `tar | zstd` shell pipe.
+    """
+    tarball_path = local_dir.parent / f"snapshots_{datetime.now():%Y%m%d}.tar.zst"
 
-    if compressor != "gzip":
-        # Pipe: tar -cf - | pv | compressor > tarball
-        # Using explicit pipe avoids GNU-tar-only flags — works on macOS BSD tar too.
-        # COPYFILE_DISABLE=1 suppresses macOS resource-fork sidecar files (._*).
-        tar_env = {**os.environ, "COPYFILE_DISABLE": "1"}
-        tar_proc = subprocess.Popen(
-            ["tar", "-cf", "-", "-C", str(local_dir.parent), local_dir.name],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=tar_env,
-        )
-        pv_proc = subprocess.Popen(
-            ["pv", "-pterb"],
-            stdin=tar_proc.stdout,
-            stdout=subprocess.PIPE,
-        )
-        tar_proc.stdout.close()
-        with open(tarball_path, "wb") as out_f:
-            comp_proc = subprocess.Popen(
-                [compressor] + comp_args,
-                stdin=pv_proc.stdout,
-                stdout=out_f,
-                stderr=subprocess.PIPE,
-            )
-            pv_proc.stdout.close()
-            _, comp_err = comp_proc.communicate()
-            pv_proc.wait()
-            _, tar_err = tar_proc.communicate()
+    if tarball_path.exists():
+        log_handle.warning("🟠 Existing %s found — deleting before recreating it.", tarball_path.name)
+        tarball_path.unlink()
 
-        if tar_proc.returncode != 0:
-            raise RuntimeError(f"❌ tar failed (exit {tar_proc.returncode}): {tar_err.decode().strip()}")
-        if comp_proc.returncode != 0:
-            raise RuntimeError(f"❌ {compressor} failed (exit {comp_proc.returncode}): {comp_err.decode().strip()}")
-    else:
-        with tarfile.open(tarball_path, "w:gz") as tar:
+    log_handle.info("🔄 Step 8: Creating %s (zstandard, multi-threaded)...", tarball_path.name)
+
+    # threads=-1 lets libzstd pick worker count from available CPUs (like `zstd -T0`).
+    # level=1 favors speed over ratio, matching this script's prior compressor choice.
+    cctx = zstandard.ZstdCompressor(level=1, threads=-1)
+    with open(tarball_path, "wb") as out_f, cctx.stream_writer(out_f) as compressor:
+        with tarfile.open(fileobj=compressor, mode="w|") as tar:
             tar.add(local_dir, arcname=local_dir.name)
 
     size_mb = tarball_path.stat().st_size / (1024 * 1024)
@@ -588,16 +572,16 @@ def step8_create_tarball(local_dir: Path) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Step 8b: Stream snapshots directly to remote server (no local tarball)
+# Step 9: Stream snapshots directly to remote server
 # ---------------------------------------------------------------------------
 
-def step8_stream_to_remote(local_dir: Path, server: str, ssh_key: str | None, location: str) -> None:
+def step9_stream_to_remote(local_dir: Path, server: str, ssh_key: str | None, location: str) -> None:
     """Pipe tar | compress | ssh (decompress | tar -x) — no intermediate file."""
     compressor, comp_args = _detect_compressor()
     remote_path = f"{location}/{local_dir.name}"
 
     log_handle.info(
-        "🔄 Step 8: Streaming %s → %s:%s (compressor=%s)...",
+        "🔄 Step 9: Streaming %s → %s:%s (compressor=%s)...",
         local_dir.name, server, remote_path, compressor,
     )
 
@@ -661,7 +645,7 @@ def step8_stream_to_remote(local_dir: Path, server: str, ssh_key: str | None, lo
 
     display_loc = "~" if location == "." else location
     display_path = f"{display_loc}/{local_dir.name}"
-    log_handle.info("✅ Step 8 done. Snapshots landed at %s:%s", server, display_path)
+    log_handle.info("✅ Step 9 done. Snapshots landed at %s:%s", server, display_path)
     log_handle.info(
         "💡 On the remote, run:\n"
         "   python restore_snapshots.py --snapshots-dir %s", display_path,
@@ -669,7 +653,7 @@ def step8_stream_to_remote(local_dir: Path, server: str, ssh_key: str | None, lo
 
 
 # ---------------------------------------------------------------------------
-# Checksum manifest + Step 9: remote verification
+# Checksum manifest + Step 10: remote verification
 # ---------------------------------------------------------------------------
 
 def _generate_manifest(local_dir: Path) -> dict[str, str]:
@@ -688,13 +672,13 @@ def _generate_manifest(local_dir: Path) -> dict[str, str]:
     return manifest
 
 
-def step9_verify_checksums(
+def step10_verify_checksums(
     manifest: dict[str, str],
     server: str,
     ssh_key: str | None,
     remote_path: str,
 ) -> None:
-    log_handle.info("🔄 Step 9: Verifying checksums on remote (%d files)...", len(manifest))
+    log_handle.info("🔄 Step 10: Verifying checksums on remote (%d files)...", len(manifest))
 
     ssh_base = ["ssh"]
     if ssh_key:
@@ -731,7 +715,7 @@ def step9_verify_checksums(
             + "\n".join(f"   {e}" for e in errors)
         )
 
-    log_handle.info("✅ Step 9 done. All %d files verified OK.", len(manifest))
+    log_handle.info("✅ Step 10 done. All %d files verified OK.", len(manifest))
 
 
 # ---------------------------------------------------------------------------
@@ -758,13 +742,13 @@ def main():
         step6_verify_snapshots()
         step7_verify_files_on_disk(local_dir)
 
+        tarball_path = step8_create_tarball(local_dir)
+
         if server:
             manifest = _generate_manifest(local_dir)
-            step8_stream_to_remote(local_dir, server, ssh_key, location)
+            step9_stream_to_remote(local_dir, server, ssh_key, location)
             remote_path = f"{location}/{local_dir.name}"
-            step9_verify_checksums(manifest, server, ssh_key, remote_path)
-        else:
-            tarball_path = step8_create_tarball(local_dir)
+            step10_verify_checksums(manifest, server, ssh_key, remote_path)
 
         elapsed = time.time() - start_time
         mins, secs = divmod(int(elapsed), 60)
@@ -773,11 +757,10 @@ def main():
         print("=" * 62)
         print("✅ All snapshots created successfully!")
         print(f"   Snapshots folder : {local_dir}")
+        print(f"   Tarball          : {tarball_path}")
         if server:
             display_loc = "~" if location == "." else location
             print(f"   Streamed to      : {server}:{display_loc}/{local_dir.name}")
-        else:
-            print(f"   Tarball          : {tarball_path}")
         print(f"   Total time       : {mins}m {secs}s")
         print("=" * 62)
         print()

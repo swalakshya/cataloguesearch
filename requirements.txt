@@ -15,3 +15,6 @@
 # Development/Testing only dependencies
 pytest-cov==5.0.0            # Coverage reporting for pytest
 coverage-badge==1.1.2        # Generate SVG coverage badge from .coverage data
+
+# Ops scripts (scripts/create_snapshots.py)
+zstandard==0.23.0            # Multi-threaded zstd compression for snapshot tarballs

@@ -32,6 +32,9 @@ const WhatsNew = () => {
                 "Granths: Gommatsaar Jeevkand by Acharya Nemichand Siddhant Chakravarti (Tikakaar: Pandit Keshav Varni)",
                 "Granths: Gommatsaar Karmkand by Acharya Nemichand Siddhant Chakravarti (Tikakaar: Pandit Keshav Varni)",
                 "Granths: Triloksaar by Acharya Nemichand Siddhant Chakravarti (Tikakaar: Pandit Todarmal)",
+                "Pravachans: Pravachan Navneet (142 Pravachans, Hindi)",
+                "Pravachans: Asht Pahud 1973-74 Series (198 Pravachans, Hindi)",
+                "Pravachans: Bahinshree Nu Vachanamrut 1980 Series (50 Pravachans, Hindi)",
             ],
         },
         {

@@ -56,6 +56,13 @@ export const searchableContent = [
     gujarati: null
   },
   {
+    granth: "Asht Pahud",
+    series: "1973-74",
+    count: 198,
+    hindi: "searchable",
+    gujarati: null
+  },
+  {
     granth: "Samaysaar Kalash Tika",
     series: "1977-78",
     count: 308,
@@ -126,10 +133,17 @@ export const searchableContent = [
     gujarati: null
   },
   {
+    granth: "Bahinshree Nu Vachanamrut",
+    series: 1980,
+    count: 50,
+    hindi: "searchable",
+    gujarati: null
+  },
+  {
     granth: "Pravachan Navneet",
     series: 1977,
     count: 142,
-    hindi: "in_progress",
+    hindi: "searchable",
     gujarati: null
   },
   {
