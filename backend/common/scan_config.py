@@ -181,6 +181,10 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
                 if "llm_workers" in default_config:
                     scan_meta["llm_workers"] = default_config["llm_workers"]
 
+                # Update llm_mode setting from default config (if present)
+                if "llm_mode" in default_config:
+                    scan_meta["llm_mode"] = default_config["llm_mode"]
+
                 # Update min/max words per paragraph from default config (if present)
                 for key in ("min_words_per_para", "max_words_per_para"):
                     if key in default_config:
@@ -253,6 +257,10 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
         # Update llm_workers setting from file-specific config (overrides default)
         if "llm_workers" in file_config:
             scan_meta["llm_workers"] = file_config["llm_workers"]
+
+        # Update llm_mode setting from file-specific config (overrides default)
+        if "llm_mode" in file_config:
+            scan_meta["llm_mode"] = file_config["llm_mode"]
 
         # Update min/max words per paragraph and qa_merge from file-specific config (overrides default)
         for key in ("min_words_per_para", "max_words_per_para"):

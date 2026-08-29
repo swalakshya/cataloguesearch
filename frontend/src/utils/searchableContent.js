@@ -569,6 +569,12 @@ export const searchableGranths = [
     status: "searchable"
   },
   {
+    name: "Triloksaar",
+    author: "Acharya Nemichand Siddhant Chakravarti",
+    tikakaar: "Pandit Todarmal",
+    status: "searchable"
+  },
+  {
     name: "Updesh Siddhant Ratnamala",
     author: "Shri Nemichand Bhandari",
     status: "searchable"

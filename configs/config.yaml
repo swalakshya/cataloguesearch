@@ -10,6 +10,7 @@ crawler:
   default_llm_model: "gemini-2.5-flash"
   secondary_llm_model: "gemini-3-flash-preview"
   llm_workers: 10
+  llm_mode: "batch"
   ocr_max_workers: "{OCR_MAX_WORKERS}"
 
 index:

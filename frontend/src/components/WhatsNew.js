@@ -31,6 +31,7 @@ const WhatsNew = () => {
                 "Granths: Padma Puran (Gujarati) by Acharya Ravisen (Tikakaar: Pandit Daulatram)",
                 "Granths: Gommatsaar Jeevkand by Acharya Nemichand Siddhant Chakravarti (Tikakaar: Pandit Keshav Varni)",
                 "Granths: Gommatsaar Karmkand by Acharya Nemichand Siddhant Chakravarti (Tikakaar: Pandit Keshav Varni)",
+                "Granths: Triloksaar by Acharya Nemichand Siddhant Chakravarti (Tikakaar: Pandit Todarmal)",
             ],
         },
         {

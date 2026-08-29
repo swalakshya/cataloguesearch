@@ -6,6 +6,7 @@ import logging
 from backend.config import Config
 from backend.crawler.advanced_pdf_processor import AdvancedPDFProcessor
 from backend.crawler.llm_pdf_processor import LLMPDFProcessor
+from backend.crawler.llm_pdf_offline_processor import LLMPDFOfflineProcessor
 from backend.crawler.multi_page_pdf_processor import MultiPagePDFProcessor
 
 log_handle = logging.getLogger(__name__)
@@ -34,11 +35,16 @@ def create_pdf_processor(config: Config, chunk_strategy: str = None,
 
     if ocr_engine == "llm":
         llm_model = scan_config.get("llm_model", config.DEFAULT_LLM_MODEL)
-        llm_workers = scan_config.get("llm_workers", config.LLM_WORKERS)
-        log_handle.info(
-            f"Creating LLMPDFProcessor: model={llm_model}, workers={llm_workers}"
-        )
-        inner = LLMPDFProcessor(config, llm_model=llm_model, llm_workers=llm_workers)
+        llm_mode = scan_config.get("llm_mode", config.LLM_MODE)
+        if llm_mode == "online":
+            llm_workers = scan_config.get("llm_workers", config.LLM_WORKERS)
+            log_handle.info(
+                f"Creating LLMPDFProcessor: model={llm_model}, workers={llm_workers}"
+            )
+            inner = LLMPDFProcessor(config, llm_model=llm_model, llm_workers=llm_workers)
+        else:
+            log_handle.info(f"Creating LLMPDFOfflineProcessor: model={llm_model}")
+            inner = LLMPDFOfflineProcessor(config, llm_model=llm_model)
     else:
         # Tesseract-based processors — selected by chunk_strategy
         strategy = chunk_strategy if chunk_strategy is not None else config.CHUNK_STRATEGY

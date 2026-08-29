@@ -27,7 +27,11 @@ class IndexState:
                 config_hash TEXT,
                 index_checksum TEXT,
                 ocr_checksum TEXT,
-                parsed_bookmarks TEXT
+                parsed_bookmarks TEXT,
+                batch_job_name TEXT,
+                batch_status TEXT,
+                batch_submitted_at TEXT,
+                batch_model TEXT
             )
         """)
         c.execute("""
@@ -37,6 +41,13 @@ class IndexState:
                 last_updated_timestamp TEXT
             )
         """)
+
+        # Additive migration for DBs created before the batch-job columns existed.
+        existing_columns = {row[1] for row in c.execute("PRAGMA table_info(indexed_files_state)")}
+        for column in ("batch_job_name", "batch_status", "batch_submitted_at", "batch_model"):
+            if column not in existing_columns:
+                c.execute(f"ALTER TABLE indexed_files_state ADD COLUMN {column} TEXT")
+
         conn.commit()
         conn.close()
 
@@ -290,6 +301,91 @@ class IndexState:
         else:
             log_handle.warning(f"update_parsed_bookmarks: document_id {document_id} not found in DB")
         return updated
+
+    def get_batch_job(self, document_id: str) -> dict | None:
+        """
+        Returns the pending Gemini batch job recorded for a document, or None
+        if no batch job is currently recorded (not started, or already collected).
+        """
+        conn = sqlite3.connect(self.state_db_path)
+        c = conn.cursor()
+        c.execute(
+            "SELECT batch_job_name, batch_status, batch_submitted_at, batch_model "
+            "FROM indexed_files_state WHERE document_id = ?",
+            (document_id,)
+        )
+        row = c.fetchone()
+        conn.close()
+        if not row or not row[0]:
+            return None
+        return {
+            "batch_job_name": row[0],
+            "batch_status": row[1],
+            "batch_submitted_at": row[2],
+            "batch_model": row[3],
+        }
+
+    def set_batch_job(self, document_id: str, batch_job_name: str, status: str,
+                       submitted_at: str, model: str = None, file_path: str = None):
+        """
+        Records (or overwrites) the in-flight Gemini batch job for a document.
+        Inserts a new row if the document has no state yet (e.g. first-ever run).
+
+        file_path must be set on first insert -- garbage_collect() joins it against
+        base_pdf_folder for every row, and a NULL there crashes that join, not just
+        this one. On conflict it's only refreshed if a non-None value is passed, so
+        an existing row's file_path is never clobbered back to NULL.
+        """
+        conn = sqlite3.connect(self.state_db_path)
+        c = conn.cursor()
+        c.execute(
+            "INSERT INTO indexed_files_state (document_id, file_path, batch_job_name, batch_status, batch_submitted_at, batch_model) "
+            "VALUES (?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(document_id) DO UPDATE SET "
+            "file_path=COALESCE(excluded.file_path, indexed_files_state.file_path), "
+            "batch_job_name=excluded.batch_job_name, "
+            "batch_status=excluded.batch_status, "
+            "batch_submitted_at=excluded.batch_submitted_at, "
+            "batch_model=excluded.batch_model",
+            (document_id, file_path, batch_job_name, status, submitted_at, model)
+        )
+        conn.commit()
+        conn.close()
+        log_handle.info(f"Recorded batch job {batch_job_name!r} (status={status}) for document {document_id}")
+
+    def clear_batch_job(self, document_id: str):
+        """Clears the recorded batch job for a document (job collected, failed, or expired)."""
+        conn = sqlite3.connect(self.state_db_path)
+        c = conn.cursor()
+        c.execute(
+            "UPDATE indexed_files_state SET batch_job_name = NULL, batch_status = NULL, "
+            "batch_submitted_at = NULL, batch_model = NULL WHERE document_id = ?",
+            (document_id,)
+        )
+        conn.commit()
+        conn.close()
+
+    def list_pending_batch_jobs(self) -> list[dict]:
+        """Returns all documents with a currently-recorded (in-flight) batch job."""
+        conn = sqlite3.connect(self.state_db_path)
+        c = conn.cursor()
+        c.execute(
+            "SELECT document_id, file_path, batch_job_name, batch_status, batch_submitted_at, batch_model "
+            "FROM indexed_files_state WHERE batch_job_name IS NOT NULL"
+        )
+        rows = c.fetchall()
+        conn.close()
+        return [
+            {
+                "document_id": row[0],
+                "file_path": row[1],
+                "batch_job_name": row[2],
+                "batch_status": row[3],
+                "batch_submitted_at": row[4],
+                "batch_model": row[5],
+            }
+            for row in rows
+        ]
 
     def delete_index_state(self):
         """

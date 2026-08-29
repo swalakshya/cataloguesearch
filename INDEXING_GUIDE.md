@@ -145,7 +145,8 @@ Full reference of all options:
 | `book_start_side` | string | `"left"` | Which side of the spread holds the first logical page: `"left"` or `"right"` |
 | `split_percentage` | int | 50 | Percentage from the left edge where the page is split (multi-page only) |
 | `llm_model` | string | `"gemini-2.5-flash"` | Gemini model to use (LLM path only) |
-| `llm_workers` | int | 6 | Parallel workers for LLM calls (LLM path only) |
+| `llm_workers` | int | 6 | Parallel workers for LLM calls (LLM path only, `llm_mode: "online"` only) |
+| `llm_mode` | string | `"batch"` | `"batch"` (submits via Gemini's Batch API, 50% cheaper, needs a rerun to collect — see §11) or `"online"` (synchronous, one call per page) — LLM path only |
 | `ignore_bookmarks` | bool | false | Skip PDF bookmark extraction |
 | `qa_merge` | bool | true | Whether to merge Q&A pairs into a single chunk |
 | `sub_sections` | array | — | Divide one PDF into separate indexed sections (see §7) |
@@ -369,6 +370,20 @@ Check the output for:
 python scripts/discovery_cli.py discover \
   --process-folder /path/to/cataloguesearch-configs/Pravachans/hindi/Dravyanuyog/My_Series \
   --crawl --index --no-dry-run
+```
+
+#### A note on LLM (Gemini) OCR and batch mode
+
+For `ocr_engine: "llm"` documents, `llm_mode` defaults to `"batch"` (see §3), which submits pages to Gemini's Batch API instead of OCRing them synchronously. This is 50% cheaper and isn't limited by per-minute rate limits, but the tradeoff is that **the first run won't finish OCR immediately.**
+
+On the first `--no-dry-run` run, `--crawl` submits a batch job per PDF and returns without writing any `page_NNNN.json` files — you'll see this in the logs, and `--index` will skip that document with "OCR directory does not exist... Run process() first." This is expected, not an error.
+
+Re-run the *exact same command* later (Gemini's batch SLA targets 24h but is usually much sooner) to check status. Once the job has finished, that same rerun writes the OCR files and `--index` proceeds normally in the same invocation. Repeat the rerun until it fully indexes.
+
+If you want the old synchronous behavior for a particular document (e.g. a small, urgent one you don't want to wait on), override it in that folder's `scan_config.json`:
+
+```json
+{ "default": { "ocr_engine": "llm", "llm_mode": "online" } }
 ```
 
 ### Metadata-only re-index

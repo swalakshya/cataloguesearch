@@ -211,6 +211,8 @@ class Config:
             return self._settings.get("crawler", {}).get("secondary_llm_model", None)
         elif name == "LLM_WORKERS":
             return self._settings.get("crawler", {}).get("llm_workers", 2)
+        elif name == "LLM_MODE":
+            return self._settings.get("crawler", {}).get("llm_mode", "batch")
         else:
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
