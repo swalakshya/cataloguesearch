@@ -829,7 +829,7 @@ const PravachanFilter = ({
         <>
             <button
                 onClick={() => setIsOpen(true)}
-                className={`flex-1 py-1.5 px-3 border rounded text-sm font-medium flex items-center justify-between transition-colors ${
+                className={`flex-1 py-1.5 px-2 border rounded text-sm font-medium flex items-center justify-between transition-colors ${
                     disabled
                         ? 'border-slate-200 bg-slate-50 text-slate-400'
                         : activeCount > 0
@@ -839,8 +839,8 @@ const PravachanFilter = ({
                 style={{ backgroundColor: (disabled || activeCount > 0) ? undefined : 'var(--bg-surface, white)' }}
                 title={disabled ? 'Not searched — a Granth-only filter is active. Pick a Pravachan filter to include Pravachan results again.' : undefined}
             >
-                <span>🎙️ Pravachan{activeCount > 0 ? ` (${activeCount})` : ''}{disabled ? ' (off)' : ''}</span>
-                <svg className="w-3.5 h-3.5 ml-1 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <span className="truncate min-w-0">🎙️ Pravachan{activeCount > 0 ? ` (${activeCount})` : ''}{disabled ? ' (off)' : ''}</span>
+                <svg className="w-3.5 h-3.5 ml-1 opacity-60 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
             </button>
@@ -1111,7 +1111,7 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
         <>
             <button
                 onClick={() => setIsOpen(true)}
-                className={`flex-1 py-1.5 px-3 border rounded text-sm font-medium flex items-center justify-between transition-colors ${
+                className={`flex-1 py-1.5 px-2 border rounded text-sm font-medium flex items-center justify-between transition-colors ${
                     disabled
                         ? 'border-slate-200 bg-slate-50 text-slate-400'
                         : activeCount > 0
@@ -1121,8 +1121,8 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
                 style={{ backgroundColor: (disabled || activeCount > 0) ? undefined : 'var(--bg-surface, white)' }}
                 title={disabled ? 'Not searched — a Pravachan-only filter is active. Pick a Granth filter to include Granth results again.' : undefined}
             >
-                <span>📜 Granth{activeCount > 0 ? ` (${activeCount})` : ''}{disabled ? ' (off)' : ''}</span>
-                <svg className="w-3.5 h-3.5 ml-1 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <span className="truncate min-w-0">📜 Granth{activeCount > 0 ? ` (${activeCount})` : ''}{disabled ? ' (off)' : ''}</span>
+                <svg className="w-3.5 h-3.5 ml-1 opacity-60 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
             </button>
@@ -1246,7 +1246,7 @@ const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, 
         <>
             <button
                 onClick={() => setIsOpen(true)}
-                className={`flex-1 py-1.5 px-3 border rounded text-sm font-medium flex items-center justify-between transition-colors ${
+                className={`flex-1 py-1.5 px-2 border rounded text-sm font-medium flex items-center justify-between transition-colors ${
                     disabled
                         ? 'border-slate-200 bg-slate-50 text-slate-400'
                         : activeCount > 0
@@ -1256,8 +1256,8 @@ const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, 
                 style={{ backgroundColor: (disabled || activeCount > 0) ? undefined : 'var(--bg-surface, white)' }}
                 title={disabled ? 'Not searched — pick a Books filter to include Books results again.' : undefined}
             >
-                <span>📚 Books{activeCount > 0 ? ` (${activeCount})` : ''}{disabled ? ' (off)' : ''}</span>
-                <svg className="w-3.5 h-3.5 ml-1 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <span className="truncate min-w-0">📚 Books{activeCount > 0 ? ` (${activeCount})` : ''}{disabled ? ' (off)' : ''}</span>
+                <svg className="w-3.5 h-3.5 ml-1 opacity-60 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
             </button>
@@ -1377,10 +1377,13 @@ export const SearchFilters = ({
     }, [pravachanOpen, granthOpen, booksOpen]); // eslint-disable-line
 
     return (
-        <div className="space-y-2">
+        // min-w-0 lets this shrink to its 1fr grid track instead of growing past it and
+        // overlapping the Language column -- CSS Grid tracks default to min-width: auto,
+        // so a row of 3 filter buttons (vs. the old 2) can otherwise force the column wider.
+        <div className="space-y-2 min-w-0">
             <p className="text-xs text-slate-900 font-semibold uppercase tracking-wide">Refine search</p>
 
-            <div className="flex gap-2">
+            <div className="flex gap-1.5">
                 {activeCategories.includes('Pravachan') && (
                     <PravachanFilter
                         allMetadata={allMetadata}

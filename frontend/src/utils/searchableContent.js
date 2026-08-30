@@ -529,6 +529,11 @@ export const searchableGranths = [
     status: "searchable"
   },
   {
+    name: "Rayansaar",
+    author: "Acharya Kund Kund",
+    status: "searchable"
+  },
+  {
     name: "Sagaar Dharmamrut",
     author: "Pandit Ashadhar",
     status: "searchable"

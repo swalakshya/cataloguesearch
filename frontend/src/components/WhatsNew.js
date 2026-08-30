@@ -26,6 +26,12 @@ const WhatsNew = () => {
 
     const updates = [
         {
+            date: "August 30, 2026",
+            newContent: [
+                "Granths: Rayansaar by Acharya Kund Kund",
+            ],
+        },
+        {
             date: "August 29, 2026",
             newContent: [
                 "Granths: Padma Puran (Gujarati) by Acharya Ravisen (Tikakaar: Pandit Daulatram)",
