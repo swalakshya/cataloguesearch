@@ -367,7 +367,7 @@ def refresh_pravachan_series_metadata(config: Config, opensearch_client: OpenSea
                 "terms": {"field": "metadata.Name.keyword", "size": 100},
                 "aggs": {
                     "by_series": {
-                        "terms": {"field": "metadata.Series.keyword", "size": 200},
+                        "terms": {"field": "metadata.Series.keyword", "size": 200, "missing": "__NO_SERIES__"},
                         "aggs": {
                             "series_start": {"min": {"field": "metadata.series_start_date"}},
                             "series_end":   {"max": {"field": "metadata.series_end_date"}},
@@ -400,7 +400,12 @@ def refresh_pravachan_series_metadata(config: Config, opensearch_client: OpenSea
             series_buckets = g_bucket.get("by_series", {}).get("buckets", [])
 
             for s_bucket in series_buckets:
+                # Pravachans with no "Series" field (standalone books, not a numbered
+                # discourse series) land in this sentinel bucket -- surfaced as name=None
+                # so the frontend can render them as a flat, non-drilldown Granth entry.
                 series_name = s_bucket["key"]
+                if series_name == "__NO_SERIES__":
+                    series_name = None
                 start_date = s_bucket.get("series_start", {}).get("value_as_string")
                 end_date   = s_bucket.get("series_end",   {}).get("value_as_string")
 

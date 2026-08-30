@@ -948,21 +948,30 @@ const AppContent = () => {
         setActiveFilters(prevFilters => prevFilters.filter((_, i) => i !== index));
     };
 
-    // Auto-disable the untouched side when only Pravachan or only Granth has been
-    // narrowed — e.g. picking a Pravachan series shouldn't also pull in unrelated,
-    // unfiltered Granth results. Both stay on when either both sides are filtered
-    // (a deliberate mix) or neither is (the default browse-everything state). This is
-    // a pure derivation (not stored in `contentTypes` state) so it can't trigger the
-    // "clear filters when contentTypes changes" effect below and wipe what was just set.
+    // Auto-disable any category that has no filter of its own when at least one OTHER
+    // category has been narrowed — e.g. picking a Pravachan series shouldn't also pull
+    // in unrelated, unfiltered Granth/Books results. All three stay on when either
+    // several are filtered together (a deliberate mix) or none is (the default
+    // browse-everything state). This is a pure derivation (not stored in `contentTypes`
+    // state) so it can't trigger the "clear filters when contentTypes changes" effect
+    // below and wipe what was just set.
     const effectiveContentTypes = useMemo(() => {
+        // "Name" is shared between the Granth and Books filters (both are valid
+        // per-category on the backend), so each pick must be checked against its own
+        // category's actual name list, never just the filter key.
+        const granthNames = allMetadata?.Granth?.[language]?.Name || [];
+        const booksNames = allMetadata?.Books?.[language]?.Name || [];
         const hasPravachanFilter = activeFilters.some(f => f.key === '_pravachan_groups');
-        const hasGranthFilter = activeFilters.some(f => f.key === 'Name');
+        const hasGranthFilter = activeFilters.some(f => f.key === 'Name' && granthNames.includes(f.value));
+        const hasBooksFilter = activeFilters.some(f => f.key === 'Name' && booksNames.includes(f.value));
+        const hasAnyCategoryFilter = hasPravachanFilter || hasGranthFilter || hasBooksFilter;
         return {
             ...contentTypes,
-            pravachans: contentTypes.pravachans && (hasPravachanFilter || !hasGranthFilter),
-            granths: contentTypes.granths && (hasGranthFilter || !hasPravachanFilter),
+            pravachans: contentTypes.pravachans && (hasPravachanFilter || !hasAnyCategoryFilter),
+            granths: contentTypes.granths && (hasGranthFilter || !hasAnyCategoryFilter),
+            books: contentTypes.books && (hasBooksFilter || !hasAnyCategoryFilter),
         };
-    }, [activeFilters, contentTypes]);
+    }, [activeFilters, contentTypes, allMetadata, language]);
 
     // Single source of truth for building search payload
     const buildSearchPayload = useCallback((pravachanPage = 1, granthPage = 1) => {
@@ -985,7 +994,7 @@ const AppContent = () => {
                     "page_number": granthPage
                 },
                 "Books": {
-                    "enabled": contentTypes.books,
+                    "enabled": effectiveContentTypes.books,
                     "page_size": PAGE_SIZE,
                     "page_number": booksPage
                 }

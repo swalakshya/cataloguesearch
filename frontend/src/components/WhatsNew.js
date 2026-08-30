@@ -36,6 +36,10 @@ const WhatsNew = () => {
                 "Pravachans: Asht Pahud 1973-74 Series (198 Pravachans, Hindi)",
                 "Pravachans: Bahinshree Nu Vachanamrut 1980 Series (50 Pravachans, Hindi)",
                 "Pravachans: Parmatma Prakash 1965-66 Series (214 Pravachans, Hindi)",
+                "Granths: Bhagwan Hanuman by Br. Harilal Jain",
+                "Granths: Bhagwan Parshvanath by Br. Harilal Jain",
+                "Granths: Bhagwan Shantinath by Br. Harilal Jain",
+                "Granths: Bhartesh Vaibhav by Mahakavi Ratnakar Varni",
             ],
         },
         {

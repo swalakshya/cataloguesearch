@@ -930,6 +930,10 @@ const PravachanFilter = ({
                                             )}
                                             {granthOptions.map((name) => {
                                                 const seriesForGranth = seriesByGranth[name] || [];
+                                                // A single entry with no name means this Granth has no
+                                                // real "Series" grouping (a standalone book, not a
+                                                // numbered discourse series) -- nothing to drill into.
+                                                const hasRealSeries = !(seriesForGranth.length === 1 && seriesForGranth[0].name == null);
                                                 const granthChecked = pendingGranths.includes(name);
                                                 const selectedCount = seriesForGranth.filter(s => pendingSeries.includes(seriesKey(name, s.name))).length;
                                                 const isPartial = !granthChecked && selectedCount > 0 && selectedCount < seriesForGranth.length;
@@ -946,7 +950,7 @@ const PravachanFilter = ({
                                                                 className="flex-1 min-w-0 text-left">
                                                                 <p className="text-sm font-medium text-slate-800">{name}</p>
                                                             </button>
-                                                            {seriesForGranth.length > 0 && (
+                                                            {hasRealSeries && (
                                                                 <button type="button" onClick={() => toggleExpand(name)}
                                                                     className="p-1 text-slate-400 hover:text-slate-600 flex-shrink-0"
                                                                     aria-label={isExpanded ? `Collapse ${name} series` : `Browse ${name} series`}>
@@ -1065,18 +1069,19 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
     }, [isOpen]); // eslint-disable-line
 
     const allNames = useMemo(() => {
-        const items = new Set();
-        ['Pravachan', 'Granth', 'Books'].forEach(cat => {
-            (allMetadata?.[cat]?.[language]?.Name || []).forEach(n => items.add(n));
-        });
-        return Array.from(items).sort();
+        return [...(allMetadata?.Granth?.[language]?.Name || [])].sort();
     }, [allMetadata, language]);
 
     const filtered = allNames.filter(n => n.toLowerCase().includes(search.toLowerCase()));
 
+    // "Name" is shared with the Books filter (both are valid per-category on the
+    // backend — see _CATEGORY_FILTER_FIELDS) — a Books title picked over there is
+    // also a `key: 'Name'` entry in activeFilters, so every read/write here must
+    // check the value against our own Granth name list, never just the key, or
+    // applying one picker would silently wipe out the other's selections.
     useEffect(() => {
         if (!isOpen) return;
-        setPending(activeFilters.filter(f => f.key === 'Name').map(f => f.value));
+        setPending(activeFilters.filter(f => f.key === 'Name' && allNames.includes(f.value)).map(f => f.value));
         setSearch('');
     }, [isOpen]); // eslint-disable-line
 
@@ -1092,7 +1097,7 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
 
     const handleApply = () => {
         const toRemove = [];
-        activeFilters.forEach((f, i) => { if (f.key === 'Name') toRemove.push(i); });
+        activeFilters.forEach((f, i) => { if (f.key === 'Name' && allNames.includes(f.value)) toRemove.push(i); });
         toRemove.reverse().forEach(i => onRemoveFilter(i));
         pending.forEach(v => onAddFilter({ key: 'Name', value: v }));
         setIsOpen(false);
@@ -1100,7 +1105,7 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
 
     const handleClear = () => { setPending([]); setSearch(''); };
 
-    const activeCount = activeFilters.filter(f => f.key === 'Name').length;
+    const activeCount = activeFilters.filter(f => f.key === 'Name' && allNames.includes(f.value)).length;
 
     return (
         <>
@@ -1190,6 +1195,141 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
     );
 };
 
+const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, language, onOpenChange, disabled }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [pending, setPending]   = useState([]);
+    const [search, setSearch]     = useState('');
+
+    useEffect(() => {
+        onOpenChange?.(isOpen);
+    }, [isOpen]); // eslint-disable-line
+
+    const allNames = useMemo(() => {
+        return [...(allMetadata?.Books?.[language]?.Name || [])].sort();
+    }, [allMetadata, language]);
+
+    const filtered = allNames.filter(n => n.toLowerCase().includes(search.toLowerCase()));
+
+    // "Name" is shared with the Granth filter (both are valid per-category on the
+    // backend — see _CATEGORY_FILTER_FIELDS) — every read/write here must check the
+    // value against our own Books name list, never just the key, or applying one
+    // picker would silently wipe out the other's selections.
+    useEffect(() => {
+        if (!isOpen) return;
+        setPending(activeFilters.filter(f => f.key === 'Name' && allNames.includes(f.value)).map(f => f.value));
+        setSearch('');
+    }, [isOpen]); // eslint-disable-line
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const onKey = (e) => { if (e.key === 'Escape') setIsOpen(false); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [isOpen]);
+
+    const toggle = (name) =>
+        setPending(prev => prev.includes(name) ? prev.filter(x => x !== name) : [...prev, name]);
+
+    const handleApply = () => {
+        const toRemove = [];
+        activeFilters.forEach((f, i) => { if (f.key === 'Name' && allNames.includes(f.value)) toRemove.push(i); });
+        toRemove.reverse().forEach(i => onRemoveFilter(i));
+        pending.forEach(v => onAddFilter({ key: 'Name', value: v }));
+        setIsOpen(false);
+    };
+
+    const handleClear = () => { setPending([]); setSearch(''); };
+
+    const activeCount = activeFilters.filter(f => f.key === 'Name' && allNames.includes(f.value)).length;
+
+    return (
+        <>
+            <button
+                onClick={() => setIsOpen(true)}
+                className={`flex-1 py-1.5 px-3 border rounded text-sm font-medium flex items-center justify-between transition-colors ${
+                    disabled
+                        ? 'border-slate-200 bg-slate-50 text-slate-400'
+                        : activeCount > 0
+                            ? 'border-sky-500 bg-sky-50 text-sky-700'
+                            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+                style={{ backgroundColor: (disabled || activeCount > 0) ? undefined : 'var(--bg-surface, white)' }}
+                title={disabled ? 'Not searched — pick a Books filter to include Books results again.' : undefined}
+            >
+                <span>📚 Books{activeCount > 0 ? ` (${activeCount})` : ''}{disabled ? ' (off)' : ''}</span>
+                <svg className="w-3.5 h-3.5 ml-1 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+
+            {isOpen && (
+                <>
+                    <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={() => setIsOpen(false)} />
+                    <div className="fixed inset-x-0 bottom-0 md:inset-0 md:flex md:items-center md:justify-center z-50">
+                        <div className="bg-white rounded-t-lg md:rounded-lg shadow-2xl w-full md:max-w-lg md:max-h-[85vh] flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+
+                            {/* Header */}
+                            <div className="p-4 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white rounded-t-lg">
+                                <h3 className="text-base font-bold text-slate-800">Filter by Books</h3>
+                                <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-slate-600">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            {/* Search */}
+                            <div className="px-4 pt-3 pb-2">
+                                <input
+                                    type="text"
+                                    value={search}
+                                    onChange={e => setSearch(e.target.value)}
+                                    placeholder="Search books..."
+                                    className="w-full px-3 py-1.5 border border-slate-300 rounded text-sm text-slate-800 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 bg-white"
+                                />
+                            </div>
+
+                            {/* List */}
+                            <div className="overflow-y-auto flex-1 px-4 pb-2" style={{ scrollbarWidth: 'thin', scrollbarColor: '#94a3b8 #f1f5f9' }}>
+                                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                                    {filtered.length === 0 && (
+                                        <p className="p-4 text-sm text-slate-500 text-center">No books found</p>
+                                    )}
+                                    {filtered.map((name) => (
+                                        <label key={name}
+                                            className="flex items-center gap-3 p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-b-0">
+                                            <input type="checkbox"
+                                                checked={pending.includes(name)}
+                                                onChange={() => toggle(name)}
+                                                className="form-checkbox h-4 w-4 text-sky-600 rounded" />
+                                            <span className="text-sm text-slate-800 flex-1">{name}</span>
+                                            {pending.includes(name) && (
+                                                <svg className="w-4 h-4 text-sky-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            )}
+                                        </label>
+                                    ))}
+                                </div>
+                                {pending.length > 0 && (
+                                    <p className="text-xs text-sky-700 font-medium mt-2">{pending.length} selected</p>
+                                )}
+                            </div>
+
+                            {/* Footer */}
+                            <FilterFooter
+                                onClear={handleClear}
+                                onApply={handleApply}
+                                applyLabel={`Apply${pending.length > 0 ? ` (${pending.length})` : ''}`}
+                            />
+                        </div>
+                    </div>
+                </>
+            )}
+        </>
+    );
+};
+
 // ─── SearchFilters (public wrapper) ──────────────────────────────────────────
 
 const CHIP_COLORS = {
@@ -1227,13 +1367,14 @@ export const SearchFilters = ({
     const hasYearFilter = startYear || endYear;
     const hasAnyFilter  = activeFilters.length > 0 || hasYearFilter;
 
-    // Pravachan and Granth each own their modal's open state independently —
+    // Pravachan, Granth and Books each own their modal's open state independently —
     // combine them so the parent only needs a single "is any filter modal open" signal.
     const [pravachanOpen, setPravachanOpen] = useState(false);
     const [granthOpen, setGranthOpen]       = useState(false);
+    const [booksOpen, setBooksOpen]         = useState(false);
     useEffect(() => {
-        onFilterModalOpenChange?.(pravachanOpen || granthOpen);
-    }, [pravachanOpen, granthOpen]); // eslint-disable-line
+        onFilterModalOpenChange?.(pravachanOpen || granthOpen || booksOpen);
+    }, [pravachanOpen, granthOpen, booksOpen]); // eslint-disable-line
 
     return (
         <div className="space-y-2">
@@ -1255,7 +1396,7 @@ export const SearchFilters = ({
                         disabled={contentTypes && !contentTypes.pravachans}
                     />
                 )}
-                {(activeCategories.includes('Granth') || activeCategories.includes('Books')) && (
+                {activeCategories.includes('Granth') && (
                     <GranthFilter
                         allMetadata={allMetadata}
                         activeFilters={activeFilters}
@@ -1264,6 +1405,17 @@ export const SearchFilters = ({
                         language={language}
                         onOpenChange={setGranthOpen}
                         disabled={contentTypes && !contentTypes.granths}
+                    />
+                )}
+                {activeCategories.includes('Books') && (
+                    <BooksFilter
+                        allMetadata={allMetadata}
+                        activeFilters={activeFilters}
+                        onAddFilter={onAddFilter}
+                        onRemoveFilter={onRemoveFilter}
+                        language={language}
+                        onOpenChange={setBooksOpen}
+                        disabled={contentTypes && !contentTypes.books}
                     />
                 )}
             </div>

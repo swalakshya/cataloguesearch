@@ -360,7 +360,7 @@ const TransliterationInput = ({
     return (
         <div className="relative w-full">
             <div className="relative">
-                <span className="absolute left-2.5 top-2 text-sm pointer-events-none select-none">🔍</span>
+                <span className="absolute left-2.5 top-1.5 text-sm pointer-events-none select-none">🔍</span>
                 <textarea
                     ref={inputRef}
                     rows={1}
@@ -370,7 +370,8 @@ const TransliterationInput = ({
                     placeholder={placeholder}
                     disabled={disabled}
                     maxLength={MAX_QUERY_LENGTH}
-                    className={`w-full min-h-8 pl-8 pr-3 py-1.5 text-sm bg-white border border-slate-400 shadow-sm rounded-sm resize-none overflow-y-auto leading-normal focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-600 text-slate-900 font-sans disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-300 disabled:cursor-not-allowed ${className}`}
+                    style={{ scrollbarWidth: 'thin' }}
+                    className={`w-full min-h-8 pl-8 pr-3 py-1 text-sm bg-white border border-slate-400 shadow-sm rounded-sm resize-none overflow-y-auto focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-600 text-slate-900 font-sans disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-300 disabled:cursor-not-allowed ${className}`}
                 />
             </div>
 

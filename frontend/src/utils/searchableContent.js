@@ -314,8 +314,28 @@ export const searchableGranths = [
     status: "searchable"
   },
   {
+    name: "Bhagwan Hanuman",
+    author: "Br. Harilal Jain",
+    status: "searchable"
+  },
+  {
+    name: "Bhagwan Parshvanath",
+    author: "Br. Harilal Jain",
+    status: "searchable"
+  },
+  {
+    name: "Bhagwan Shantinath",
+    author: "Br. Harilal Jain",
+    status: "searchable"
+  },
+  {
     name: "Bhagwati Aradhana",
     author: "Acharya Shivarya",
+    status: "searchable"
+  },
+  {
+    name: "Bhartesh Vaibhav",
+    author: "Mahakavi Ratnakar Varni",
     status: "searchable"
   },
   {
