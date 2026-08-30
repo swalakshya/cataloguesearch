@@ -38,7 +38,7 @@ export const searchableContent = [
     granth: "Niyamsaar",
     series: "1975-76",
     count: 183,
-    hindi: null,
+    hindi: "searchable",
     gujarati: "searchable"
   },
   {

@@ -35,6 +35,7 @@ const WhatsNew = () => {
                 "Granths: Uttar Puran by Acharya Gunbhadra",
                 "Granths: Shrenik Charitra by Bhattarak Shubhchandra",
                 "Granths: Swanubhuti Darshan by Bahinshree Champaben",
+                "Pravachans: Niyamsaar 1975-76 Series (Hindi, 183 Pravachans)",
             ],
         },
         {

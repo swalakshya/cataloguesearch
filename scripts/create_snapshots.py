@@ -251,11 +251,11 @@ def _confirm(local_dir: Path, server: str | None, ssh_key: str | None, location:
     print()
     print("The following steps will be executed:")
     print()
-    print("  1. Delete existing snapshot repository (local_backup)")
-    print("  2. Stop opensearch-node container")
+    print("  1. Stop opensearch-node container")
     print("     Clear and recreate the local snapshots directory")
     print("     Restart opensearch-node container")
     print("     Wait for cluster to be healthy")
+    print("  2. Delete existing snapshot repository (local_backup)")
     print("  3. Register new snapshot repository → /tmp/snapshots")
     print("  4. Create snapshot: cataloguesearch_prod")
     print("  5. Create snapshot: cataloguesearch_prod_metadata")
@@ -270,7 +270,7 @@ def _confirm(local_dir: Path, server: str | None, ssh_key: str | None, location:
         print(f"     (wipes {remote_path} on remote first, then extracts)")
         print(" 10. Verify checksums of all transferred files")
     print()
-    print(f"⚠️  WARNING: Step 2 will CLEAR all existing files in:")
+    print(f"⚠️  WARNING: Step 1 will CLEAR all existing files in:")
     print(f"           {local_dir}")
     print("         Make sure you do not need any files currently there.")
     print("⚠️  WARNING: OpenSearch will be briefly stopped and restarted.")
@@ -288,35 +288,11 @@ def _confirm(local_dir: Path, server: str | None, ssh_key: str | None, location:
 
 
 # ---------------------------------------------------------------------------
-# Step 1: Delete existing repository
+# Step 1: Stop container, clear host dir, restart, wait for healthy cluster
 # ---------------------------------------------------------------------------
 
-def step1_delete_repository():
-    log_handle.warning(
-        "🟠 Step 1: Deleting existing snapshot repository '%s' (if present)...", REPO_NAME
-    )
-    status, body = _os_request("DELETE", f"/_snapshot/{REPO_NAME}")
-    if status == 200:
-        log_handle.info("✅ Step 1 done. Repository '%s' deleted.", REPO_NAME)
-    elif status == 404:
-        log_handle.info("✅ Step 1 done. Repository '%s' did not exist — nothing to delete.", REPO_NAME)
-    elif status == 0:
-        log_handle.info(
-            "✅ Step 1 done. OpenSearch not reachable (container likely stopped from a "
-            "previous interrupted run) — assuming no repository to delete."
-        )
-    else:
-        raise RuntimeError(
-            f"❌ Unexpected response deleting repository: HTTP {status} — {body}"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Step 2: Stop container, clear host dir, restart, wait for healthy cluster
-# ---------------------------------------------------------------------------
-
-def step2_cycle_container(local_dir: Path):
-    log_handle.info("🔄 Step 2: Stopping container '%s'...", CONTAINER_NAME)
+def step1_cycle_container(local_dir: Path):
+    log_handle.info("🔄 Step 1: Stopping container '%s'...", CONTAINER_NAME)
     # stop with a 30-second timeout so OpenSearch flushes cleanly
     _docker_request("POST", f"/containers/{CONTAINER_NAME}/stop?t=30")
     log_handle.info("🔄 Container stopped.")
@@ -358,7 +334,7 @@ def step2_cycle_container(local_dir: Path):
             cluster_status = body.get("status", "unknown")
             if cluster_status in ("green", "yellow"):
                 log_handle.info(
-                    "✅ Step 2 done. Cluster healthy (status=%s) after %d attempt(s).",
+                    "✅ Step 1 done. Cluster healthy (status=%s) after %d attempt(s).",
                     cluster_status, attempt,
                 )
                 return
@@ -376,6 +352,30 @@ def step2_cycle_container(local_dir: Path):
     raise RuntimeError(
         "❌ OpenSearch cluster did not reach a healthy state within the timeout period."
     )
+
+
+# ---------------------------------------------------------------------------
+# Step 2: Delete existing repository (runs only after the cluster is
+# confirmed healthy, so an unreachable cluster here is a real failure —
+# never "maybe it's just down, assume nothing to delete". Deleting AFTER
+# the container cycle (and thus after the host snapshots dir has already
+# been wiped) also ensures OpenSearch forgets any stale cached repository
+# generation before Step 3 re-registers against the now-empty directory.
+# ---------------------------------------------------------------------------
+
+def step2_delete_repository():
+    log_handle.warning(
+        "🟠 Step 2: Deleting existing snapshot repository '%s' (if present)...", REPO_NAME
+    )
+    status, body = _os_request("DELETE", f"/_snapshot/{REPO_NAME}")
+    if status == 200:
+        log_handle.info("✅ Step 2 done. Repository '%s' deleted.", REPO_NAME)
+    elif status == 404:
+        log_handle.info("✅ Step 2 done. Repository '%s' did not exist — nothing to delete.", REPO_NAME)
+    else:
+        raise RuntimeError(
+            f"❌ Unexpected response deleting repository: HTTP {status} — {body}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -734,8 +734,8 @@ def main():
         _confirm(local_dir, server, ssh_key, location)
         start_time = time.time()
 
-        step1_delete_repository()
-        step2_cycle_container(local_dir)
+        step1_cycle_container(local_dir)
+        step2_delete_repository()
         step3_create_repository()
         step4_create_snapshot_prod()
         step5_create_snapshot_metadata()
