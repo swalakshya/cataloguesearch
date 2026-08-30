@@ -277,6 +277,11 @@ export const getAllGranths = () => {
  */
 export const searchableGranths = [
   {
+    name: "Aadi Puran",
+    author: "Acharya Jinsen",
+    status: "searchable"
+  },
+  {
     name: "Aaradhansaar",
     author: "Acharya Devsen",
     tikakaar: "Pandit Ratnakeerti Dev",
@@ -370,6 +375,11 @@ export const searchableGranths = [
     status: "searchable"
   },
   {
+    name: "Gautam Charitra",
+    author: "Mandalacharya Shri Dharmchandra",
+    status: "searchable"
+  },
+  {
     name: "Gnaanarnav",
     author: "Acharya Shubhchandra",
     status: "searchable"
@@ -435,6 +445,11 @@ export const searchableGranths = [
   {
     name: "Laghu Tattvasphot",
     author: "Acharya Amritchandra",
+    status: "searchable"
+  },
+  {
+    name: "Maharani Chelna",
+    author: "Br. Harilal Jain",
     status: "searchable"
   },
   {
@@ -600,8 +615,18 @@ export const searchableGranths = [
     status: "searchable"
   },
   {
+    name: "Shrenik Charitra",
+    author: "Bhattarak Shubhchandra",
+    status: "searchable"
+  },
+  {
     name: "Sukumal Charitra",
     author: "Acharya Sakalkirti",
+    status: "searchable"
+  },
+  {
+    name: "Swanubhuti Darshan",
+    author: "Bahinshree Champaben",
     status: "searchable"
   },
   {
@@ -623,6 +648,11 @@ export const searchableGranths = [
   {
     name: "Updesh Siddhant Ratnamala",
     author: "Shri Nemichand Bhandari",
+    status: "searchable"
+  },
+  {
+    name: "Uttar Puran",
+    author: "Acharya Gunbhadra",
     status: "searchable"
   },
   {

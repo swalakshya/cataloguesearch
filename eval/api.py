@@ -4,6 +4,7 @@ from fastapi.responses import FileResponse, Response
 from utils.logger import setup_logging, VERBOSE_LEVEL_NUM
 from pydantic import BaseModel, Field
 from typing import Any, Dict, List, Optional
+import asyncio
 import json
 import os
 import sys
@@ -522,20 +523,20 @@ async def calculate_ocr_cost(request: CostCalculationRequest):
         raise HTTPException(status_code=500, detail=f"Error calculating cost: {str(e)}")
 
 # Background task to clean up old jobs
-async def cleanup_old_jobs_task():
-    """Background task to periodically clean up old jobs"""
-    try:
-        ocr_service = get_ocr_service()
-        ocr_service.cleanup_old_jobs()
-    except Exception as e:
-        log_handle.error(f"Error during job cleanup: {str(e)}")
+_CLEANUP_INTERVAL_SECONDS = 15 * 60  # how often to sweep; jobs themselves expire after max_age_hours=1
 
-# Clean up old jobs when the module loads
-import asyncio
-try:
-    asyncio.create_task(cleanup_old_jobs_task())
-except Exception:
-    pass  # Ignore if no event loop is running
+async def cleanup_old_jobs_task():
+    """Recurring background task that periodically clears out batch OCR job
+    output directories (tempfile.mkdtemp under $TMPDIR) older than 1 hour.
+    Runs for the lifetime of the app process; started from the FastAPI
+    startup event so it always has a live event loop."""
+    while True:
+        try:
+            ocr_service = get_ocr_service()
+            ocr_service.cleanup_old_jobs()
+        except Exception as e:
+            log_handle.error(f"Error during job cleanup: {str(e)}")
+        await asyncio.sleep(_CLEANUP_INTERVAL_SECONDS)
 
 @router.post("/bookmarks/extract", response_model=BookmarkExtractionResponse)
 async def extract_bookmarks(request: BookmarkExtractionRequest):
@@ -1653,4 +1654,5 @@ async def startup():
     except ImportError:
         log_handle.warning(
             "python-dotenv not installed; relying on process environment for API keys (e.g. GEMINI_API_KEY)")
+    asyncio.create_task(cleanup_old_jobs_task())
     log_handle.info("Eval app started.")

@@ -29,6 +29,12 @@ const WhatsNew = () => {
             date: "August 30, 2026",
             newContent: [
                 "Granths: Rayansaar by Acharya Kund Kund",
+                "Granths: Gautam Charitra by Mandalacharya Shri Dharmchandra",
+                "Granths: Maharani Chelna by Br. Harilal Jain",
+                "Granths: Aadi Puran by Acharya Jinsen",
+                "Granths: Uttar Puran by Acharya Gunbhadra",
+                "Granths: Shrenik Charitra by Bhattarak Shubhchandra",
+                "Granths: Swanubhuti Darshan by Bahinshree Champaben",
             ],
         },
         {
