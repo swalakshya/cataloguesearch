@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 // Cap auto-grow height so a long paste doesn't take over the page -- past
 // this the textarea scrolls internally instead of growing further.
 const MAX_TEXTAREA_HEIGHT = 160;
-const MAX_QUERY_LENGTH = 500;
+const MAX_QUERY_LENGTH = 1000;
 
 /**
  * TransliterationInput - A standalone, reusable input component with real-time transliteration
