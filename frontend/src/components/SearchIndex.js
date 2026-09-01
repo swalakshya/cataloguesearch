@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { searchableContent, searchableGranths, getAllStats, getContentByStatus } from '../utils/searchableContent.js';
+import { PageHeader } from './ui';
 import './SearchIndex.css';
 
 const SearchIndex = () => {
@@ -70,10 +71,10 @@ const SearchIndex = () => {
   // Get sort indicator icon
   const getSortIcon = (columnKey) => {
     if (sortConfig.key !== columnKey) {
-      return <span style={{ color: '#ccc', fontSize: '0.8em' }}> ⇅</span>;
+      return <span style={{ color: 'var(--color-ink-muted)', fontSize: '0.8em' }}> ⇅</span>;
     }
-    const color = '#2563eb'; // Blue for active sort
-    return sortConfig.direction === 'asc' ? 
+    const color = 'var(--color-brand)';
+    return sortConfig.direction === 'asc' ?
       <span style={{ color, fontSize: '0.9em' }}> ▲</span> : 
       <span style={{ color, fontSize: '0.9em' }}> ▼</span>;
   };
@@ -198,6 +199,12 @@ const SearchIndex = () => {
 
   return (
     <div className="search-index-page">
+
+      <PageHeader
+        variant="hero"
+        title="Aagam Khoj (आगम खोज)"
+        subtitle="Explore and search across the Jain literature comprising authentic Digambar Jain Scriptures, Pravachans of Pujya Gurudevshri Kanji Swami, and literature by contemporary Jain scholars."
+      />
 
       <div className="stats-overview">
         <div className="overview-card">

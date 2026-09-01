@@ -28,7 +28,7 @@ import clipboardEmoji from './assets/emoji/clipboard.svg';
 import bulbEmoji from './assets/emoji/bulb.svg';
 import documentEmoji from './assets/emoji/document.svg';
 import { CATEGORY_EMOJI_SRC } from './components/chat/categoryEmoji';
-import { Modal, InputActionBar } from './components/ui';
+import { Modal, InputActionBar, PageHeader } from './components/ui';
 
 // Import API service
 import { api } from './services/api';
@@ -1784,6 +1784,11 @@ const AppContent = () => {
                             {/* ── SEARCH MODE ── */}
                             {!isChatMode && (
                                 <>
+                                    <PageHeader
+                                        variant="hero"
+                                        title="Aagam Khoj (आगम खोज)"
+                                        subtitle="Explore and search across the Jain literature comprising authentic Digambar Jain Scriptures, Pravachans of Pujya Gurudevshri Kanji Swami, and literature by contemporary Jain scholars."
+                                    />
                                     <div className="flex items-center justify-between mb-2">
                                         <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Content Available</p>
                                         <Link to="/search-index" className="text-sm font-semibold text-brand hover:text-brand-hover">
@@ -1833,7 +1838,7 @@ const AppContent = () => {
                                         </div>
                                         {showFilters && (
                                             <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--color-border)' }}>
-                                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                                                <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr_1fr] gap-5">
                                                     <SearchFilters
                                                         allMetadata={allMetadata}
                                                         activeFilters={activeFilters}
@@ -2018,10 +2023,11 @@ const AppContent = () => {
                                     {chatMessages.length === 0 && !llmLoading && (
                                         <div className="flex flex-col items-center justify-center py-16">
                                             <div className="w-full max-w-4xl space-y-2">
-                                                <div className="text-center mb-12">
-                                                    <h1 className="text-4xl font-bold text-ink tracking-tight">Swalakshya AI</h1>
-                                                    <p className="mt-2 text-ink-muted max-w-xl mx-auto">Get your questions answered through authentic Jain Scriptures and teachings of Pujya Gurudevshri Kanji Swami</p>
-                                                </div>
+                                                <PageHeader
+                                                    variant="hero"
+                                                    title="Swalakshya AI"
+                                                    subtitle="Get your questions answered through authentic Jain Scriptures and teachings of Pujya Gurudevshri Kanji Swami"
+                                                />
                                                 <ChatComposer
                                                     query={query}
                                                     setQuery={setQuery}

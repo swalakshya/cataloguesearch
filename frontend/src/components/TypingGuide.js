@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { Info, CheckCircle2, Zap, ChevronDown } from 'lucide-react';
+import { Card } from './ui';
 
 const TypingGuide = () => {
     const [isExpanded, setIsExpanded] = useState(false);
@@ -8,10 +10,6 @@ const TypingGuide = () => {
     const detectOS = () => {
         const userAgent = navigator.userAgent;
         const platform = navigator.platform;
-        
-        // Log for debugging
-        console.log('UserAgent:', userAgent);
-        console.log('Platform:', platform);
 
         // Mobile detection first (most specific)
         if (/Android/i.test(userAgent)) {
@@ -22,7 +20,7 @@ const TypingGuide = () => {
         }
 
         // Windows detection (check multiple indicators)
-        if (/Win/i.test(userAgent) || 
+        if (/Win/i.test(userAgent) ||
             /Win32|Win64|Windows|WinCE/i.test(platform) ||
             /Windows NT/i.test(userAgent) ||
             /Surface/i.test(userAgent)) {
@@ -30,7 +28,7 @@ const TypingGuide = () => {
         }
 
         // macOS detection (be more specific to avoid false positives)
-        if ((/Mac/i.test(userAgent) && !/Windows/i.test(userAgent)) || 
+        if ((/Mac/i.test(userAgent) && !/Windows/i.test(userAgent)) ||
             /MacIntel|MacPPC/i.test(platform) ||
             /Macintosh/i.test(userAgent)) {
             return 'macos';
@@ -62,10 +60,10 @@ const TypingGuide = () => {
             id: 'chrome-edge',
             label: 'Chrome/Edge Browser',
             icon: (
-                <img 
-                    src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/chrome/chrome-original.svg" 
-                    alt="Chrome" 
-                    className="w-5 h-5" 
+                <img
+                    src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/chrome/chrome-original.svg"
+                    alt="Chrome"
+                    className="w-5 h-5"
                 />
             ),
             content: {
@@ -94,10 +92,10 @@ const TypingGuide = () => {
             id: 'android',
             label: 'Android',
             icon: (
-                <img 
-                    src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/android/android-original.svg" 
-                    alt="Android" 
-                    className="w-5 h-5" 
+                <img
+                    src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/android/android-original.svg"
+                    alt="Android"
+                    className="w-5 h-5"
                 />
             ),
             content: {
@@ -128,10 +126,10 @@ const TypingGuide = () => {
             id: 'ios',
             label: 'iOS',
             icon: (
-                <img 
-                    src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/apple/apple-original.svg" 
-                    alt="iOS" 
-                    className="w-5 h-5" 
+                <img
+                    src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/apple/apple-original.svg"
+                    alt="iOS"
+                    className="w-5 h-5"
                 />
             ),
             content: {
@@ -163,10 +161,10 @@ const TypingGuide = () => {
             id: 'windows',
             label: 'Windows',
             icon: (
-                <img 
-                    src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/windows8/windows8-original.svg" 
-                    alt="Windows" 
-                    className="w-5 h-5" 
+                <img
+                    src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/windows8/windows8-original.svg"
+                    alt="Windows"
+                    className="w-5 h-5"
                 />
             ),
             content: {
@@ -198,10 +196,10 @@ const TypingGuide = () => {
             id: 'macos',
             label: 'macOS',
             icon: (
-                <img 
-                    src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/apple/apple-original.svg" 
-                    alt="macOS" 
-                    className="w-5 h-5" 
+                <img
+                    src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/apple/apple-original.svg"
+                    alt="macOS"
+                    className="w-5 h-5"
                 />
             ),
             content: {
@@ -253,43 +251,37 @@ const TypingGuide = () => {
     return (
         <div id="typing-guide" className="mt-12">
             {/* Importance Message - Always Visible */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <div className="notice notice-info mb-4">
                 <div className="flex items-start">
-                    <svg className="w-5 h-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
+                    <Info size={20} className="mt-0.5 mr-3 flex-shrink-0" style={{ color: 'var(--color-info)' }} />
                     <div>
-                        <h3 className="font-semibold text-blue-800 mb-2">Important for Better Results</h3>
-                        <p className="text-blue-700">
-                            Typing your queries in Hindi (हिन्दी) or Gujarati (ગુજરાતી) significantly improves search accuracy and relevance. 
-                            The AI system is specifically trained on content in these languages and will provide much better results 
+                        <h3 className="font-semibold mb-2" style={{ color: 'var(--color-info)' }}>Important for Better Results</h3>
+                        <p className="text-ink">
+                            Typing your queries in Hindi (हिन्दी) or Gujarati (ગુજરાતી) significantly improves search accuracy and relevance.
+                            The AI system is specifically trained on content in these languages and will provide much better results
                             when queries match the original language of the pravachans.
                         </p>
                     </div>
                 </div>
             </div>
 
-            <div style={{ backgroundColor: 'var(--bg-card, white)' }} className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+            <Card className="overflow-hidden">
                 {/* Header */}
                 <div
-                    className="bg-amber-50 border-b border-amber-100 px-6 py-4 cursor-pointer hover:bg-amber-100 transition-colors duration-200"
+                    className="notice-brand px-6 py-4 cursor-pointer transition-colors duration-200"
+                    style={{ borderRadius: 0 }}
                     onClick={toggleSection}
                 >
                     <div className="flex items-center justify-between">
-                        <h2 className="text-xl font-semibold text-amber-800 flex items-center">
-                            <svg className="w-6 h-6 text-amber-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                            </svg>
+                        <h2 className="text-xl font-semibold flex items-center" style={{ color: 'var(--color-brand)' }}>
+                            <Zap size={22} className="mr-3" />
                             Typing in Hindi/Gujarati
                         </h2>
-                        <svg 
-                            className={`w-5 h-5 text-amber-600 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} 
-                            fill="none" 
-                            stroke="currentColor" 
-                            viewBox="0 0 24 24"
-                        >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
+                        <ChevronDown
+                            size={20}
+                            className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                            style={{ color: 'var(--color-brand)' }}
+                        />
                     </div>
                 </div>
 
@@ -299,82 +291,75 @@ const TypingGuide = () => {
 
                         {/* Platform Tabs */}
                         <div className="space-y-2">
-                            <h3 className="text-lg font-semibold text-slate-800 mb-4">Setup Guide for Your Device:</h3>
-                            
+                            <h3 className="text-lg font-semibold text-ink mb-4">Setup Guide for Your Device:</h3>
+
                             {/* Auto-detection notice */}
-                            <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
-                                <div className="flex items-center text-sm text-green-700">
-                                    <svg className="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
+                            <div className="notice notice-success mb-4 p-3">
+                                <div className="flex items-center text-sm" style={{ color: 'var(--color-success)' }}>
+                                    <CheckCircle2 size={16} className="mr-2 flex-shrink-0" />
                                     <span>
                                         We've detected your device and opened the relevant setup guide below. You can click on other platforms if needed.
                                     </span>
                                 </div>
                             </div>
-                            
+
                             {platforms.map((platform) => (
-                                <div key={platform.id} className="border border-slate-200 rounded-lg">
+                                <div key={platform.id} className="border border-border rounded-lg">
                                     {/* Tab Header */}
                                     <button
                                         onClick={() => handleTabClick(platform.id)}
-                                        className={`w-full px-4 py-3 text-left flex items-center justify-between transition-colors duration-200 rounded-lg ${
-                                            activeTab === platform.id 
-                                                ? 'bg-sky-50 text-sky-800 border-sky-200' 
-                                                : 'hover:bg-neutral-50 text-slate-700'
-                                        }`}
+                                        className="w-full px-4 py-3 text-left flex items-center justify-between transition-colors duration-200 rounded-lg"
+                                        style={activeTab === platform.id
+                                            ? { backgroundColor: 'color-mix(in srgb, var(--color-brand) 8%, var(--color-surface))', color: 'var(--color-brand)' }
+                                            : { color: 'var(--color-ink)' }}
                                     >
                                         <div className="flex items-center">
-                                            <span className={`mr-3 ${activeTab === platform.id ? 'text-sky-600' : 'text-slate-500'}`}>
+                                            <span className="mr-3">
                                                 {platform.icon}
                                             </span>
                                             <span className="font-medium">{platform.label}</span>
                                         </div>
-                                        <svg 
-                                            className={`w-4 h-4 transition-transform duration-200 ${
-                                                activeTab === platform.id ? 'rotate-180 text-sky-600' : 'text-slate-400'
-                                            }`} 
-                                            fill="none" 
-                                            stroke="currentColor" 
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                        </svg>
+                                        <ChevronDown
+                                            size={16}
+                                            className={`transition-transform duration-200 ${activeTab === platform.id ? 'rotate-180' : ''}`}
+                                            style={{ color: activeTab === platform.id ? 'var(--color-brand)' : 'var(--color-ink-muted)' }}
+                                        />
                                     </button>
 
                                     {/* Tab Content */}
                                     {activeTab === platform.id && (
-                                        <div style={{ backgroundColor: 'var(--bg-surface, #f8fafc)' }} className="px-4 pb-4 pt-2 bg-slate-50 border-t border-slate-200">
+                                        <div className="px-4 pb-4 pt-2 bg-bg border-t border-border">
                                             <div className="space-y-6">
                                                 {/* Setup Steps */}
                                                 <div>
-                                                    <h4 className="font-semibold text-slate-800 mb-3 flex items-center">
-                                                        <svg className="w-4 h-4 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
-                                                        </svg>
+                                                    <h4 className="font-semibold text-ink mb-3 flex items-center">
+                                                        <CheckCircle2 size={16} className="mr-2" style={{ color: 'var(--color-success)' }} />
                                                         {platform.content.title} - Setup Steps:
                                                     </h4>
                                                     <ol className="space-y-2">
                                                         {platform.content.steps.map((step, index) => (
                                                             <li key={index} className="flex items-start">
-                                                                <span className="flex-shrink-0 w-6 h-6 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-sm font-medium mr-3 mt-0.5">
+                                                                <span
+                                                                    className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-sm font-medium mr-3 mt-0.5"
+                                                                    style={{ backgroundColor: 'color-mix(in srgb, var(--color-success) 16%, var(--color-surface))', color: 'var(--color-success)' }}
+                                                                >
                                                                     {index + 1}
                                                                 </span>
-                                                                <span className="text-slate-700">
+                                                                <span className="text-ink">
                                                                     {typeof step === 'string' ? (
                                                                         step
                                                                     ) : (
                                                                         step.link ? (
                                                                             <>
                                                                                 {step.text.split('(')[0]}
-                                                                                <a 
-                                                                                    href={step.link} 
-                                                                                    target="_blank" 
+                                                                                <a
+                                                                                    href={step.link}
+                                                                                    target="_blank"
                                                                                     rel="noopener noreferrer"
-                                                                                    className="text-sky-600 hover:text-sky-800 underline font-medium mx-1"
+                                                                                    className="text-brand hover:text-brand-hover underline font-medium mx-1"
                                                                                 >
-                                                                                    {step.link.includes('chromewebstore') ? 'Chrome Web Store' : 
-                                                                                     step.link.includes('play.google.com') ? 'Google Play Store' : 
+                                                                                    {step.link.includes('chromewebstore') ? 'Chrome Web Store' :
+                                                                                     step.link.includes('play.google.com') ? 'Google Play Store' :
                                                                                      'Official Link'}
                                                                                 </a>
                                                                                 {step.text.includes('(') && `(${step.text.split('(')[1]}`}
@@ -391,17 +376,15 @@ const TypingGuide = () => {
 
                                                 {/* Usage Instructions */}
                                                 <div>
-                                                    <h4 className="font-semibold text-slate-800 mb-3 flex items-center">
-                                                        <svg className="w-4 h-4 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                                        </svg>
+                                                    <h4 className="font-semibold text-ink mb-3 flex items-center">
+                                                        <Zap size={16} className="mr-2" style={{ color: 'var(--color-info)' }} />
                                                         How to Use:
                                                     </h4>
                                                     <ul className="space-y-2">
                                                         {platform.content.usage.map((instruction, index) => (
                                                             <li key={index} className="flex items-start">
-                                                                <span className="flex-shrink-0 w-2 h-2 bg-blue-500 rounded-full mt-2 mr-3"></span>
-                                                                <span className="text-slate-700">{instruction}</span>
+                                                                <span className="list-item-dot mt-2 mr-3" style={{ backgroundColor: 'var(--color-info)' }}></span>
+                                                                <span className="text-ink">{instruction}</span>
                                                             </li>
                                                         ))}
                                                     </ul>
@@ -414,7 +397,7 @@ const TypingGuide = () => {
                         </div>
                     </div>
                 )}
-            </div>
+            </Card>
         </div>
     );
 };

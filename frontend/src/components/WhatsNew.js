@@ -1,27 +1,29 @@
 import React from 'react';
+import { Zap, FileText } from 'lucide-react';
+import { PageHeader, Card, Button } from './ui';
 
 const WhatsNew = () => {
     // Helper function to render content with optional links
     const renderContent = (item) => {
         if (typeof item === 'string') {
-            return <span className="text-slate-700">{item}</span>;
+            return <span className="text-ink">{item}</span>;
         } else if (item.link) {
             const isExternalLink = item.link.startsWith('http') || item.link.startsWith('//');
             return (
-                <span className="text-slate-700">
+                <span className="text-ink">
                     {item.text}{' '}
                     <a
                         href={item.link}
                         target={isExternalLink ? "_blank" : "_self"}
                         rel={isExternalLink ? "noopener noreferrer" : undefined}
-                        className="text-sky-600 hover:text-sky-800 underline font-medium"
+                        className="text-brand hover:text-brand-hover underline font-medium"
                     >
                         {item.linkText || 'Learn more'}
                     </a>
                 </span>
             );
         }
-        return <span className="text-slate-700">{item.text}</span>;
+        return <span className="text-ink">{item.text}</span>;
     };
 
     const updates = [
@@ -278,35 +280,38 @@ const WhatsNew = () => {
 
     return (
         <div className="max-w-4xl mx-auto">
-            <div className="text-center py-6">
-                <h1 className="text-4xl font-bold text-slate-800 mb-4">What's New?</h1>
-                <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-                    Stay updated with the latest improvements, new content, and features added to Swalakshya Chat.
-                </p>
-            </div>
+            <PageHeader
+                variant="hero"
+                title="What's New?"
+                subtitle="Stay updated with the latest improvements, new content, and features added to Swalakshya Chat."
+            />
 
             <div className="space-y-8">
                 {updates.map((update, index) => (
-                    <div key={index} style={{ backgroundColor: 'var(--bg-card, white)' }} className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+                    <Card key={index} className="overflow-hidden">
                         {/* Header with Date */}
-                        <div className="bg-sky-50 border-b border-sky-100 px-6 py-4">
-                            <h2 className="text-xl font-semibold text-sky-800">{update.date}</h2>
+                        <div
+                            className="px-6 py-4"
+                            style={{
+                                backgroundColor: 'color-mix(in srgb, var(--color-brand) 8%, var(--color-surface))',
+                                borderBottom: '1px solid color-mix(in srgb, var(--color-brand) 25%, transparent)',
+                            }}
+                        >
+                            <h2 className="text-xl font-semibold" style={{ color: 'var(--color-brand)' }}>{update.date}</h2>
                         </div>
 
                         <div className="px-6 py-6">
                             <div className={`grid grid-cols-1 gap-8 ${update.newFeatures?.length > 0 && update.newContent?.length > 0 ? 'lg:grid-cols-2' : ''}`}>
                                 {update.newFeatures?.length > 0 && (
                                     <div>
-                                        <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center">
-                                            <svg className="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                            </svg>
+                                        <h3 className="text-lg font-semibold text-ink mb-4 flex items-center">
+                                            <Zap size={18} className="mr-2" style={{ color: 'var(--color-info)' }} />
                                             New Features
                                         </h3>
                                         <ul className="space-y-2">
                                             {update.newFeatures.map((feature, featureIndex) => (
                                                 <li key={featureIndex} className="flex items-start">
-                                                    <span className="flex-shrink-0 w-2 h-2 bg-blue-500 rounded-full mt-2 mr-3"></span>
+                                                    <span className="list-item-dot mt-2 mr-3" style={{ backgroundColor: 'var(--color-info)' }}></span>
                                                     {renderContent(feature)}
                                                 </li>
                                             ))}
@@ -315,16 +320,14 @@ const WhatsNew = () => {
                                 )}
                                 {update.newContent?.length > 0 && (
                                     <div>
-                                        <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center">
-                                            <svg className="w-5 h-5 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                            </svg>
+                                        <h3 className="text-lg font-semibold text-ink mb-4 flex items-center">
+                                            <FileText size={18} className="mr-2" style={{ color: 'var(--color-success)' }} />
                                             New Content
                                         </h3>
                                         <ul className="space-y-2">
                                             {update.newContent.map((item, itemIndex) => (
                                                 <li key={itemIndex} className="flex items-start">
-                                                    <span className="flex-shrink-0 w-2 h-2 bg-green-500 rounded-full mt-2 mr-3"></span>
+                                                    <span className="list-item-dot mt-2 mr-3" style={{ backgroundColor: 'var(--color-success)' }}></span>
                                                     {renderContent(item)}
                                                 </li>
                                             ))}
@@ -333,24 +336,21 @@ const WhatsNew = () => {
                                 )}
                             </div>
                         </div>
-                    </div>
+                    </Card>
                 ))}
             </div>
 
             {/* Call to Action */}
             <div className="mt-12 text-center">
-                <div className="bg-gradient-to-r from-sky-50 to-blue-50 rounded-lg p-8 border border-sky-100">
-                    <h3 className="text-xl font-semibold text-slate-800 mb-3">Have suggestions for new features?</h3>
-                    <p className="text-slate-600 mb-4">
+                <Card className="notice-brand p-8">
+                    <h3 className="text-xl font-semibold text-ink mb-3">Have suggestions for new features?</h3>
+                    <p className="text-ink-muted mb-4">
                         We're always looking to improve Swalakshya Chat based on your feedback and needs.
                     </p>
-                    <button
-                        onClick={() => window.location.href = '/feedback'}
-                        className="bg-sky-600 text-white font-semibold py-2 px-6 rounded-md hover:bg-sky-700 transition-colors duration-200"
-                    >
+                    <Button onClick={() => window.location.href = '/feedback'}>
                         Share Your Feedback
-                    </button>
-                </div>
+                    </Button>
+                </Card>
             </div>
         </div>
     );

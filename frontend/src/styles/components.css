@@ -168,6 +168,40 @@ input::placeholder, textarea::placeholder { color: var(--color-ink-muted); }
     background-color: color-mix(in srgb, var(--color-info) 10%, var(--color-surface));
     border-color: color-mix(in srgb, var(--color-info) 35%, transparent);
 }
+.notice-success {
+    background-color: color-mix(in srgb, var(--color-success) 10%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-success) 35%, transparent);
+}
+.notice-danger {
+    background-color: color-mix(in srgb, var(--color-danger) 10%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-danger) 35%, transparent);
+}
+.notice-brand {
+    background-color: color-mix(in srgb, var(--color-brand) 6%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-brand) 25%, transparent);
+}
+
+/* --- Code blocks (Developer API) --- */
+.code-block {
+    background-color: var(--color-bg);
+    color: var(--color-ink);
+    border: 1px solid var(--color-border);
+    border-radius: 0.375rem;
+    padding: 1rem;
+    overflow-x: auto;
+    font-family: monospace;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    margin: 1rem 0;
+}
+.inline-code {
+    background-color: var(--color-bg);
+    padding: 0.125rem 0.35rem;
+    border-radius: 0.25rem;
+    font-family: monospace;
+    font-size: 0.875em;
+    color: var(--color-ink);
+}
 
 /* --- Filter dropdown triggers (Refine Search) --- */
 .filter-trigger {
