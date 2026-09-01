@@ -476,6 +476,7 @@ const AppContent = () => {
     const [activeFilters, setActiveFilters] = useState([]);
     const [contentTypes, setContentTypes] = useState({ pravachans: true, granths: true, books: false });
     const [debugMode, setDebugMode] = useState(false);
+    const [appName, setAppName] = useState('swalakshya');
     const [activeCategories, setActiveCategories] = useState(['Pravachan', 'Granth']);
     const [language, setLanguage] = useState('hindi');
     const [textSearch, setTextSearch] = useState(false);
@@ -802,6 +803,7 @@ const AppContent = () => {
 
     useEffect(() => {
         api.getAppConfig().then(cfg => {
+            setAppName(cfg.app_name || 'swalakshya');
             setDebugMode(cfg.debug_mode);
             setActiveCategories(cfg.active_categories);
             setChatContentTypes([...cfg.active_categories]);
@@ -883,9 +885,10 @@ const AppContent = () => {
         return {
             language: languageCode,
             user_id: USER_ID,
+            app: appName,
             ...(llmProvider ? { provider: llmProvider } : {})
         };
-    }, [language, llmProvider]);
+    }, [language, llmProvider, appName]);
 
     // Update metadata when language or contentTypes selection changes
     useEffect(() => {
@@ -1293,6 +1296,7 @@ const AppContent = () => {
             const sessionPayload = {
                 language: languageCode,
                 user_id: USER_ID,
+                app: appName,
                 ...(llmProvider ? { provider: llmProvider } : {})
             };
             const session = await api.createChatSession(sessionPayload);
@@ -1533,6 +1537,7 @@ const AppContent = () => {
         const quoteParts = [];
         const parenParts = [];
         const citationBlocks = [];
+        const actionLabelParts = [];
 
         // Step 0: Use pre-tokenized citation blocks if available (avoids raw <citation> tags
         // appearing mid-render during the typing animation). Otherwise extract inline.
@@ -1550,6 +1555,18 @@ const AppContent = () => {
         sanitizedAnswer = sanitizedAnswer.replace(/_([^_\n]+?)_/g, (match, content) => {
             italicParts.push(content);
             return `__ITAL_${italicParts.length - 1}__`;
+        });
+
+        // Step 1.5: Recognize the closed set of known interactive action placeholders.
+        // Must run AFTER italic extraction (see note above) so this token's own underscores
+        // don't get mistaken for _italic_ markers. This is intentionally NOT a general
+        // link/markup mechanism: the action (e.g. "feedback_button") is a fixed, hardcoded
+        // identifier resolved to one specific wired-up click handler below — only the visible
+        // label text is free-form. LLM-generated or indexed-document text can never inject an
+        // arbitrary clickable destination or URL here, only decide what a known button says.
+        sanitizedAnswer = sanitizedAnswer.replace(/\[feedback_button:([^\]]+)\]/g, (match, label) => {
+            actionLabelParts.push(label);
+            return `__ACTION_FEEDBACK_${actionLabelParts.length - 1}__`;
         });
 
         // Step 2: Extract ## / ### headings
@@ -1618,8 +1635,9 @@ const AppContent = () => {
 
         text = escapeHtml(text);
 
-        // Collapse multiple consecutive newlines to a single one to reduce visual gap
-        text = text.replace(/\n{2,}/g, '\n');
+        // Collapse runs of 3+ newlines down to one blank line (reduces excessive gaps from
+        // verbose LLM output) while preserving a single intentional blank-line paragraph break.
+        text = text.replace(/\n{3,}/g, '\n\n');
 
         // Split into lines; insert spacing before headings and citation blocks
         const lines = text.split('\n');
@@ -1628,12 +1646,13 @@ const AppContent = () => {
         for (const line of lines) {
             const trimmed = line.trim();
             if (segments.length > 0) {
-                // Blank line before headings
-                if (/^__HEADING_BOLD_\d+__$/.test(trimmed)) {
+                const lastSegment = segments[segments.length - 1];
+                // Blank line before headings (skip if one is already there from the source text)
+                if (/^__HEADING_BOLD_\d+__$/.test(trimmed) && lastSegment !== '') {
                     segments.push('');
                 }
                 // Small-gap line before citation blocks (grey quote lines)
-                if (/^__QUOT(?:CITE)?_\d+/.test(trimmed)) {
+                if (/^__QUOT(?:CITE)?_\d+/.test(trimmed) && lastSegment !== '') {
                     segments.push('<span style="display:block;height:0.3rem"></span>');
                 }
             }
@@ -1688,6 +1707,10 @@ const AppContent = () => {
             const content = codeParts[Number(idx)] || '';
             return `<span class=”llm-code”>${escapeHtml(content)}</span>`;
         });
+        html = html.replace(/__ACTION_FEEDBACK_(\d+)__/g, (match, idx) => {
+            const label = actionLabelParts[Number(idx)] || 'Feedback';
+            return `<button type="button" data-app-action="feedback" class="text-sky-700 underline decoration-sky-300 underline-offset-2 hover:text-sky-800 hover:decoration-sky-500 transition-colors">${escapeHtml(label)}</button>`;
+        });
 
         // Change #1: citation divs are display:block so they create their own line break;
         // remove the extra <br/> the segment join places immediately after </div> to avoid double-spacing.
@@ -1697,6 +1720,18 @@ const AppContent = () => {
         html = html.replace(/@@BREAK@@/g, '<br/>');
 
         return html;
+    };
+
+    // Delegated click handler for the closed set of action buttons formatAnswerHtml renders
+    // (e.g. data-app-action="feedback"). Needed because dangerouslySetInnerHTML content can't
+    // carry React event handlers directly.
+    const handleAnswerActionClick = (event) => {
+        const target = event.target.closest('[data-app-action]');
+        if (!target) return;
+        const action = target.getAttribute('data-app-action');
+        if (action === 'feedback') {
+            setCurrentPage('feedback');
+        }
     };
 
     const buildInlineQuoteLabel = (citation) => {
@@ -2006,6 +2041,7 @@ const AppContent = () => {
                                                 <div className="llm-answer-scroll">
                                                     {llmAnswer && (
                                                         <div className="text-slate-800 leading-relaxed text-base"
+                                                            onClick={handleAnswerActionClick}
                                                             dangerouslySetInnerHTML={{ __html: formatAnswerHtml(llmAnswer) }} />
                                                     )}
                                                     {llmReferences.length > 0 && (
@@ -2266,6 +2302,7 @@ const AppContent = () => {
                                                                         </div>
                                                                         <div className="max-w-3xl">
                                                                             <div className={`text-slate-900 leading-relaxed text-base ${displayedTexts[key] === cleanAnswerText(msg.content) && shouldCollapseAnswer(msg.content) && expandedAnswers[key] === false ? 'max-h-72 overflow-hidden' : ''}`}
+                                                                                onClick={handleAnswerActionClick}
                                                                                 dangerouslySetInnerHTML={{ __html: formatAnswerHtml(
                                                                                     resolveChunkQuotes(
                                                                                         displayedTexts[key] !== undefined ? displayedTexts[key] : msg.content || '',

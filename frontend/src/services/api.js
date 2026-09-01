@@ -10,7 +10,7 @@ export const api = {
             return await response.json();
         } catch (error) {
             console.error("API Error: Could not fetch app config", error);
-            return { debug_mode: false, active_categories: ['Pravachan', 'Granth'] };
+            return { app_name: 'swalakshya', debug_mode: false, active_categories: ['Pravachan', 'Granth'] };
         }
     },
 

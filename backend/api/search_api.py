@@ -232,6 +232,7 @@ async def get_app_config(request: Request):
     """
     config = request.app.state.config
     return JSONResponse(content={
+        "app_name": config.APP_NAME,
         "debug_mode": config.DEBUG_MODE,
         "active_categories": config.ACTIVE_CATEGORIES,
         "page_size_pravachan": config.PAGE_SIZE_PRAVACHAN,

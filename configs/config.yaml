@@ -1,4 +1,7 @@
 # config.yaml
+app:
+  name: "swalakshya"
+
 crawler:
   base_pdf_path: "{HOME}/github/swalakshya/cataloguesearch-configs"
   base_text_path: "{HOME}/cataloguesearch/text"

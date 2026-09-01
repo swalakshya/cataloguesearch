@@ -152,6 +152,8 @@ class Config:
             return self._settings.get("vector_embeddings", {}).get("enable_reranker", True)
         elif name == "FILTERED_METADATA_FIELDS":
             return self._settings.get("search", {}).get("filtered_metadata_fields", {})
+        elif name == "APP_NAME":
+            return self._settings.get("app", {}).get("name", "swalakshya")
         elif name == "METRICS_DB_PATH":
             return os.environ.get("METRICS_DB_PATH")
         elif name == "DEBUG_MODE":
