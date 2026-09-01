@@ -1,10 +1,10 @@
 .searchable-content-widget {
-  background: #f8f9ff;
-  border: 1px solid #e2e8f0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 16px;
   margin: 0 0 16px 0;
-  color: #475569;
+  color: var(--color-ink-muted);
 }
 
 .widget-content {
@@ -24,12 +24,12 @@
   margin: 0 0 4px 0;
   font-size: 0.9rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-ink);
 }
 
 .widget-stats {
   font-size: 0.8rem;
-  color: #334155;
+  color: var(--color-ink-muted);
   font-weight: 500;
 }
 
@@ -40,7 +40,7 @@
 }
 
 .btn-link {
-  color: #0ea5e9;
+  color: var(--color-brand);
   text-decoration: none;
   font-size: 0.85rem;
   font-weight: 500;
@@ -50,8 +50,8 @@
 }
 
 .btn-link:hover {
-  background: #e0f2fe;
-  color: #0284c7;
+  background: color-mix(in srgb, var(--color-brand) 14%, var(--color-surface));
+  color: var(--color-brand-hover);
 }
 
 /* Responsive Design */

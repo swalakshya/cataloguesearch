@@ -187,7 +187,7 @@ const TypingGuide = () => {
                     "Look for the language indicator in your taskbar (usually shows 'ENG')",
                     "Click on it or press Windows + Space to switch languages",
                     "Select Hindi (HIN) or Gujarati (GUJ) from the list",
-                    "Open your web browser and go to the Aagam-Khoj search page",
+                    "Open your web browser and go to the Swalakshya Chat search page",
                     "Start typing in English - Windows will convert to Hindi/Gujarati script",
                     "Use spacebar to accept suggestions or continue typing",
                     "Press Windows + Space again to switch back to English"
@@ -223,7 +223,7 @@ const TypingGuide = () => {
                     "Look for the input source icon in your menu bar (top-right corner)",
                     "Click on it or press Control + Space (or Command + Space) to switch",
                     "Select Hindi or Gujarati from the dropdown menu",
-                    "Open your web browser and navigate to Aagam-Khoj",
+                    "Open your web browser and navigate to Swalakshya Chat",
                     "Start typing in the search box - macOS will convert English to Hindi/Gujarati",
                     "Use spacebar to accept suggestions from the candidate window",
                     "Switch back to English using the menu bar icon or keyboard shortcut"

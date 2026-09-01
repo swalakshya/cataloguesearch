@@ -1,3 +1,6 @@
+@import './styles/tokens.css';
+@import './styles/components.css';
+
 /* Import Tailwind CSS directives */
 @tailwind base;
 @tailwind components;
@@ -10,17 +13,17 @@ input[type="radio"] {
   -moz-appearance: none;
   width: 1rem;
   height: 1rem;
-  border: 2px solid #d1d5db;
+  border: 2px solid var(--color-border);
   border-radius: 50%;
-  background-color: white;
+  background-color: var(--color-surface);
   cursor: pointer;
   position: relative;
   transition: all 0.2s ease;
 }
 
 input[type="radio"]:checked {
-  border-color: #2563eb;
-  background-color: #2563eb;
+  border-color: var(--color-brand);
+  background-color: var(--color-brand);
 }
 
 input[type="radio"]:checked::after {
@@ -32,12 +35,12 @@ input[type="radio"]:checked::after {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background-color: white;
+  background-color: var(--color-surface);
 }
 
 input[type="radio"]:focus {
   outline: none;
-  box-shadow: 0 0 0 2px #3b82f6;
+  box-shadow: 0 0 0 2px var(--color-brand);
 }
 
 /* You can add any global custom styles here if needed */
@@ -72,8 +75,9 @@ code {
 
 /* Ensure the font-family is set correctly in your main CSS file (e.g., App.css) */
 body {
-  font-family: 'Noto Sans', 'Noto Sans Devanagari', sans-serif;
-  color: #1e293b; /* slate-800 — darker default so un-styled text is never washed out */
+  font-family: 'Noto Sans', 'Noto Sans Devanagari', 'Noto Sans Gujarati', sans-serif;
+  color: var(--color-ink);
+  background-color: var(--color-bg);
   font-weight: 450; /* between regular (400) and medium (500) — crisper without being bold */
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;

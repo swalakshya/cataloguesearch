@@ -104,7 +104,7 @@ const UsageGuide = () => {
             <div className="text-center py-6">
                 <h1 className="text-4xl font-bold text-slate-800 mb-4">Usage Guide</h1>
                 <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-                    Learn how to effectively search and navigate through Pujya Gurudev's pravachans using Aagam-Khoj.
+                    Learn how to effectively search and navigate through Pujya Gurudev's pravachans using Swalakshya Chat.
                 </p>
             </div>
 

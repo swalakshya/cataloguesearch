@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Search } from 'lucide-react';
 
 // Cap auto-grow height so a long paste doesn't take over the page -- past
 // this the textarea scrolls internally instead of growing further.
@@ -44,7 +45,11 @@ const TransliterationInput = ({
     disabled = false,
     topk = 5,
     debounceMs = 200,
-    storageKey = 'transliterationEnabled'
+    storageKey = 'transliterationEnabled',
+    // When true, renders without its own border/background/shadow so a parent
+    // container (e.g. ChatComposer) can present it as one seamless pill instead
+    // of a boxed input nested inside another box.
+    bare = false
 }) => {
     // Language code mapping
     const langCodeMap = {
@@ -360,7 +365,11 @@ const TransliterationInput = ({
     return (
         <div className="relative w-full">
             <div className="relative">
-                <span className="absolute left-2.5 top-1.5 text-sm pointer-events-none select-none">🔍</span>
+                <Search
+                    size={bare ? 18 : 14}
+                    className="absolute pointer-events-none text-ink-muted"
+                    style={bare ? { left: '0.75rem', top: '50%', transform: 'translateY(-50%)' } : { left: '0.6rem', top: '0.45rem' }}
+                />
                 <textarea
                     ref={inputRef}
                     rows={1}
@@ -371,11 +380,13 @@ const TransliterationInput = ({
                     disabled={disabled}
                     maxLength={MAX_QUERY_LENGTH}
                     style={{ scrollbarWidth: 'thin' }}
-                    className={`w-full min-h-8 pl-8 pr-3 py-1 text-sm bg-white border border-slate-400 shadow-sm rounded-sm resize-none overflow-y-auto focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-600 text-slate-900 font-sans disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-300 disabled:cursor-not-allowed ${className}`}
+                    className={bare
+                        ? `w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-base resize-none overflow-y-auto font-sans pl-9 pr-2 py-2 text-ink ${className}`
+                        : `field min-h-8 pl-8 pr-3 py-1 text-sm shadow-sm resize-none overflow-y-auto font-sans ${className}`}
                 />
             </div>
             {value.length > 0 && (
-                <div className="text-right text-[10px] leading-none text-slate-400 pt-0.5 pr-1 select-none">
+                <div className="text-right text-[10px] leading-none text-ink-muted pt-0.5 pr-1 select-none">
                     {value.length}/{MAX_QUERY_LENGTH}
                 </div>
             )}
@@ -384,17 +395,16 @@ const TransliterationInput = ({
             {showDropdown && suggestions.length > 0 && (
                 <div
                     ref={dropdownRef}
-                    className="absolute z-50 w-full mt-1 bg-white border border-slate-300 rounded-md shadow-lg max-h-60 overflow-y-auto"
+                    className="card absolute z-50 w-full mt-1 shadow-lg max-h-60 overflow-y-auto"
                 >
                     {suggestions.map((suggestion, index) => (
                         <div
                             key={index}
                             onClick={() => handleSuggestionClick(suggestion)}
-                            className={`px-4 py-2 cursor-pointer transition-colors ${
-                                index === selectedIndex
-                                    ? 'bg-sky-100 text-sky-900'
-                                    : 'bg-white text-slate-700 hover:bg-neutral-50'
-                            }`}
+                            className="suggestion-row px-4 py-2 cursor-pointer transition-colors"
+                            style={index === selectedIndex
+                                ? { backgroundColor: 'color-mix(in srgb, var(--color-brand) 14%, var(--color-surface))', color: 'var(--color-brand)' }
+                                : { color: 'var(--color-ink)' }}
                         >
                             <span className="text-lg">{suggestion}</span>
                         </div>

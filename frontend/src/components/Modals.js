@@ -351,7 +351,7 @@ export const WelcomeModal = ({ onClose, onGoToUsageGuide }) => {
                         <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-sky-100 mb-4">
                             <span className="text-2xl">🙏😊</span>
                         </div>
-                        <h2 className="text-2xl font-bold text-slate-800 mb-2">Welcome to Aagam Khoj!</h2>
+                        <h2 className="text-2xl font-bold text-slate-800 mb-2">Welcome to Swalakshya Chat!</h2>
                         <p className="text-slate-600 text-base leading-relaxed">
                             Please go through the "Usage Guide" to use this platform effectively.
                         </p>

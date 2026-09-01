@@ -281,7 +281,7 @@ const WhatsNew = () => {
             <div className="text-center py-6">
                 <h1 className="text-4xl font-bold text-slate-800 mb-4">What's New?</h1>
                 <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-                    Stay updated with the latest improvements, new content, and features added to Aagam-Khoj.
+                    Stay updated with the latest improvements, new content, and features added to Swalakshya Chat.
                 </p>
             </div>
 
@@ -342,7 +342,7 @@ const WhatsNew = () => {
                 <div className="bg-gradient-to-r from-sky-50 to-blue-50 rounded-lg p-8 border border-sky-100">
                     <h3 className="text-xl font-semibold text-slate-800 mb-3">Have suggestions for new features?</h3>
                     <p className="text-slate-600 mb-4">
-                        We're always looking to improve Aagam-Khoj based on your feedback and needs.
+                        We're always looking to improve Swalakshya Chat based on your feedback and needs.
                     </p>
                     <button
                         onClick={() => window.location.href = '/feedback'}

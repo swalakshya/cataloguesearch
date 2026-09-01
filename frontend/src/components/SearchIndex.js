@@ -230,7 +230,7 @@ const SearchIndex = () => {
 
       <div className="page-footer">
         <div className="footer-actions">
-          <Link to="/" className="btn btn-primary">
+          <Link to="/" className="si-btn si-btn-primary">
             Start Searching
           </Link>
         </div>

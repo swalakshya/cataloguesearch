@@ -260,7 +260,11 @@
   flex-wrap: wrap;
 }
 
-.btn {
+/* Prefixed (si-) so these never collide with the shared .btn/.btn-primary
+   classes in styles/components.css — plain CSS imports in CRA are global,
+   not scoped to this component, so an unprefixed name here would leak out
+   and override the app-wide button styling everywhere else. */
+.si-btn {
   padding: 12px 24px;
   border-radius: 8px;
   text-decoration: none;
@@ -271,23 +275,23 @@
   gap: 8px;
 }
 
-.btn-primary {
-  background: #0284c7;
+.si-btn-primary {
+  background: var(--color-brand);
   color: white;
 }
 
-.btn-primary:hover {
-  background: #0369a1;
+.si-btn-primary:hover {
+  background: var(--color-brand-hover);
 }
 
-.btn-secondary {
-  background: var(--bg-surface, #e2e8f0);
-  color: #1e293b;
-  border: 1px solid #cbd5e0;
+.si-btn-secondary {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  border: 1px solid var(--color-border);
 }
 
-.btn-secondary:hover {
-  background: #dce7f0;
+.si-btn-secondary:hover {
+  background: var(--color-surface);
 }
 
 .update-info {

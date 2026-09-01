@@ -43,16 +43,17 @@ const extractYearsFromMetadata = (metadata, selectedGranths, language) => {
 };
 
 // --- SEARCH INTERFACE COMPONENTS ---
-export const SearchBar = ({ query, setQuery, onSearch, language, disabled = false }) => {
+export const SearchBar = ({ query, setQuery, onSearch, language, disabled = false, bare = false, placeholder = 'Enter your search query...' }) => {
     return (
         <TransliterationInput
             value={query}
             onChange={setQuery}
             onSearch={onSearch}
             language={language}
-            placeholder="Enter your search query..."
+            placeholder={placeholder}
             autoFocus={true}
             disabled={disabled}
+            bare={bare}
         />
     );
 };

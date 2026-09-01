@@ -4,7 +4,8 @@ import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from
 import { GoogleReCaptchaProvider } from 'react-google-recaptcha-v3';
 
 // Import components
-import { Navigation, Header } from './components/Navigation';
+import Sidebar from './components/layout/Sidebar';
+import TopBar from './components/layout/TopBar';
 import AdminLoginPage from './components/admin/AdminLogin';
 import AdminPageComponent from './components/admin/AdminPage';
 import { SearchBar, MetadataFilters, SearchFilters, AdvancedSearch, SearchOptions } from './components/SearchInterface';
@@ -19,7 +20,12 @@ import DeveloperAPI from './components/DeveloperAPI';
 import SearchIndex from './components/SearchIndex';
 import UIEval from './components/eval/UIEval';
 import SearchableContentWidget from './components/SearchableContentWidget';
+import ChatComposer from './components/chat/ChatComposer';
+import StatsStrip from './components/chat/StatsStrip';
+import AiDisclaimer from './components/chat/AiDisclaimer';
 import { Spinner, ChevronUpIcon, ChevronDownIcon, ExpandIcon, PdfIcon } from './components/SharedComponents';
+import { Mic, ScrollText, BookOpen, FileText, ChevronDown, Sparkles, AlertTriangle, Mail, Home, MessageCircleQuestion, PenLine, Copy, Check } from 'lucide-react';
+import { Modal } from './components/ui';
 
 // Import API service
 import { api } from './services/api';
@@ -28,107 +34,74 @@ import { copyToClipboard } from './utils/shareUtils';
 
 // --- TIPS MODAL COMPONENT ---
 const TipsModal = ({ onClose }) => {
-    // Effect to handle 'Escape' key press for closing the modal
-    useEffect(() => {
-        const handleEsc = (event) => {
-            if (event.key === 'Escape') {
-                onClose();
-            }
-        };
-        window.addEventListener('keydown', handleEsc);
-
-        // Cleanup the event listener on component unmount
-        return () => {
-            window.removeEventListener('keydown', handleEsc);
-        };
-    }, [onClose]);
-
     return (
-        <div 
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-            onClick={onClose}
-        >
-            <div 
-                className="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
-                onClick={(e) => e.stopPropagation()}
-            >
-                <div className="p-6 border-b border-slate-200 sticky top-0 bg-white">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-2xl font-bold text-slate-800">Tips to write good queries</h2>
-                        <button onClick={onClose} className="text-slate-500 hover:text-slate-700 transition-colors">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
+        <Modal open onClose={onClose} title="Tips to write good queries" size="md">
+            <ul className="space-y-4 text-ink">
+                <li className="flex items-start">
+                    <span className="text-brand font-bold mr-3">1.</span>
+                    <span>Write in Hindi for the most accurate results.</span>
+                </li>
+                <li className="flex items-start">
+                    <span className="text-brand font-bold mr-3">2.</span>
+                    <span>For questions or specific phrases, end with punctuation like a question mark (?) or a Purn Viram (।).</span>
+                </li>
+                <li className="flex items-start">
+                    <span className="text-brand font-bold mr-3">3.</span>
+                    <span>If writing in English, avoid mixing in Hindi words written in the English alphabet (Hinglish).</span>
+                </li>
+            </ul>
+            <div className="mt-6">
+                <h3 className="text-lg font-semibold text-ink mb-3">Examples:</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <p className="font-semibold mb-2 text-ink">✅ Right</p>
+                        <ul className="space-y-2">
+                            <li className="badge-success rounded-md p-2 block" style={{ fontSize: 'inherit', fontWeight: 'normal' }}>"कुन्दकुन्दाचार्य विदेह"</li>
+                            <li className="badge-success rounded-md p-2 block" style={{ fontSize: 'inherit', fontWeight: 'normal' }}>"शुद्धभाव अधिकार"</li>
+                            <li className="badge-success rounded-md p-2 block" style={{ fontSize: 'inherit', fontWeight: 'normal' }}>"सम्यक् एकांत"</li>
+                            <li className="badge-success rounded-md p-2 block" style={{ fontSize: 'inherit', fontWeight: 'normal' }}>"दृष्टि का विषय क्या है?"</li>
+                            <li className="badge-success rounded-md p-2 block" style={{ fontSize: 'inherit', fontWeight: 'normal' }}>"कुन्दकुन्दाचार्य विदेह क्षेत्र कब गए थे?"</li>
+                            <li className="badge-success rounded-md p-2 block" style={{ fontSize: 'inherit', fontWeight: 'normal' }}>"Where does Seemandhar God reside?"</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <p className="font-semibold mb-2 text-ink">❌ Wrong</p>
+                        <ul className="space-y-2">
+                            <li className="badge-danger rounded-md p-2 block" style={{ fontSize: 'inherit', fontWeight: 'normal' }}>"सम्यक् एकांत क्या है"</li>
+                            <li className="badge-danger rounded-md p-2 block" style={{ fontSize: 'inherit', fontWeight: 'normal' }}>"Kundkund Acharya kaun hai?"</li>
+                        </ul>
                     </div>
                 </div>
-                <div className="p-6">
-                    <ul className="space-y-4 text-slate-700">
-                        <li className="flex items-start">
-                            <span className="text-sky-500 font-bold mr-3">1.</span>
-                            <span>Write in Hindi for the most accurate results.</span>
-                        </li>
-                        <li className="flex items-start">
-                            <span className="text-sky-500 font-bold mr-3">2.</span>
-                            <span>For questions or specific phrases, end with punctuation like a question mark (?) or a Purn Viram (।).</span>
-                        </li>
-                        <li className="flex items-start">
-                            <span className="text-sky-500 font-bold mr-3">3.</span>
-                            <span>If writing in English, avoid mixing in Hindi words written in the English alphabet (Hinglish).</span>
-                        </li>
-                    </ul>
-                    <div className="mt-6">
-                        <h3 className="text-lg font-semibold text-slate-800 mb-3">Examples:</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <p className="font-semibold mb-2">✅ Right</p>
-                                <ul className="space-y-2">
-                                    <li className="bg-green-50 border border-green-200 rounded-md p-2">"कुन्दकुन्दाचार्य विदेह"</li>
-                                    <li className="bg-green-50 border border-green-200 rounded-md p-2">"शुद्धभाव अधिकार"</li>
-                                    <li className="bg-green-50 border border-green-200 rounded-md p-2">"सम्यक् एकांत"</li>
-                                    <li className="bg-green-50 border border-green-200 rounded-md p-2">"दृष्टि का विषय क्या है?"</li>
-                                    <li className="bg-green-50 border border-green-200 rounded-md p-2">"कुन्दकुन्दाचार्य विदेह क्षेत्र कब गए थे?"</li>
-                                    <li className="bg-green-50 border border-green-200 rounded-md p-2">"Where does Seemandhar God reside?"</li>
-                                </ul>
-                            </div>
-                            <div>
-                                <p className="font-semibold mb-2">❌ Wrong</p>
-                                <ul className="space-y-2">
-                                    <li className="bg-red-50 border border-red-200 rounded-md p-2">"सम्यक् एकांत क्या है"</li>
-                                    <li className="bg-red-50 border border-red-200 rounded-md p-2">"Kundkund Acharya kaun hai?"</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    {/* Link to Typing Guide */}
-                    <div className="mt-6 pt-4 border-t border-slate-200">
-                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                            <div className="flex items-start">
-                                <svg className="w-5 h-5 text-amber-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                                <div>
-                                    <h4 className="font-semibold text-amber-800 mb-1">Need help typing in Hindi/Gujarati?</h4>
-                                    <p className="text-amber-700 text-sm mb-3">
-                                        Learn how to set up Hindi and Gujarati typing on your device for better search results.
-                                    </p>
-                                    <button
-                                        onClick={() => {
-                                            onClose();
-                                            window.location.href = '/usage-guide#typing-guide';
-                                        }}
-                                        className="bg-amber-600 text-white text-sm font-semibold py-2 px-4 rounded-md hover:bg-amber-700 transition-colors duration-200"
-                                    >
-                                        View Typing Setup Guide
-                                    </button>
-                                </div>
-                            </div>
+            </div>
+
+            {/* Link to Typing Guide */}
+            <div className="mt-6 pt-4" style={{ borderTop: '1px solid var(--color-border)' }}>
+                <div
+                    className="rounded-lg p-4"
+                    style={{ backgroundColor: 'color-mix(in srgb, var(--color-warning) 10%, var(--color-surface))', border: '1px solid color-mix(in srgb, var(--color-warning) 35%, transparent)' }}
+                >
+                    <div className="flex items-start">
+                        <PenLine size={18} className="mt-0.5 mr-3 flex-shrink-0" style={{ color: 'var(--color-warning)' }} />
+                        <div>
+                            <h4 className="font-semibold mb-1" style={{ color: 'var(--color-warning)' }}>Need help typing in Hindi/Gujarati?</h4>
+                            <p className="text-sm mb-3" style={{ color: 'var(--color-warning)' }}>
+                                Learn how to set up Hindi and Gujarati typing on your device for better search results.
+                            </p>
+                            <button
+                                onClick={() => {
+                                    onClose();
+                                    window.location.href = '/usage-guide#typing-guide';
+                                }}
+                                className="btn text-sm py-2 px-4"
+                                style={{ backgroundColor: 'var(--color-warning)', color: '#fff' }}
+                            >
+                                View Typing Setup Guide
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
+        </Modal>
     );
 };
 
@@ -216,29 +189,24 @@ const ShareAnswerButtons = ({ question, answer, citationBlocks }) => {
         <div className="flex items-center gap-2">
             <button
                 onClick={handleCopy}
-                className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 bg-white border border-slate-200 hover:border-slate-300 rounded px-2 py-1 transition-colors"
+                className="btn btn-secondary flex items-center gap-1.5 text-xs py-1 px-2"
                 title="Copy answer"
             >
                 {copied ? (
                     <>
-                        <svg className="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        <span className="text-green-600">Copied to clipboard</span>
+                        <Check size={14} style={{ color: 'var(--color-success)' }} />
+                        <span style={{ color: 'var(--color-success)' }}>Copied to clipboard</span>
                     </>
                 ) : (
                     <>
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <rect x="8" y="8" width="12" height="14" rx="2" strokeWidth={2} />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2h2" />
-                        </svg>
+                        <Copy size={14} />
                         <span>Copy</span>
                     </>
                 )}
             </button>
             <button
                 onClick={handleWhatsAppShare}
-                className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-green-700 bg-white border border-slate-200 hover:border-green-300 rounded px-2 py-1 transition-colors"
+                className="btn btn-secondary flex items-center gap-1.5 text-xs py-1 px-2"
                 title="Share on WhatsApp"
             >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
@@ -247,123 +215,6 @@ const ShareAnswerButtons = ({ question, answer, citationBlocks }) => {
                 </svg>
                 <span>WhatsApp</span>
             </button>
-        </div>
-    );
-};
-
-// --- CHAT FILTERS COMPONENT ---
-const CATEGORY_EMOJI = { Pravachan: '🎙️', Granth: '📜', Books: '📚' };
-
-const ChatFilters = ({ activeCategories, debugMode, chatContentTypes, setChatContentTypes, chatShastras, setChatShastras, allMetadata, language, dropUp = false }) => {
-    const [shastraOpen, setShastraOpen] = useState(false);
-    const dropdownRef = useRef(null);
-
-    useEffect(() => {
-        if (!shastraOpen) return;
-        const handle = (e) => { if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setShastraOpen(false); };
-        document.addEventListener('mousedown', handle);
-        return () => document.removeEventListener('mousedown', handle);
-    }, [shastraOpen]);
-
-    const shastraOptions = useMemo(() => {
-        const names = new Set();
-        chatContentTypes.forEach(cat => {
-            const catMeta = allMetadata[cat]?.[language];
-            if (catMeta?.Name) catMeta.Name.forEach(n => names.add(n));
-        });
-        return [...names].sort();
-    }, [chatContentTypes, allMetadata, language]);
-
-    useEffect(() => {
-        const valid = new Set(shastraOptions);
-        const filtered = chatShastras.filter(s => valid.has(s));
-        if (filtered.length !== chatShastras.length) setChatShastras(filtered);
-    }, [shastraOptions]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    const visibleCategories = [
-        ...activeCategories,
-        ...(debugMode && !activeCategories.includes('Books') ? ['Books'] : [])
-    ];
-
-    const toggleCategory = (cat) => {
-        setChatContentTypes(prev => {
-            if (prev.includes(cat)) {
-                if (prev.length === 1) return prev;
-                return prev.filter(c => c !== cat);
-            }
-            return [...prev, cat];
-        });
-    };
-
-    const toggleShastra = (name) => {
-        setChatShastras(prev =>
-            prev.includes(name) ? prev.filter(s => s !== name) : [...prev, name]
-        );
-    };
-
-    const shastraLabel = chatShastras.length === 0
-        ? 'All Shastras'
-        : chatShastras.length === 1
-            ? chatShastras[0]
-            : `${chatShastras.length} Shastras`;
-
-    return (
-        <div className="flex items-center gap-1.5 flex-wrap">
-            {visibleCategories.map(cat => {
-                const active = chatContentTypes.includes(cat);
-                return (
-                    <button
-                        key={cat}
-                        onClick={() => toggleCategory(cat)}
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-medium border transition-colors ${
-                            active ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-500 border-slate-300 hover:border-slate-400'
-                        }`}
-                    >
-                        <span>{CATEGORY_EMOJI[cat]}</span>
-                        <span>{cat}</span>
-                    </button>
-                );
-            })}
-            {shastraOptions.length > 0 && (
-                <div className="relative" ref={dropdownRef}>
-                    <button
-                        onClick={() => setShastraOpen(v => !v)}
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-medium border transition-colors ${
-                            chatShastras.length > 0 ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-500 border-slate-300 hover:border-slate-400'
-                        }`}
-                    >
-                        <span className="max-w-[160px] truncate">{shastraLabel}</span>
-                        <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={dropUp ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'} />
-                        </svg>
-                    </button>
-                    {shastraOpen && (
-                        <div className={`absolute ${dropUp ? 'bottom-full mb-1' : 'top-full mt-1'} left-0 z-50 bg-white border border-slate-200 rounded shadow-lg w-64 max-h-60 overflow-y-auto`}>
-                            {chatShastras.length > 0 && (
-                                <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between">
-                                    <span className="text-xs text-slate-500">{chatShastras.length} selected</span>
-                                    <button onClick={() => setChatShastras([])} className="text-xs text-sky-600 hover:text-sky-800 font-medium">Clear all</button>
-                                </div>
-                            )}
-                            {shastraOptions.map(name => {
-                                const selected = chatShastras.includes(name);
-                                return (
-                                    <button
-                                        key={name}
-                                        onClick={() => toggleShastra(name)}
-                                        className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-50 transition-colors flex items-center gap-2 ${selected ? 'text-sky-700' : 'text-slate-700'}`}
-                                    >
-                                        <span className={`w-3.5 h-3.5 flex-shrink-0 rounded border flex items-center justify-center ${selected ? 'bg-sky-600 border-sky-600' : 'border-slate-300'}`}>
-                                            {selected && <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
-                                        </span>
-                                        <span>{name}</span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
-            )}
         </div>
     );
 };
@@ -448,7 +299,6 @@ const AppContent = () => {
         setLlmError(null);
         setLlmLoading(false);
         setChatContentTypes([...activeCategories]);
-        setChatShastras([]);
         setHomeMode('search');
     };
 
@@ -491,7 +341,11 @@ const AppContent = () => {
     const [searchData, setSearchData] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [loadingCategories, setLoadingCategories] = useState(new Set());
-    const suggestedQueries = useMemo(() => getRandomSuggestedQueriesByLanguage(language, 5), [language]);
+    const [suggestedQueries, setSuggestedQueries] = useState(() => getRandomSuggestedQueriesByLanguage(language, 5));
+    const refreshSuggestedQueries = useCallback(() => {
+        setSuggestedQueries(getRandomSuggestedQueriesByLanguage(language, 5));
+    }, [language]);
+    useEffect(() => { refreshSuggestedQueries(); }, [language]); // eslint-disable-line react-hooks/exhaustive-deps
     const [compact, setCompact] = useState(() => localStorage.getItem('resultDensity') === 'compact');
     const toggleCompact = () => setCompact(v => { const next = !v; localStorage.setItem('resultDensity', next ? 'compact' : 'comfortable'); return next; });
     const [activeTab, setActiveTab] = useState('pravachan');
@@ -512,6 +366,7 @@ const AppContent = () => {
     // True while the Pravachan/Granth filter modal (SearchFilters) is open — used to
     // hide the mobile FABs below so they don't collide with the modal's Apply button.
     const [filterModalOpen, setFilterModalOpen] = useState(false);
+    const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
     const [llmAnswer, setLlmAnswer] = useState(null);
     const [llmReferences, setLlmReferences] = useState([]);
     const [llmCitations, setLlmCitations] = useState([]);
@@ -523,7 +378,6 @@ const AppContent = () => {
     const [chatInput, setChatInput] = useState('');
     const [chatInputVisible, setChatInputVisible] = useState(false);
     const [chatContentTypes, setChatContentTypes] = useState(['Pravachan', 'Granth']);
-    const [chatShastras, setChatShastras] = useState([]);
     const [expandedAnswers, setExpandedAnswers] = useState({});
     const PAGE_SIZE = 20;
     const llmProvider = (process.env.REACT_APP_LLM_PROVIDER || '').trim();
@@ -1042,8 +896,6 @@ const AppContent = () => {
                 filters.contributor = value;
             }
         });
-
-        if (isChatMode && chatShastras.length > 0) filters.granth = chatShastras;
 
         return filters;
     }
@@ -1709,7 +1561,7 @@ const AppContent = () => {
         });
         html = html.replace(/__ACTION_FEEDBACK_(\d+)__/g, (match, idx) => {
             const label = actionLabelParts[Number(idx)] || 'Feedback';
-            return `<button type="button" data-app-action="feedback" class="text-sky-700 underline decoration-sky-300 underline-offset-2 hover:text-sky-800 hover:decoration-sky-500 transition-colors">${escapeHtml(label)}</button>`;
+            return `<button type="button" data-app-action="feedback" class="text-brand underline decoration-brand underline-offset-2 hover:text-brand-hover transition-colors">${escapeHtml(label)}</button>`;
         });
 
         // Change #1: citation divs are display:block so they create their own line break;
@@ -1792,40 +1644,18 @@ const AppContent = () => {
         return url.endsWith(`/${page}`) ? url : `${url}/${page}`;
     };
 
+    // Each content category gets a distinct token-driven accent (not literal colors),
+    // so this stays correct under any of the 6 candidate palettes / dark mode.
     const getCitationCategoryMeta = (category) => {
         switch (category) {
             case 'Pravachan':
-                return {
-                    emoji: '🎙️',
-                    label: 'Pravachan',
-                    cardClassName: 'bg-white border-sky-200',
-                    badgeClassName: 'bg-sky-50 text-sky-700 border-sky-200',
-                    numberClassName: 'bg-sky-50 text-sky-700'
-                };
+                return { icon: Mic, label: 'Pravachan', colorVar: '--color-info' };
             case 'Granth':
-                return {
-                    emoji: '📜',
-                    label: 'Granth',
-                    cardClassName: 'bg-white border-rose-200',
-                    badgeClassName: 'bg-rose-50 text-rose-700 border-rose-200',
-                    numberClassName: 'bg-rose-50 text-rose-700'
-                };
+                return { icon: ScrollText, label: 'Granth', colorVar: '--color-brand' };
             case 'Books':
-                return {
-                    emoji: '📚',
-                    label: 'Books',
-                    cardClassName: 'bg-white border-emerald-200',
-                    badgeClassName: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-                    numberClassName: 'bg-emerald-50 text-emerald-700'
-                };
+                return { icon: BookOpen, label: 'Books', colorVar: '--color-success' };
             default:
-                return {
-                    emoji: '📄',
-                    label: 'Reference',
-                    cardClassName: 'bg-slate-50 border-slate-200',
-                    badgeClassName: 'bg-slate-100 text-slate-700 border-slate-200',
-                    numberClassName: 'bg-slate-200 text-slate-600'
-                };
+                return { icon: FileText, label: 'Reference', colorVar: '--color-ink-muted' };
         }
     };
 
@@ -1853,9 +1683,7 @@ const AppContent = () => {
         const categoryMeta = getCitationCategoryMeta(citation?.category);
         const locationLabel = getCitationLocationLabel(citation);
         const granthLineBase = citation?.granth || fallback.text || ref;
-        const title = locationLabel
-            ? `${categoryMeta.emoji} ${granthLineBase} (${locationLabel})`
-            : `${categoryMeta.emoji} ${granthLineBase}`;
+        const title = locationLabel ? `${granthLineBase} (${locationLabel})` : granthLineBase;
         const speaker = citation?.pravachankar || citation?.Pravachankar;
 
         const detailParts = [];
@@ -1881,9 +1709,8 @@ const AppContent = () => {
             title,
             lines,
             categoryLabel: categoryMeta.label,
-            cardClassName: categoryMeta.cardClassName,
-            badgeClassName: categoryMeta.badgeClassName,
-            numberClassName: categoryMeta.numberClassName,
+            categoryIcon: categoryMeta.icon,
+            colorVar: categoryMeta.colorVar,
             readChunkId: citation?.chunk_id || null,
             viewPdfUrl: buildReferencePdfUrl(
                 citation?.file_url || fallback.url || null,
@@ -1894,7 +1721,7 @@ const AppContent = () => {
     };
 
     return (
-        <div style={{ backgroundColor: '#f0f4f9', '--bg-card': '#ffffff', '--bg-surface': '#dce7f0' }} className="text-slate-900 min-h-screen font-sans">
+        <div style={{ backgroundColor: 'var(--color-bg)', '--bg-card': 'var(--color-surface)', '--bg-surface': 'var(--color-bg)' }} className="text-ink min-h-screen font-sans flex items-start">
             {modalData && (
                 <ExpandModal
                     data={modalData}
@@ -1933,20 +1760,32 @@ const AppContent = () => {
             {showTipsModal && <TipsModal onClose={() => setShowTipsModal(false)} />}
             
             {debugMode && (
-                <div className="fixed bottom-4 left-4 z-50 bg-orange-500 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg select-none" title="Debug mode is on — all categories visible. Never enabled in production.">
+                <div className="fixed bottom-4 left-4 z-50 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg select-none" style={{ backgroundColor: 'var(--color-danger)' }} title="Debug mode is on — all categories visible. Never enabled in production.">
                     DEBUG
                 </div>
             )}
-            <Navigation currentPage={currentPage} setCurrentPage={setCurrentPage} debugMode={debugMode} isChatMode={isChatMode} onNewChat={handleNewChat} />
-            
-            <div className="container mx-auto p-4 md:p-5">
+            <Sidebar
+                currentPage={currentPage}
+                setCurrentPage={setCurrentPage}
+                onNewChat={handleNewChat}
+                mobileOpen={sidebarMobileOpen}
+                onCloseMobile={() => setSidebarMobileOpen(false)}
+            />
+
+            <div className="flex-1 flex flex-col min-w-0">
+                <TopBar
+                    currentPage={currentPage}
+                    setCurrentPage={setCurrentPage}
+                    onOpenMobileSidebar={() => setSidebarMobileOpen(true)}
+                />
+
+                <div className="p-4 md:p-5">
                 <div className="max-w-[1080px] mx-auto">
-                    <Header currentPage={currentPage} />
 
                     {currentPage === 'chat' && !llmAvailable && (
                         <main>
                             <div className="text-center py-16">
-                                <p className="text-slate-500 text-lg">AI Service is unavailable right now.</p>
+                                <p className="text-ink-muted text-lg">AI Service is unavailable right now.</p>
                             </div>
                         </main>
                     )}
@@ -1958,7 +1797,7 @@ const AppContent = () => {
                             {!isChatMode && (
                                 <>
                                     <SearchableContentWidget />
-                                    <div style={{ backgroundColor: 'var(--bg-card)' }} className="bg-white p-3 rounded shadow-sm border border-slate-200 mb-4">
+                                    <div className="card p-3 shadow-sm mb-4">
                                         <div className="flex items-end gap-2">
                                             <div className="flex-grow">
                                                 <SearchBar
@@ -1971,7 +1810,7 @@ const AppContent = () => {
                                             <button
                                                 onClick={() => handleSearch(1)}
                                                 disabled={isLoading}
-                                                className="bg-sky-600 text-white font-semibold h-8 px-4 rounded text-sm hover:bg-sky-700 active:bg-sky-800 transition duration-200 disabled:bg-slate-300 flex items-center justify-center whitespace-nowrap shrink-0"
+                                                className="btn btn-primary h-8 px-4 py-0 text-sm whitespace-nowrap shrink-0"
                                             >
                                                 {isLoading ? <Spinner /> : 'Search'}
                                             </button>
@@ -1979,14 +1818,14 @@ const AppContent = () => {
                                         <div className="flex items-center justify-between mt-3">
                                             <button
                                                 onClick={() => setShowFilters(!showFilters)}
-                                                className="flex items-center text-sky-700 font-semibold hover:text-sky-800 text-sm whitespace-nowrap"
+                                                className="flex items-center text-brand font-semibold hover:text-brand-hover text-sm whitespace-nowrap"
                                             >
                                                 {showFilters ? <ChevronUpIcon /> : <ChevronDownIcon />}
                                                 {showFilters ? 'Hide Filters' : 'Show Filters'}
                                             </button>
                                             <button
                                                 onClick={() => setShowTipsModal(true)}
-                                                className="flex items-center text-sky-700 font-semibold hover:text-sky-800 text-sm"
+                                                className="flex items-center text-brand font-semibold hover:text-brand-hover text-sm"
                                                 aria-label="Show search tips"
                                             >
                                                 <ExpandIcon />
@@ -1994,7 +1833,7 @@ const AppContent = () => {
                                             </button>
                                         </div>
                                         {showFilters && (
-                                            <div className="mt-4 border-t border-slate-200 pt-4">
+                                            <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--color-border)' }}>
                                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                                                     <SearchFilters
                                                         allMetadata={allMetadata}
@@ -2026,44 +1865,45 @@ const AppContent = () => {
                                     </div>
 
                                     {homeMode && llmAvailable && (llmAnswer || llmError || llmLoading) && (
-                                        <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 mb-4">
+                                        <div className="card p-4 shadow-sm mb-4">
                                             <div className="flex items-center justify-between mb-3">
-                                                <h3 className="text-lg font-semibold text-slate-800">Answer</h3>
+                                                <h3 className="text-lg font-semibold text-ink">Answer</h3>
                                                 {llmLoading && (
-                                                    <div className="flex items-center text-sm text-slate-500">
+                                                    <div className="flex items-center text-sm text-ink-muted">
                                                         <img src="/images/swalakshya.png" className="h-5 w-5 animate-pulse rounded-full mr-2" alt="" />
                                                         Generating...
                                                     </div>
                                                 )}
                                             </div>
-                                            {llmError && <div className="text-red-600 text-sm">{llmError}</div>}
+                                            {llmError && <div className="text-sm" style={{ color: 'var(--color-danger)' }}>{llmError}</div>}
                                             {(llmAnswer || llmReferences.length > 0) && (
                                                 <div className="llm-answer-scroll">
                                                     {llmAnswer && (
-                                                        <div className="text-slate-800 leading-relaxed text-base"
+                                                        <div className="text-ink leading-relaxed text-base"
                                                             onClick={handleAnswerActionClick}
                                                             dangerouslySetInnerHTML={{ __html: formatAnswerHtml(llmAnswer) }} />
                                                     )}
                                                     {llmReferences.length > 0 && (
-                                                        <div className="mt-4 border-t border-slate-200 pt-3">
-                                                            <h4 className="text-sm font-semibold text-slate-600 uppercase tracking-wider mb-2">References</h4>
+                                                        <div className="mt-4 pt-3" style={{ borderTop: '1px solid var(--color-border)' }}>
+                                                            <h4 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-2">References</h4>
                                                             <div className="space-y-2">
                                                                 {llmReferences.map((ref, idx) => {
                                                                     const { text, url } = parseReference(ref);
                                                                     const citation = llmCitations.find(c => c.reference === ref);
                                                                     return (
-                                                                        <div key={`${ref}-${idx}`} className="flex items-center justify-between gap-3 text-sm text-slate-700">
+                                                                        <div key={`${ref}-${idx}`} className="flex items-center justify-between gap-3 text-sm text-ink">
                                                                             <span className="flex-1">{text || ref}</span>
                                                                             <div className="flex items-center gap-2 whitespace-nowrap">
                                                                                 {citation && (
                                                                                     <button onClick={() => handleExpand(citation.chunk_id)}
-                                                                                        className="text-slate-500 hover:text-slate-800 font-medium underline underline-offset-2">
+                                                                                        className="text-ink-muted hover:text-ink font-medium underline underline-offset-2">
                                                                                         View text
                                                                                     </button>
                                                                                 )}
                                                                                 {url && (
                                                                                     <a href={url} target="_blank" rel="noopener noreferrer"
-                                                                                        className="inline-flex items-center gap-1 text-sm text-red-600 hover:text-red-700 bg-white border border-slate-300 rounded px-2 py-1 hover:border-red-300 transition-colors">
+                                                                                        className="btn btn-secondary inline-flex items-center gap-1 text-sm py-1 px-2"
+                                                                                        style={{ color: 'var(--color-danger)' }}>
                                                                                         <PdfIcon />View PDF
                                                                                     </a>
                                                                                 )}
@@ -2089,13 +1929,13 @@ const AppContent = () => {
                                             />
                                             {searchData && query && (
                                                 <div className="flex items-center justify-between mb-2">
-                                                    <p className="text-sm text-slate-900">
-                                                        <span className="font-semibold text-slate-900">
+                                                    <p className="text-sm text-ink">
+                                                        <span className="font-semibold text-ink">
                                                             {((searchData.pravachan_results?.total_hits || 0) + (searchData.granth_results?.total_hits || 0) + (searchData.books_results?.total_hits || 0)).toLocaleString()}
-                                                        </span> results for <span className="font-semibold text-slate-800">"{query}"</span>
+                                                        </span> results for <span className="font-semibold text-ink">"{query}"</span>
                                                     </p>
                                                     <button onClick={toggleCompact}
-                                                        className="text-xs text-slate-700 hover:text-slate-900 flex items-center gap-1 transition-colors font-medium"
+                                                        className="text-xs text-ink-muted hover:text-ink flex items-center gap-1 transition-colors font-medium"
                                                         title={compact ? 'Switch to comfortable view' : 'Switch to compact view'}>
                                                         {compact ? (
                                                             <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor"><rect y="2" width="16" height="2" rx="1"/><rect y="7" width="16" height="2" rx="1"/><rect y="12" width="16" height="2" rx="1"/></svg>
@@ -2106,13 +1946,14 @@ const AppContent = () => {
                                                     </button>
                                                 </div>
                                             )}
-                                            <div className="flex items-start gap-2.5 px-3.5 py-2.5 mb-3 bg-amber-50 border border-amber-200 rounded text-amber-800 text-xs leading-relaxed">
-                                                <svg className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                                                </svg>
+                                            <div
+                                                className="flex items-start gap-2.5 px-3.5 py-2.5 mb-3 rounded text-xs leading-relaxed"
+                                                style={{ backgroundColor: 'color-mix(in srgb, var(--color-warning) 12%, var(--color-surface))', border: '1px solid color-mix(in srgb, var(--color-warning) 35%, transparent)', color: 'var(--color-warning)' }}
+                                            >
+                                                <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
                                                 <span><strong>Note:</strong> Text from Pravachans and Granths is extracted via OCR and results are ranked by AI — both may contain errors. For <strong>accurate reference</strong>, please use the <strong>original PDFs</strong> linked alongside each result.</span>
                                             </div>
-                                            <div style={{ backgroundColor: 'var(--bg-card)' }} className="border border-slate-200 rounded shadow-sm overflow-hidden">
+                                            <div className="card overflow-hidden">
                                                 <Tabs activeTab={activeTab} setActiveTab={setActiveTab} searchData={searchData}
                                                     similarDocumentsData={similarDocumentsData} onClearSimilar={handleClearSimilar}
                                                     loadingCategories={loadingCategories} activeCategories={activeCategories} />
@@ -2147,7 +1988,7 @@ const AppContent = () => {
                                                                 resultType="similar" onFindSimilar={handleFindSimilar} onExpand={handleExpand}
                                                                 searchType={searchType} query={query} currentFilters={activeFilters} compact={compact} language={language} />
                                                         ) : (
-                                                            <div className="text-center py-8 text-sm text-slate-500">No similar documents found.</div>
+                                                            <div className="text-center py-8 text-sm text-ink-muted">No similar documents found.</div>
                                                         )}
                                                     </div>
                                                 )}
@@ -2157,11 +1998,11 @@ const AppContent = () => {
 
                                     {homeMode && !isLoading && !searchData && !similarDocumentsData && (
                                         <div className="mt-5">
-                                            <p className="text-xs text-slate-400 uppercase tracking-wider mb-2.5 font-medium">Try searching for</p>
+                                            <p className="text-xs text-ink-muted uppercase tracking-wider mb-2.5 font-medium">Try searching for</p>
                                             <div className="flex flex-wrap gap-2">
                                                 {suggestedQueries.map(term => (
                                                     <button key={term} onClick={() => handleSuggestionClick(term)}
-                                                        className="px-3 py-1 text-sm bg-white border border-slate-200 rounded text-slate-600 hover:border-sky-300 hover:text-sky-700 hover:bg-sky-50 transition-colors">
+                                                        className="suggestion-chip px-3 py-1 text-sm rounded transition-colors">
                                                         {term}
                                                     </button>
                                                 ))}
@@ -2178,74 +2019,42 @@ const AppContent = () => {
                                     {chatMessages.length === 0 && !llmLoading && (
                                         <div className="flex flex-col items-center justify-center py-16">
                                             <div className="w-full max-w-4xl space-y-2">
-                                                <div className="w-full">
-                                                    <SearchableContentWidget />
+                                                <div className="text-center mb-12">
+                                                    <h1 className="text-4xl font-bold text-ink tracking-tight">Swalakshya AI</h1>
+                                                    <p className="mt-2 text-ink-muted max-w-xl mx-auto">Get your questions answered through authentic Jain Scriptures and teachings of Pujya Gurudevshri Kanji Swami</p>
                                                 </div>
-                                                <div className="w-full">
-                                                    <div className="rounded-lg border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3 transition-colors focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100">
-                                                        <div className="flex items-end gap-2">
-                                                            <div className="relative shrink-0 group">
-                                                                <button
-                                                                    onClick={handleNewChat}
-                                                                    title="New Chat"
-                                                                    className="h-8 w-8 flex items-center justify-center rounded-full border border-sky-300 bg-sky-100 text-sky-700 hover:bg-sky-200 hover:border-sky-400 transition-colors"
-                                                                >
-                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                                                                </button>
-                                                                <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 hidden -translate-x-1/2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 shadow-sm opacity-0 transition-opacity duration-150 group-hover:opacity-100 md:block">
-                                                                    New chat
-                                                                </span>
-                                                            </div>
-                                                            <div className="flex-grow">
-                                                                <SearchBar
-                                                                    query={query}
-                                                                    setQuery={setQuery}
-                                                                    onSearch={() => query.trim() && handleChatStart(query)}
-                                                                    language={language}
-                                                                />
-                                                            </div>
-                                                            <button
-                                                                onClick={() => query.trim() && handleChatStart(query)}
-                                                                disabled={!query.trim()}
-                                                                className="bg-sky-600 text-white h-8 w-8 rounded-full border border-sky-700 hover:bg-sky-700 hover:border-sky-800 transition duration-200 disabled:bg-slate-200 disabled:text-slate-400 disabled:border-slate-300 flex items-center justify-center shrink-0"
-                                                                aria-label="Send"
-                                                            >
-                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
-                                                                </svg>
-                                                            </button>
-                                                        </div>
-                                                        <div className="mt-1.5 border-t border-slate-100 pt-1.5 flex items-center gap-2 pl-10">
-                                                            <ChatFilters
-                                                                activeCategories={activeCategories}
-                                                                debugMode={debugMode}
-                                                                chatContentTypes={chatContentTypes}
-                                                                setChatContentTypes={setChatContentTypes}
-                                                                chatShastras={chatShastras}
-                                                                setChatShastras={setChatShastras}
-                                                                allMetadata={allMetadata}
-                                                                language={language}
-                                                                dropUp={false}
-                                                            />
-                                                        </div>
+                                                <ChatComposer
+                                                    query={query}
+                                                    setQuery={setQuery}
+                                                    onSend={() => query.trim() && handleChatStart(query)}
+                                                    language={language}
+                                                    activeCategories={activeCategories}
+                                                    debugMode={debugMode}
+                                                    chatContentTypes={chatContentTypes}
+                                                    setChatContentTypes={setChatContentTypes}
+                                                    showDisclaimer={false}
+                                                />
+                                                <div className="w-full pt-10">
+                                                    <div className="flex items-center gap-3 mb-4">
+                                                        <div className="flex-1 h-px" style={{ backgroundColor: 'var(--color-border)' }} />
+                                                        <p className="text-xs text-ink-muted uppercase tracking-wider font-medium whitespace-nowrap">Try asking</p>
+                                                        <div className="flex-1 h-px" style={{ backgroundColor: 'var(--color-border)' }} />
                                                     </div>
-                                                </div>
-                                                <div className="flex items-start gap-2.5 px-3.5 py-2.5 bg-amber-50/80 border border-amber-200 rounded text-amber-800 text-[11px] leading-relaxed">
-                                                    <svg className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                                                    </svg>
-                                                    <span>Swalakshya AI Bot uses AI to generate answers, which may sometimes be <strong>inaccurate</strong>. Always refer to the <strong>original scriptures and references</strong> attached to each answer to study authentic content and <strong>stay true to Jinvaani</strong>. Use this bot as a <strong>starting point</strong>, not as a <strong>definitive source</strong>.</span>
-                                                </div>
-                                                <div className="w-full pt-1">
-                                                    <p className="text-xs text-slate-400 uppercase tracking-wider mb-3 font-medium text-center">Try asking</p>
-                                                    <div className="flex flex-wrap gap-2 justify-center">
+                                                    <div className="flex flex-wrap items-center gap-2 justify-center">
                                                         {suggestedQueries.map(term => (
                                                             <button key={term} onClick={() => handleChatStart(term)}
-                                                                className="px-3 py-1 text-sm bg-white border border-slate-200 rounded text-slate-600 hover:border-lime-300 hover:text-lime-700 hover:bg-lime-50 transition-colors">
+                                                                className="suggestion-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded transition-colors">
+                                                                <Sparkles size={13} style={{ color: 'var(--color-brand)' }} />
                                                                 {term}
                                                             </button>
                                                         ))}
                                                     </div>
+                                                </div>
+                                                <div className="w-full pt-8">
+                                                    <StatsStrip />
+                                                </div>
+                                                <div className="w-full pt-1">
+                                                    <AiDisclaimer />
                                                 </div>
                                             </div>
                                         </div>
@@ -2271,7 +2080,7 @@ const AppContent = () => {
                                                     <div key={msg.localId ? `${msg.role}-${msg.localId}` : `${msg.role}-${idx}`}>
                                                         {msg.role === 'user' ? (
                                                             <div ref={isLastUser ? latestUserBubbleRef : null} className="flex justify-end">
-                                                                <div className="bg-sky-600 shadow-sm rounded-lg rounded-tr-none px-4 py-2.5 max-w-[72%] text-white text-base">
+                                                                <div className="shadow-sm rounded-lg rounded-tr-none px-4 py-2.5 max-w-[72%] text-white text-base" style={{ backgroundColor: 'var(--color-brand)' }}>
                                                                     {msg.content}
                                                                 </div>
                                                             </div>
@@ -2285,9 +2094,9 @@ const AppContent = () => {
                                                                 />
                                                                 <div className="flex-1">
                                                                 {msg.pending ? (
-                                                                    <div className="flex items-center text-sm text-slate-600 gap-2">
+                                                                    <div className="flex items-center text-sm text-ink-muted gap-2">
                                                                         <span>{msg.stageLabel || 'Preparing answer'}</span>
-                                                                        <span className="flex items-center text-lime-600" aria-hidden="true">
+                                                                        <span className="flex items-center text-brand" aria-hidden="true">
                                                                             <span className="inline-block animate-bounce">.</span>
                                                                             <span className="inline-block animate-bounce" style={{ animationDelay: '0.15s' }}>.</span>
                                                                             <span className="inline-block animate-bounce" style={{ animationDelay: '0.3s' }}>.</span>
@@ -2297,11 +2106,11 @@ const AppContent = () => {
                                                                     <>
                                                                         <div className="flex items-start justify-between gap-3 mb-3 max-w-3xl">
                                                                             <div>
-                                                                                <div className="text-sm font-bold uppercase tracking-[0.12em] text-slate-900">Answer</div>
+                                                                                <div className="text-sm font-bold uppercase tracking-[0.12em] text-ink">Answer</div>
                                                                             </div>
                                                                         </div>
                                                                         <div className="max-w-3xl">
-                                                                            <div className={`text-slate-900 leading-relaxed text-base ${displayedTexts[key] === cleanAnswerText(msg.content) && shouldCollapseAnswer(msg.content) && expandedAnswers[key] === false ? 'max-h-72 overflow-hidden' : ''}`}
+                                                                            <div className={`text-ink leading-relaxed text-base ${displayedTexts[key] === cleanAnswerText(msg.content) && shouldCollapseAnswer(msg.content) && expandedAnswers[key] === false ? 'max-h-72 overflow-hidden' : ''}`}
                                                                                 onClick={handleAnswerActionClick}
                                                                                 dangerouslySetInnerHTML={{ __html: formatAnswerHtml(
                                                                                     resolveChunkQuotes(
@@ -2314,7 +2123,7 @@ const AppContent = () => {
                                                                             {displayedTexts[key] === cleanAnswerText(msg.content) && shouldCollapseAnswer(msg.content) && (
                                                                                 <button
                                                                                     onClick={() => setExpandedAnswers(prev => ({ ...prev, [key]: prev[key] === false }))}
-                                                                                    className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-sky-700 hover:text-sky-800 transition-colors"
+                                                                                    className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-brand hover:text-brand-hover transition-colors"
                                                                                 >
                                                                                     {expandedAnswers[key] === false ? 'Show more' : 'Show less'}
                                                                                 </button>
@@ -2326,9 +2135,13 @@ const AppContent = () => {
                                                                             </div>
                                                                         )}
                                                                         {displayedTexts[key] === cleanAnswerText(msg.content) && msg.follow_up_questions && msg.follow_up_questions.length > 0 && (
-                                                                            <div className="mt-8 w-full rounded-md border border-sky-200 bg-sky-50 p-4">
-                                                                                <p className="text-xs font-bold uppercase tracking-wide text-sky-800 mb-2.5">
-                                                                                    💡 Suggested Follow up questions
+                                                                            <div
+                                                                                className="mt-8 w-full rounded-md p-4"
+                                                                                style={{ border: '1px solid color-mix(in srgb, var(--color-brand) 30%, var(--color-border))', backgroundColor: 'color-mix(in srgb, var(--color-brand) 8%, var(--color-surface))' }}
+                                                                            >
+                                                                                <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide mb-2.5" style={{ color: 'var(--color-brand)' }}>
+                                                                                    <MessageCircleQuestion size={13} />
+                                                                                    Suggested Follow up questions
                                                                                 </p>
                                                                                 <div className="flex flex-wrap gap-2">
                                                                                     {msg.follow_up_questions.map((question, questionIdx) => (
@@ -2336,7 +2149,7 @@ const AppContent = () => {
                                                                                             key={`${idx}-follow-up-${questionIdx}`}
                                                                                             onClick={() => handleChatSend(chatSessionId, question)}
                                                                                             disabled={llmLoading || !chatSessionId}
-                                                                                            className="px-3 py-1 text-sm bg-white border border-sky-200 rounded text-sky-900 hover:border-sky-300 hover:text-sky-950 hover:bg-sky-50 transition-colors disabled:bg-sky-50 disabled:text-slate-400 disabled:border-sky-100"
+                                                                                            className="suggestion-chip px-3 py-1 text-sm rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                                                         >
                                                                                             {question}
                                                                                         </button>
@@ -2345,12 +2158,19 @@ const AppContent = () => {
                                                                             </div>
                                                                         )}
                                                                         {displayedTexts[key] === cleanAnswerText(msg.content) && msg.references && msg.references.length > 0 && (
-                                                                            <div className="mt-5 w-full rounded-md border border-sky-200 bg-sky-50 p-4">
-                                                                                <h4 className="text-xs font-bold uppercase tracking-wide text-sky-800 mb-3">📖 References</h4>
+                                                                            <div
+                                                                                className="mt-5 w-full rounded-md p-4"
+                                                                                style={{ border: '1px solid color-mix(in srgb, var(--color-brand) 30%, var(--color-border))', backgroundColor: 'color-mix(in srgb, var(--color-brand) 8%, var(--color-surface))' }}
+                                                                            >
+                                                                                <h4 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide mb-3" style={{ color: 'var(--color-brand)' }}>
+                                                                                    <BookOpen size={13} />
+                                                                                    References
+                                                                                </h4>
                                                                                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                                                                                     {msg.references.map((ref, refIdx) => {
                                                                                         const citation = (msg.citations || []).find(c => c.reference === ref) || msg.citations?.[refIdx];
                                                                                         const card = getAibotReferenceCardData(citation, ref);
+                                                                                        const CategoryIcon = card.categoryIcon;
                                                                                         const handleCardActivate = () => {
                                                                                             if (card.readChunkId) {
                                                                                                 handleExpand(card.readChunkId);
@@ -2371,17 +2191,27 @@ const AppContent = () => {
                                                                                                 } : undefined}
                                                                                                 role={isCardInteractive ? 'button' : undefined}
                                                                                                 tabIndex={isCardInteractive ? 0 : undefined}
-                                                                                                className={`flex flex-col justify-between border rounded p-3 text-sm transition-shadow ${card.cardClassName} ${isCardInteractive ? 'cursor-pointer hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-200' : ''}`}
+                                                                                                className={`card flex flex-col justify-between p-3 text-sm transition-shadow ${isCardInteractive ? 'cursor-pointer hover:shadow-sm' : ''}`}
+                                                                                                style={{ borderColor: `var(${card.colorVar})` }}
                                                                                             >
                                                                                                 <div className="mb-3">
                                                                                                     <div className="mb-2 flex items-start justify-between gap-2">
-                                                                                                        <span className={`inline-block text-xs font-bold rounded px-1.5 py-0.5 ${card.numberClassName}`}>{refIdx + 1}</span>
-                                                                                                        <span className={`inline-flex items-center rounded border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.06em] ${card.badgeClassName}`}>
+                                                                                                        <span
+                                                                                                            className="inline-block text-xs font-bold rounded px-1.5 py-0.5"
+                                                                                                            style={{ backgroundColor: `color-mix(in srgb, var(${card.colorVar}) 14%, var(--color-surface))`, color: `var(${card.colorVar})` }}
+                                                                                                        >
+                                                                                                            {refIdx + 1}
+                                                                                                        </span>
+                                                                                                        <span
+                                                                                                            className="inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.06em]"
+                                                                                                            style={{ backgroundColor: `color-mix(in srgb, var(${card.colorVar}) 14%, var(--color-surface))`, color: `var(${card.colorVar})`, borderColor: `color-mix(in srgb, var(${card.colorVar}) 35%, transparent)` }}
+                                                                                                        >
+                                                                                                            {CategoryIcon && <CategoryIcon size={10} />}
                                                                                                             {card.categoryLabel}
                                                                                                         </span>
                                                                                                     </div>
-                                                                                                    <p className="font-bold text-slate-900 leading-snug">{card.title}</p>
-                                                                                                    <div className="mt-2 space-y-1 text-slate-800 leading-snug">
+                                                                                                    <p className="font-bold text-ink leading-snug">{card.title}</p>
+                                                                                                    <div className="mt-2 space-y-1 text-ink leading-snug">
                                                                                                         {card.lines.map((line, lineIdx) => (
                                                                                                             <p key={`${refIdx}-${lineIdx}`} className="break-words">
                                                                                                                 {line}
@@ -2395,14 +2225,15 @@ const AppContent = () => {
                                                                                                             event.stopPropagation();
                                                                                                             handleExpand(card.readChunkId);
                                                                                                         }}
-                                                                                                            className="flex items-center gap-1 text-xs text-slate-600 hover:text-slate-900 bg-white border border-slate-300 rounded px-2 py-1 transition-colors">
+                                                                                                            className="btn btn-secondary text-xs py-1 px-2">
                                                                                                             Expand
                                                                                                         </button>
                                                                                                     )}
                                                                                                     {card.viewPdfUrl && (
                                                                                                         <a href={card.viewPdfUrl} target="_blank" rel="noopener noreferrer"
                                                                                                             onClick={(event) => event.stopPropagation()}
-                                                                                                            className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700 bg-white border border-slate-300 rounded px-2 py-1 hover:border-red-300 transition-colors">
+                                                                                                            className="btn btn-secondary inline-flex items-center gap-1 text-xs py-1 px-2"
+                                                                                                            style={{ color: 'var(--color-danger)' }}>
                                                                                                             <PdfIcon />View PDF
                                                                                                         </a>
                                                                                                     )}
@@ -2433,7 +2264,7 @@ const AppContent = () => {
                                                     );
                                                 });
                                                 })()}
-                                                {llmError && <div className="text-red-600 text-sm">{llmError}</div>}
+                                                {llmError && <div className="text-sm" style={{ color: 'var(--color-danger)' }}>{llmError}</div>}
                                                 <div ref={messagesEndRef} />
                                                 {/* Spacer while loading so the new user bubble can always reach the top of the viewport */}
                                                 {llmLoading && <div style={{ height: '70vh', flexShrink: 0 }} aria-hidden="true" />}
@@ -2443,78 +2274,39 @@ const AppContent = () => {
                                             {showScrollDown && (
                                                 <button
                                                     onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
-                                                    className="fixed bottom-28 left-1/2 -translate-x-1/2 z-40 h-9 w-9 rounded-full bg-sky-600 text-white shadow-lg flex items-center justify-center hover:bg-sky-700 transition-colors"
+                                                    className="btn btn-primary fixed bottom-28 left-1/2 -translate-x-1/2 z-40 h-9 w-9 rounded-full p-0 shadow-lg"
                                                     aria-label="Scroll to bottom"
                                                 >
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                                                    </svg>
+                                                    <ChevronDown size={16} strokeWidth={2.5} />
                                                 </button>
                                             )}
 
                                             {/* Sticky bottom input */}
-                                            <div className="sticky bottom-0 mt-auto pt-3 pb-4 shrink-0" style={{ backgroundColor: '#f0f4f9' }}>
+                                            <div className="sticky bottom-0 mt-auto pt-3 pb-4 shrink-0" style={{ backgroundColor: 'var(--color-bg)' }}>
                                                 {chatNotice && (
                                                     <div className="flex justify-center mb-2">
-                                                        <span className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-1 animate-fade-in">{chatNotice}</span>
+                                                        <span
+                                                            className="badge badge-warning animate-fade-in"
+                                                            style={{ fontSize: '11px', padding: '0.25rem 0.75rem' }}
+                                                        >
+                                                            {chatNotice}
+                                                        </span>
                                                     </div>
                                                 )}
-                                                <div className="rounded-lg border border-slate-400 bg-white/95 backdrop-blur-sm shadow-md px-3 py-3 transition-colors focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100">
-                                                    <div className="flex items-end gap-2">
-                                                        <div className="relative shrink-0 group">
-                                                            <button
-                                                                onClick={handleNewChat}
-                                                                title="New Chat"
-                                                                className="h-8 w-8 flex items-center justify-center rounded-full border border-sky-300 bg-sky-100 text-sky-700 hover:bg-sky-200 hover:border-sky-400 transition-colors"
-                                                            >
-                                                                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                                                            </button>
-                                                            <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 hidden -translate-x-1/2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 shadow-sm opacity-0 transition-opacity duration-150 group-hover:opacity-100 md:block">
-                                                                New chat
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex-grow">
-                                                            <SearchBar
-                                                                query={chatInput}
-                                                                setQuery={setChatInput}
-                                                                onSearch={() => chatInput.trim() && !llmLoading && handleChatSend(chatSessionId, chatInput)}
-                                                                language={language}
-                                                                disabled={llmLoading || hasPendingChatMessage}
-                                                            />
-                                                        </div>
-                                                        <button
-                                                            onClick={() => handleChatSend(chatSessionId, chatInput)}
-                                                            disabled={llmLoading || hasPendingChatMessage || !chatInput.trim()}
-                                                            className="bg-sky-600 text-white h-8 w-8 rounded-full border border-sky-700 hover:bg-sky-700 hover:border-sky-800 transition duration-200 disabled:bg-slate-200 disabled:text-slate-400 disabled:border-slate-300 flex items-center justify-center shrink-0"
-                                                            aria-label="Send"
-                                                        >
-                                                            {llmLoading ? <Spinner /> : (
-                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
-                                                                </svg>
-                                                            )}
-                                                        </button>
-                                                    </div>
-                                                    <div className="mt-1.5 border-t border-slate-100 pt-1.5 flex items-center gap-2 pl-10">
-                                                        <ChatFilters
-                                                            activeCategories={activeCategories}
-                                                            debugMode={debugMode}
-                                                            chatContentTypes={chatContentTypes}
-                                                            setChatContentTypes={setChatContentTypes}
-                                                            chatShastras={chatShastras}
-                                                            setChatShastras={setChatShastras}
-                                                            allMetadata={allMetadata}
-                                                            language={language}
-                                                            dropUp={true}
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-start gap-2.5 px-3.5 py-2.5 mt-2 bg-amber-50/80 border border-amber-200 rounded text-amber-800 text-[11px] leading-relaxed">
-                                                    <svg className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                                                    </svg>
-                                                    <span>Swalakshya AI Bot uses AI to generate answers, which may sometimes be <strong>inaccurate</strong>. Always refer to the <strong>original scriptures and references</strong> attached to each answer to study authentic content and <strong>stay true to Jinvaani</strong>. Use this bot as a <strong>starting point</strong>, not as a <strong>definitive source</strong>.</span>
-                                                </div>
+                                                <ChatComposer
+                                                    query={chatInput}
+                                                    setQuery={setChatInput}
+                                                    onSend={() => chatInput.trim() && !llmLoading && handleChatSend(chatSessionId, chatInput)}
+                                                    language={language}
+                                                    disabled={llmLoading || hasPendingChatMessage}
+                                                    loading={llmLoading}
+                                                    activeCategories={activeCategories}
+                                                    debugMode={debugMode}
+                                                    chatContentTypes={chatContentTypes}
+                                                    setChatContentTypes={setChatContentTypes}
+                                                    compact
+                                                    placeholder="Ask a follow-up question..."
+                                                />
                                             </div>
                                         </div>
                                     )}
@@ -2569,33 +2361,28 @@ const AppContent = () => {
                         </main>
                     )}
                 </div>
+                </div>
             </div>
-            
+
             {/* Mobile Navigation Buttons - Only visible on mobile, hidden while a filter modal is open
                 so they don't collide with the modal's Apply button (both are fixed to the same corner). */}
             {currentPage !== 'feedback' && !filterModalOpen && (
                 <button
                     onClick={() => setCurrentPage('feedback')}
-                    className="md:hidden fixed bottom-6 right-6 bg-sky-600 text-white p-3 rounded-full shadow-lg hover:bg-sky-700 transition-colors duration-200 z-50"
+                    className="btn btn-primary md:hidden fixed bottom-6 right-6 p-3 rounded-full shadow-lg z-50"
                     aria-label="Feedback"
                 >
-                    {/* Email icon for feedback */}
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
+                    <Mail size={20} />
                 </button>
             )}
 
             {currentPage !== 'home' && !filterModalOpen && (
                 <button
                     onClick={() => setCurrentPage('home')}
-                    className="md:hidden fixed bottom-6 left-6 bg-slate-600 text-white p-3 rounded-full shadow-lg hover:bg-slate-700 transition-colors duration-200 z-50"
+                    className="btn btn-secondary md:hidden fixed bottom-6 left-6 p-3 rounded-full shadow-lg z-50"
                     aria-label="Home"
                 >
-                    {/* Home icon */}
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                    </svg>
+                    <Home size={20} />
                 </button>
             )}
 

@@ -4,11 +4,11 @@ const About = () => {
     return (
         <div className="max-w-[1080px] mx-auto p-6">
             <div className="text-center py-6">
-                <h1 className="text-3xl font-bold text-gray-900 mb-6">Aagam Khoj</h1>
+                <h1 className="text-3xl font-bold text-gray-900 mb-6">Swalakshya Chat</h1>
             </div>
             
             <p className="mb-8 text-gray-700 leading-relaxed">
-                Aagam Khoj is an AI-powered search platform for thousands of spiritual discourses (Pravachans) delivered by Pujya Gurudev Shri Kanji Swami. It enables users to ask Tattva-related questions in Hindi, Gujarati, or English and receive answers directly from Gurudev's Pravachans.
+                Swalakshya Chat is an AI-powered search platform for thousands of spiritual discourses (Pravachans) delivered by Pujya Gurudev Shri Kanji Swami. It enables users to ask Tattva-related questions in Hindi, Gujarati, or English and receive answers directly from Gurudev's Pravachans.
             </p>
             
             
@@ -44,14 +44,14 @@ const About = () => {
             </p>
             
             
-            <h2 className="text-2xl font-semibold text-gray-800 mb-6">Why Aagam Khoj?</h2>
+            <h2 className="text-2xl font-semibold text-gray-800 mb-6">Why Swalakshya Chat?</h2>
             <p className="mb-4 text-gray-700 leading-relaxed">
-                Aagam Khoj was developed to help spiritual seekers (मुमुक्षु) easily navigate and search through Gurudevshri's vast collection of Pravachans, aiding their spiritual study (स्वाध्याय). It is designed for spiritual seekers, researchers, and Jain Scholars (विद्वान) alike.
+                Swalakshya Chat was developed to help spiritual seekers (मुमुक्षु) easily navigate and search through Gurudevshri's vast collection of Pravachans, aiding their spiritual study (स्वाध्याय). It is designed for spiritual seekers, researchers, and Jain Scholars (विद्वान) alike.
             </p>
             
             <ul className="mb-8 ml-6 text-gray-700 list-disc">
                 <li className="mb-4">
-                    <strong>Spiritual Seekers:</strong> This portal allows spiritual seekers to find answers to common questions by posing them in Hindi, English, or Gujarati. Aagam Khoj uses AI to provide relevant answers directly from Gurudev's Pravachans. For instance, a user can ask, <strong>"दृष्टि के विषय और ज्ञान के विषय में क्या अन्तर है?"</strong> and Aagam Khoj will provide references from Gurudev's entire catalog that address this question. Users can also search using specific keywords, such as <strong>"महात्मा गाँधी"</strong> to find all references where Gurudev mentioned Mahatma Gandhi.
+                    <strong>Spiritual Seekers:</strong> This portal allows spiritual seekers to find answers to common questions by posing them in Hindi, English, or Gujarati. Swalakshya Chat uses AI to provide relevant answers directly from Gurudev's Pravachans. For instance, a user can ask, <strong>"दृष्टि के विषय और ज्ञान के विषय में क्या अन्तर है?"</strong> and Swalakshya Chat will provide references from Gurudev's entire catalog that address this question. Users can also search using specific keywords, such as <strong>"महात्मा गाँधी"</strong> to find all references where Gurudev mentioned Mahatma Gandhi.
                 </li>
                 <li className="mb-4">
                     <strong>Jain Scholars and Researchers:</strong> Gurudev's words are considered a definitive authority on Jain Spirituality. Jain Scholars and researchers frequently reference Gurudev's Pravachans to support their arguments. They also study his Pravachan Shastra for research, to learn about events in Gurudev's life, or to understand the examples he used to explain concepts.
@@ -59,9 +59,9 @@ const About = () => {
             </ul>
             
             
-            <h2 className="text-2xl font-semibold text-gray-800 mb-6">How Does Aagam Khoj Work?</h2>
+            <h2 className="text-2xl font-semibold text-gray-800 mb-6">How Does Swalakshya Chat Work?</h2>
             <p className="mb-4 text-gray-700 leading-relaxed">
-                Aagam Khoj employs OCR technology to convert all PDF files into text files. This text is then indexed into a search-engine system (called OpenSearch). When a user enters a query, Aagam Khoj performs two operations:
+                Swalakshya Chat employs OCR technology to convert all PDF files into text files. This text is then indexed into a search-engine system (called OpenSearch). When a user enters a query, Swalakshya Chat performs two operations:
             </p>
             
             <ul className="mb-8 ml-6 text-gray-700 list-disc">
@@ -75,7 +75,7 @@ const About = () => {
                 A crucial question arises: Should artificial technology be used with such important content? Gurudev's Pravachans are akin to our Teerthankar's Vaani—how can AI be used to interpret their words?
             </p>
             <p className="mb-8 text-gray-700 leading-relaxed">
-                The short answer is that AI is not used to interpret Gurudev's words or his intention. Instead, AI serves merely as a tool to identify references that <em>possibly</em> match the input questions, providing direct references from Gurudev's Pravachans. Aagam Khoj generates answers which are strongly backed with Jain Shastras and Gurudev's Pravachans. It provides word-for-word references from these texts with each answer. This helps in finding answers from Jain Aagam easily.
+                The short answer is that AI is not used to interpret Gurudev's words or his intention. Instead, AI serves merely as a tool to identify references that <em>possibly</em> match the input questions, providing direct references from Gurudev's Pravachans. Swalakshya Chat generates answers which are strongly backed with Jain Shastras and Gurudev's Pravachans. It provides word-for-word references from these texts with each answer. This helps in finding answers from Jain Aagam easily.
             </p>
             
             
