@@ -25,13 +25,15 @@ export default function TopBar({ currentPage, setCurrentPage, onOpenMobileSideba
                 the nav links next to it. */}
             <div className="px-4 md:px-5">
                 <div className="max-w-[1080px] mx-auto h-16 flex items-center gap-4">
-                    <button
-                        onClick={onOpenMobileSidebar}
-                        className="lg:hidden p-2 -ml-2 rounded-md text-ink-muted hover:text-ink hover:bg-bg shrink-0"
-                        title="Open menu"
-                    >
-                        <Menu size={20} />
-                    </button>
+                    {onOpenMobileSidebar && (
+                        <button
+                            onClick={onOpenMobileSidebar}
+                            className="lg:hidden p-2 -ml-2 rounded-md text-ink-muted hover:text-ink hover:bg-bg shrink-0"
+                            title="Open menu"
+                        >
+                            <Menu size={20} />
+                        </button>
+                    )}
 
                     <div className="hidden lg:block h-10 w-10 shrink-0 overflow-hidden rounded-full">
                         <img

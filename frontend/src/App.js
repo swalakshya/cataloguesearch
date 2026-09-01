@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { flushSync } from 'react-dom';
-import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation, Link } from 'react-router-dom';
 import { GoogleReCaptchaProvider } from 'react-google-recaptcha-v3';
 
 // Import components
@@ -19,17 +19,16 @@ import UsageGuide from './components/UsageGuide';
 import DeveloperAPI from './components/DeveloperAPI';
 import SearchIndex from './components/SearchIndex';
 import UIEval from './components/eval/UIEval';
-import SearchableContentWidget from './components/SearchableContentWidget';
 import ChatComposer from './components/chat/ChatComposer';
 import StatsStrip from './components/chat/StatsStrip';
 import AiDisclaimer from './components/chat/AiDisclaimer';
 import { Spinner, ChevronUpIcon, ChevronDownIcon, ExpandIcon, PdfIcon } from './components/SharedComponents';
-import { ChevronDown, Sparkles, AlertTriangle, Mail, Home, PenLine, Check } from 'lucide-react';
+import { ChevronDown, Sparkles, AlertTriangle, Mail, Home, PenLine, Check, SendHorizontal } from 'lucide-react';
 import clipboardEmoji from './assets/emoji/clipboard.svg';
 import bulbEmoji from './assets/emoji/bulb.svg';
 import documentEmoji from './assets/emoji/document.svg';
 import { CATEGORY_EMOJI_SRC } from './components/chat/categoryEmoji';
-import { Modal } from './components/ui';
+import { Modal, InputActionBar } from './components/ui';
 
 // Import API service
 import { api } from './services/api';
@@ -1751,19 +1750,21 @@ const AppContent = () => {
                     DEBUG
                 </div>
             )}
-            <Sidebar
-                currentPage={currentPage}
-                setCurrentPage={setCurrentPage}
-                onNewChat={handleNewChat}
-                mobileOpen={sidebarMobileOpen}
-                onCloseMobile={() => setSidebarMobileOpen(false)}
-            />
+            {currentPage === 'chat' && (
+                <Sidebar
+                    currentPage={currentPage}
+                    setCurrentPage={setCurrentPage}
+                    onNewChat={handleNewChat}
+                    mobileOpen={sidebarMobileOpen}
+                    onCloseMobile={() => setSidebarMobileOpen(false)}
+                />
+            )}
 
             <div className="flex-1 flex flex-col min-w-0">
                 <TopBar
                     currentPage={currentPage}
                     setCurrentPage={setCurrentPage}
-                    onOpenMobileSidebar={() => setSidebarMobileOpen(true)}
+                    onOpenMobileSidebar={currentPage === 'chat' ? () => setSidebarMobileOpen(true) : undefined}
                 />
 
                 <div className="p-4 md:p-5">
@@ -1783,25 +1784,36 @@ const AppContent = () => {
                             {/* ── SEARCH MODE ── */}
                             {!isChatMode && (
                                 <>
-                                    <SearchableContentWidget />
+                                    <div className="flex items-center justify-between mb-2">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Content Available</p>
+                                        <Link to="/search-index" className="text-sm font-semibold text-brand hover:text-brand-hover">
+                                            Browse All
+                                        </Link>
+                                    </div>
+                                    <div className="mb-4">
+                                        <StatsStrip />
+                                    </div>
                                     <div className="card p-3 shadow-sm mb-4">
-                                        <div className="flex items-end gap-2">
-                                            <div className="flex-grow">
-                                                <SearchBar
-                                                    query={query}
-                                                    setQuery={setQuery}
-                                                    onSearch={() => handleSearch(1)}
-                                                    language={language}
-                                                />
-                                            </div>
-                                            <button
-                                                onClick={() => handleSearch(1)}
-                                                disabled={isLoading}
-                                                className="btn btn-primary h-8 px-4 py-0 text-sm whitespace-nowrap shrink-0"
-                                            >
-                                                {isLoading ? <Spinner /> : 'Search'}
-                                            </button>
-                                        </div>
+                                        <InputActionBar
+                                            action={
+                                                <button
+                                                    onClick={() => handleSearch(1)}
+                                                    disabled={isLoading || query.trim().length === 0}
+                                                    className="btn btn-primary h-10 w-10 rounded-full p-0 shrink-0"
+                                                    aria-label="Search"
+                                                >
+                                                    {isLoading ? <Spinner /> : <SendHorizontal size={18} strokeWidth={2.5} />}
+                                                </button>
+                                            }
+                                        >
+                                            <SearchBar
+                                                query={query}
+                                                setQuery={setQuery}
+                                                onSearch={() => handleSearch(1)}
+                                                language={language}
+                                                bare
+                                            />
+                                        </InputActionBar>
                                         <div className="flex items-center justify-between mt-3">
                                             <button
                                                 onClick={() => setShowFilters(!showFilters)}

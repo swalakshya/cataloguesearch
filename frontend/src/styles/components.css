@@ -130,6 +130,97 @@ input::placeholder, textarea::placeholder { color: var(--color-ink-muted); }
 .list-item { display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.35rem 0; color: var(--color-ink); }
 .list-item-dot { width: 0.4rem; height: 0.4rem; border-radius: 9999px; background-color: var(--color-brand); margin-top: 0.5rem; flex-shrink: 0; }
 
+/* --- Search result snippets --- */
+.search-highlight {
+    background-color: color-mix(in srgb, var(--color-brand) 28%, var(--color-surface));
+    color: var(--color-ink);
+    padding: 0 0.25rem;
+    border-radius: 0.25rem;
+}
+
+.result-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.75rem;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    color: var(--color-ink-muted);
+    transition: background-color 150ms ease, color 150ms ease;
+}
+.result-action:hover {
+    color: var(--color-brand);
+    background-color: color-mix(in srgb, var(--color-brand) 10%, transparent);
+}
+.result-action-danger { color: var(--color-danger); }
+.result-action-danger:hover {
+    color: var(--color-danger);
+    background-color: color-mix(in srgb, var(--color-danger) 10%, transparent);
+}
+
+/* --- Notice callouts --- */
+.notice { border-radius: 0.5rem; padding: 1rem; border: 1px solid; color: var(--color-ink); }
+.notice-warning {
+    background-color: color-mix(in srgb, var(--color-warning) 10%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-warning) 35%, transparent);
+}
+.notice-info {
+    background-color: color-mix(in srgb, var(--color-info) 10%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-info) 35%, transparent);
+}
+
+/* --- Filter dropdown triggers (Refine Search) --- */
+.filter-trigger {
+    flex: 1 1 0%;
+    min-width: 0;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.25rem;
+    background-color: var(--color-surface);
+    color: var(--color-ink);
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+.filter-trigger:hover:not(.filter-trigger-disabled) { background-color: var(--color-bg); }
+.filter-trigger-active {
+    border-color: var(--color-brand);
+    background-color: color-mix(in srgb, var(--color-brand) 8%, var(--color-surface));
+    color: var(--color-brand);
+}
+.filter-trigger-disabled {
+    color: var(--color-ink-muted);
+    background-color: var(--color-bg);
+    cursor: default;
+}
+
+/* Bottom-sheet-on-mobile / centered-on-desktop filter dialog, shared by the
+   Pravachan/Granth/Books filter popups so their shell doesn't drift apart. */
+.filter-overlay { position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 40; }
+.filter-sheet {
+    background-color: var(--color-surface);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh;
+}
+.filter-list-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-ink);
+    cursor: pointer;
+}
+.filter-list-row:last-child { border-bottom: none; }
+.filter-list-row:hover { background-color: var(--color-bg); }
+
 /* --- Skeleton loading --- */
 .skeleton { background-color: var(--color-border); border-radius: 0.375rem; position: relative; overflow: hidden; }
 .skeleton::after {

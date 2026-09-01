@@ -2,6 +2,7 @@ import React from 'react';
 import { SendHorizontal } from 'lucide-react';
 import { SearchBar } from '../SearchInterface';
 import { Spinner } from '../SharedComponents';
+import { InputActionBar } from '../ui';
 import ChatFilters from './ChatFilters';
 import AiDisclaimer from './AiDisclaimer';
 
@@ -33,22 +34,8 @@ export default function ChatComposer({
 
     return (
         <div className="w-full">
-            <div
-                className="rounded-xl shadow-md transition-colors"
-                style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)' }}
-            >
-                <div className="flex items-center gap-2 pl-1 pr-1.5 py-1.5">
-                    <div className="flex-grow">
-                        <SearchBar
-                            query={query}
-                            setQuery={setQuery}
-                            onSearch={() => canSend && onSend()}
-                            language={language}
-                            disabled={disabled}
-                            bare
-                            placeholder={placeholder}
-                        />
-                    </div>
+            <InputActionBar
+                action={
                     <button
                         onClick={onSend}
                         disabled={!canSend}
@@ -57,8 +44,18 @@ export default function ChatComposer({
                     >
                         {loading ? <Spinner /> : <SendHorizontal size={18} strokeWidth={2.5} />}
                     </button>
-                </div>
-            </div>
+                }
+            >
+                <SearchBar
+                    query={query}
+                    setQuery={setQuery}
+                    onSearch={() => canSend && onSend()}
+                    language={language}
+                    disabled={disabled}
+                    bare
+                    placeholder={placeholder}
+                />
+            </InputActionBar>
             <div className={compact ? 'mt-2' : 'mt-3'}>
                 <ChatFilters
                     activeCategories={activeCategories}

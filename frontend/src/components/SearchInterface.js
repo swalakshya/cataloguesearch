@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { ChevronDown, ChevronRight, ChevronLeft, X, Check, Info } from 'lucide-react';
 import TransliterationInput from './TransliterationInput';
+import { Badge, Button, Input } from './ui';
+import { CATEGORY_EMOJI_SRC } from './chat/categoryEmoji';
 
 // --- UTILITY FUNCTIONS ---
 const parseYear = (dateString) => {
@@ -565,9 +568,7 @@ const sortPravachanNumbers = (nums) =>
     });
 
 // Small chip used inside the modal header breadcrumbs
-const BreadcrumbChip = ({ label }) => (
-    <span className="bg-sky-100 text-sky-700 text-xs font-semibold px-2 py-0.5 rounded-full">{label}</span>
-);
+const BreadcrumbChip = ({ label }) => <Badge variant="brand">{label}</Badge>;
 
 // Compact toggleable number/string button used in volume and pravachan# grids
 const GridToggle = ({ value, selected, onToggle }) => (
@@ -575,8 +576,8 @@ const GridToggle = ({ value, selected, onToggle }) => (
         onClick={() => onToggle(value)}
         className={`rounded text-sm py-1.5 font-medium transition-colors border ${
             selected
-                ? 'bg-sky-600 border-sky-600 text-white'
-                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                ? 'bg-brand border-brand text-white'
+                : 'bg-surface border-border text-ink hover:bg-bg'
         }`}
     >
         {value}
@@ -586,16 +587,14 @@ const GridToggle = ({ value, selected, onToggle }) => (
 // Standard Clear/Apply footer for filter dialogs (PravachanFilter, GranthFilter, MetadataFilters) —
 // single source of truth for their color/shape so the three don't drift from each other again.
 const FilterFooter = ({ onClear, clearLabel = 'Clear', onApply, applyLabel = 'Apply' }) => (
-    <div className="p-4 border-t border-slate-200 flex gap-2 sticky bottom-0 bg-white rounded-b-lg">
-        <button onClick={onClear}
-            className="px-4 py-1.5 border border-slate-300 rounded text-slate-700 text-sm font-semibold hover:bg-slate-50">
+    <div className="p-4 border-t border-border flex gap-2 sticky bottom-0 bg-surface rounded-b-lg">
+        <Button variant="secondary" onClick={onClear} className="text-sm py-1.5 px-4">
             {clearLabel}
-        </button>
+        </Button>
         <div className="flex-1" />
-        <button onClick={onApply}
-            className="px-4 py-1.5 bg-sky-600 text-white rounded text-sm font-semibold hover:bg-sky-700">
+        <Button onClick={onApply} className="text-sm py-1.5 px-4">
             {applyLabel}
-        </button>
+        </Button>
     </div>
 );
 
@@ -830,59 +829,49 @@ const PravachanFilter = ({
         <>
             <button
                 onClick={() => setIsOpen(true)}
-                className={`flex-1 py-1.5 px-2 border rounded text-sm font-medium flex items-center justify-between transition-colors ${
-                    disabled
-                        ? 'border-slate-200 bg-slate-50 text-slate-400'
-                        : activeCount > 0
-                            ? 'border-sky-500 bg-sky-50 text-sky-700'
-                            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
-                }`}
-                style={{ backgroundColor: (disabled || activeCount > 0) ? undefined : 'var(--bg-surface, white)' }}
+                className={`filter-trigger ${disabled ? 'filter-trigger-disabled' : activeCount > 0 ? 'filter-trigger-active' : ''}`}
                 title={disabled ? 'Not searched — a Granth-only filter is active. Pick a Pravachan filter to include Pravachan results again.' : undefined}
             >
-                <span className="truncate min-w-0">🎙️ Pravachan{activeCount > 0 ? ` (${activeCount})` : ''}{disabled ? ' (off)' : ''}</span>
-                <svg className="w-3.5 h-3.5 ml-1 opacity-60 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
+                <span className="truncate min-w-0 flex items-center gap-1.5">
+                    <img src={CATEGORY_EMOJI_SRC.Pravachan} alt="" className="w-4 h-4 flex-shrink-0" />
+                    Pravachan{activeCount > 0 ? ` (${activeCount})` : ''}{disabled ? ' (off)' : ''}
+                </span>
+                <ChevronDown className="w-3.5 h-3.5 ml-1 opacity-60 flex-shrink-0" />
             </button>
 
             {isOpen && (
                 <>
-                    <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={() => setIsOpen(false)} />
+                    <div className="filter-overlay" onClick={() => setIsOpen(false)} />
                     <div className="fixed inset-x-0 bottom-0 md:inset-0 md:flex md:items-center md:justify-center z-50">
-                        <div className="bg-white rounded-t-lg md:rounded-lg shadow-2xl w-full md:max-w-lg md:max-h-[85vh] flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                        <div className="filter-sheet rounded-t-lg md:rounded-lg md:max-w-lg md:max-h-[85vh]" onClick={e => e.stopPropagation()}>
 
                             {/* Header */}
-                            <div className="p-4 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white rounded-t-lg">
+                            <div className="p-4 border-b border-border flex items-center justify-between sticky top-0 bg-surface rounded-t-lg">
                                 <div className="flex items-center gap-2 min-w-0">
                                     {narrowingKey && (
                                         <button onClick={narrowStep === 'numbers' ? () => setNarrowStep('volumes') : closeNarrow}
-                                            className="text-slate-400 hover:text-slate-600 mr-1 flex-shrink-0">
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                            </svg>
+                                            className="text-ink-muted hover:text-ink mr-1 flex-shrink-0">
+                                            <ChevronLeft className="w-5 h-5" />
                                         </button>
                                     )}
                                     <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                                         {narrowingKey ? (
                                             <>
-                                                <span className="font-bold text-slate-800 text-sm truncate">{narrowSeries?.name}</span>
-                                                <span className="text-xs text-slate-400">{narrowSeries?.granth}</span>
-                                                <span className="text-xs text-slate-400">· {narrowStep === 'volumes' ? 'Volumes' : 'Pravachan #'}</span>
+                                                <span className="font-bold text-ink text-sm truncate">{narrowSeries?.name}</span>
+                                                <span className="text-xs text-ink-muted">{narrowSeries?.granth}</span>
+                                                <span className="text-xs text-ink-muted">· {narrowStep === 'volumes' ? 'Volumes' : 'Pravachan #'}</span>
                                             </>
                                         ) : (
                                             <>
-                                                <span className="font-bold text-slate-800 text-sm">Select Granth &amp; Series</span>
+                                                <span className="font-bold text-ink text-sm">Select Granth &amp; Series</span>
                                                 {pendingGranths.map(g => <BreadcrumbChip key={`g-${g}`} label={g} />)}
                                                 {pendingSeries.length > 0 && <BreadcrumbChip label={`${pendingSeries.length} series`} />}
                                             </>
                                         )}
                                     </div>
                                 </div>
-                                <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-slate-600 flex-shrink-0 ml-2">
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
+                                <button onClick={() => setIsOpen(false)} className="text-ink-muted hover:text-ink flex-shrink-0 ml-2">
+                                    <X className="w-5 h-5" />
                                 </button>
                             </div>
 
@@ -892,7 +881,7 @@ const PravachanFilter = ({
                                 {/* ── Narrow popup: Volumes → Pravachan# for one series ── */}
                                 {narrowingKey && narrowStep === 'volumes' && (
                                     <div className="space-y-3">
-                                        <p className="text-xs text-slate-500">
+                                        <p className="text-xs text-ink-muted">
                                             {(narrowSeries?.volumes || []).length} volume{(narrowSeries?.volumes || []).length !== 1 ? 's' : ''}
                                         </p>
                                         <div className="grid grid-cols-6 gap-1.5">
@@ -901,23 +890,22 @@ const PravachanFilter = ({
                                             ))}
                                         </div>
                                         {narrowVolumes.length > 0 && (
-                                            <p className="text-xs text-sky-700 font-medium">{narrowVolumes.length} selected</p>
+                                            <p className="text-xs text-brand font-medium">{narrowVolumes.length} selected</p>
                                         )}
                                     </div>
                                 )}
                                 {narrowingKey && narrowStep === 'numbers' && (
                                     <div className="space-y-3">
-                                        <p className="text-xs text-slate-500">
+                                        <p className="text-xs text-ink-muted">
                                             {narrowAvailableNumbers.length} pravachan{narrowAvailableNumbers.length !== 1 ? 's' : ''} in selected volumes
                                         </p>
-                                        <div className="grid grid-cols-6 gap-1 max-h-72 overflow-y-auto pr-1"
-                                            style={{ scrollbarWidth: 'thin', scrollbarColor: '#94a3b8 #f1f5f9' }}>
+                                        <div className="grid grid-cols-6 gap-1 max-h-72 overflow-y-auto pr-1">
                                             {narrowAvailableNumbers.map(n => (
                                                 <GridToggle key={n} value={n} selected={narrowNumbers.includes(n)} onToggle={toggleNarrowNumber} />
                                             ))}
                                         </div>
                                         {narrowNumbers.length > 0 && (
-                                            <p className="text-xs text-sky-700 font-medium">{narrowNumbers.length} selected</p>
+                                            <p className="text-xs text-brand font-medium">{narrowNumbers.length} selected</p>
                                         )}
                                     </div>
                                 )}
@@ -925,9 +913,9 @@ const PravachanFilter = ({
                                 {/* ── Main accordion: Granth & Series ── */}
                                 {!narrowingKey && (
                                     <div className="space-y-4">
-                                        <div className="border border-slate-200 rounded-lg overflow-hidden">
+                                        <div className="border border-border rounded-lg overflow-hidden">
                                             {granthOptions.length === 0 && (
-                                                <p className="p-4 text-sm text-slate-500 text-center">No Granth data available</p>
+                                                <p className="p-4 text-sm text-ink-muted text-center">No Granth data available</p>
                                             )}
                                             {granthOptions.map((name) => {
                                                 const seriesForGranth = seriesByGranth[name] || [];
@@ -940,29 +928,28 @@ const PravachanFilter = ({
                                                 const isPartial = !granthChecked && selectedCount > 0 && selectedCount < seriesForGranth.length;
                                                 const isExpanded = expandedGranths.includes(name);
                                                 return (
-                                                    <div key={name} className="border-b border-slate-100 last:border-b-0">
-                                                        <div className="flex items-center gap-2 p-3 hover:bg-slate-50">
+                                                    <div key={name} className="border-b border-border last:border-b-0">
+                                                        <div className="flex items-center gap-2 p-3 hover:bg-bg">
                                                             <input type="checkbox"
                                                                 checked={granthChecked}
                                                                 ref={el => { if (el) el.indeterminate = isPartial; }}
                                                                 onChange={() => toggleGranth(name)}
-                                                                className="form-checkbox h-4 w-4 text-sky-600 rounded flex-shrink-0" />
+                                                                style={{ accentColor: 'var(--color-brand)' }}
+                                                                className="h-4 w-4 rounded flex-shrink-0" />
                                                             <button type="button" onClick={() => toggleGranth(name)}
                                                                 className="flex-1 min-w-0 text-left">
-                                                                <p className="text-sm font-medium text-slate-800">{name}</p>
+                                                                <p className="text-sm font-medium text-ink">{name}</p>
                                                             </button>
                                                             {hasRealSeries && (
                                                                 <button type="button" onClick={() => toggleExpand(name)}
-                                                                    className="p-1 text-slate-400 hover:text-slate-600 flex-shrink-0"
+                                                                    className="p-1 text-ink-muted hover:text-ink flex-shrink-0"
                                                                     aria-label={isExpanded ? `Collapse ${name} series` : `Browse ${name} series`}>
-                                                                    <svg className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                                                    </svg>
+                                                                    <ChevronRight className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                                                                 </button>
                                                             )}
                                                         </div>
                                                         {isExpanded && (
-                                                            <div className="bg-slate-50 border-t border-slate-100">
+                                                            <div className="bg-bg border-t border-border">
                                                                 {seriesForGranth.map(s => {
                                                                     const key = seriesKey(name, s.name);
                                                                     const checked = granthChecked || pendingSeries.includes(key);
@@ -970,16 +957,17 @@ const PravachanFilter = ({
                                                                     const nNums = (pendingNumbersBySeries[key] || []).length;
                                                                     return (
                                                                         <div key={s.name}
-                                                                            className="flex items-center gap-3 py-2 pl-10 pr-3 hover:bg-slate-100 border-b border-slate-100 last:border-b-0">
+                                                                            className="flex items-center gap-3 py-2 pl-10 pr-3 hover:bg-surface border-b border-border last:border-b-0">
                                                                             <input type="checkbox"
                                                                                 checked={checked}
                                                                                 onChange={() => toggleSeriesWithinGranth(name, s.name)}
-                                                                                className="form-checkbox h-3.5 w-3.5 text-sky-600 rounded flex-shrink-0" />
+                                                                                style={{ accentColor: 'var(--color-brand)' }}
+                                                                                className="h-3.5 w-3.5 rounded flex-shrink-0" />
                                                                             <label className="flex-1 min-w-0 cursor-pointer"
                                                                                 onClick={() => toggleSeriesWithinGranth(name, s.name)}>
-                                                                                <p className="text-sm text-slate-700">{s.name}</p>
+                                                                                <p className="text-sm text-ink">{s.name}</p>
                                                                                 {s.start_date && s.end_date && (
-                                                                                    <p className="text-xs text-slate-400">
+                                                                                    <p className="text-xs text-ink-muted">
                                                                                         {s.start_date.substring(0, 7)} – {s.end_date.substring(0, 7)}
                                                                                         {' · '}{s.volumes.length} vol{s.volumes.length !== 1 ? 's' : ''}
                                                                                     </p>
@@ -987,12 +975,10 @@ const PravachanFilter = ({
                                                                             </label>
                                                                             {checked && (
                                                                                 <button type="button" onClick={() => openNarrow(name, s.name)}
-                                                                                    className="text-xs text-sky-700 hover:text-sky-900 font-medium flex items-center gap-0.5 flex-shrink-0">
+                                                                                    className="text-xs text-brand hover:text-brand-hover font-medium flex items-center gap-0.5 flex-shrink-0">
                                                                                     {nVols > 0 ? `${nVols} vol${nVols !== 1 ? 's' : ''}` : 'Narrow'}
                                                                                     {nNums > 0 && ` · ${nNums} #`}
-                                                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                                                                    </svg>
+                                                                                    <ChevronRight className="w-3.5 h-3.5" />
                                                                                 </button>
                                                                             )}
                                                                         </div>
@@ -1008,16 +994,16 @@ const PravachanFilter = ({
                                         {/* Year range — only show when nothing selected, since a Granth/Series implies a date range */}
                                         {pendingGranths.length === 0 && pendingSeries.length === 0 && (
                                             <div>
-                                                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Year Range (Optional)</h4>
+                                                <h4 className="text-xs font-semibold text-ink-muted uppercase tracking-wide mb-2">Year Range (Optional)</h4>
                                                 <div className="grid grid-cols-2 gap-2">
                                                     <select value={startYear || ''} onChange={e => { const y = e.target.value ? parseInt(e.target.value) : null; setStartYear(y); if (endYear && y && endYear < y) setEndYear(null); }}
-                                                        className="p-2 bg-white border border-slate-300 rounded text-slate-800 text-sm focus:ring-2 focus:ring-sky-500">
+                                                        className="field text-sm">
                                                         <option value="">From year</option>
                                                         {pravachanYears.map(y => <option key={y} value={y}>{y}</option>)}
                                                     </select>
                                                     <select value={endYear || ''} onChange={e => setEndYear(e.target.value ? parseInt(e.target.value) : null)}
                                                         disabled={!startYear}
-                                                        className="p-2 bg-white border border-slate-300 rounded text-slate-800 text-sm focus:ring-2 focus:ring-sky-500 disabled:opacity-50">
+                                                        className="field text-sm">
                                                         <option value="">To year</option>
                                                         {endYearOptions.map(y => <option key={y} value={y}>{y}</option>)}
                                                     </select>
@@ -1030,20 +1016,17 @@ const PravachanFilter = ({
 
                             {/* Footer */}
                             {narrowingKey ? (
-                                <div className="p-4 border-t border-slate-200 flex gap-2 sticky bottom-0 bg-white rounded-b-lg">
-                                    <button onClick={closeNarrow}
-                                        className="px-4 py-1.5 border border-slate-300 rounded text-slate-700 text-sm font-semibold hover:bg-slate-50">
+                                <div className="p-4 border-t border-border flex gap-2 sticky bottom-0 bg-surface rounded-b-lg">
+                                    <Button variant="secondary" onClick={closeNarrow} className="text-sm py-1.5 px-4">
                                         Done
-                                    </button>
+                                    </Button>
                                     <div className="flex-1" />
                                     {narrowStep === 'volumes' && narrowVolumes.length > 0 && narrowAvailableNumbers.length > 0 && (
-                                        <button onClick={() => setNarrowStep('numbers')}
-                                            className="px-4 py-1.5 border border-sky-400 text-sky-700 rounded text-sm font-semibold hover:bg-sky-50 flex items-center gap-1">
+                                        <Button variant="secondary" onClick={() => setNarrowStep('numbers')}
+                                            className="text-sm py-1.5 px-4" style={{ color: 'var(--color-brand)', borderColor: 'var(--color-brand)' }}>
                                             Pravachan #
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                            </svg>
-                                        </button>
+                                            <ChevronRight className="w-4 h-4" />
+                                        </Button>
                                     )}
                                 </div>
                             ) : (
@@ -1112,73 +1095,63 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
         <>
             <button
                 onClick={() => setIsOpen(true)}
-                className={`flex-1 py-1.5 px-2 border rounded text-sm font-medium flex items-center justify-between transition-colors ${
-                    disabled
-                        ? 'border-slate-200 bg-slate-50 text-slate-400'
-                        : activeCount > 0
-                            ? 'border-sky-500 bg-sky-50 text-sky-700'
-                            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
-                }`}
-                style={{ backgroundColor: (disabled || activeCount > 0) ? undefined : 'var(--bg-surface, white)' }}
+                className={`filter-trigger ${disabled ? 'filter-trigger-disabled' : activeCount > 0 ? 'filter-trigger-active' : ''}`}
                 title={disabled ? 'Not searched — a Pravachan-only filter is active. Pick a Granth filter to include Granth results again.' : undefined}
             >
-                <span className="truncate min-w-0">📜 Granth{activeCount > 0 ? ` (${activeCount})` : ''}{disabled ? ' (off)' : ''}</span>
-                <svg className="w-3.5 h-3.5 ml-1 opacity-60 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
+                <span className="truncate min-w-0 flex items-center gap-1.5">
+                    <img src={CATEGORY_EMOJI_SRC.Granth} alt="" className="w-4 h-4 flex-shrink-0" />
+                    Granth{activeCount > 0 ? ` (${activeCount})` : ''}{disabled ? ' (off)' : ''}
+                </span>
+                <ChevronDown className="w-3.5 h-3.5 ml-1 opacity-60 flex-shrink-0" />
             </button>
 
             {isOpen && (
                 <>
-                    <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={() => setIsOpen(false)} />
+                    <div className="filter-overlay" onClick={() => setIsOpen(false)} />
                     <div className="fixed inset-x-0 bottom-0 md:inset-0 md:flex md:items-center md:justify-center z-50">
-                        <div className="bg-white rounded-t-lg md:rounded-lg shadow-2xl w-full md:max-w-lg md:max-h-[85vh] flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                        <div className="filter-sheet rounded-t-lg md:rounded-lg md:max-w-lg md:max-h-[85vh]" onClick={e => e.stopPropagation()}>
 
                             {/* Header */}
-                            <div className="p-4 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white rounded-t-lg">
-                                <h3 className="text-base font-bold text-slate-800">Filter by Granth</h3>
-                                <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-slate-600">
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
+                            <div className="p-4 border-b border-border flex items-center justify-between sticky top-0 bg-surface rounded-t-lg">
+                                <h3 className="text-base font-bold text-ink">Filter by Granth</h3>
+                                <button onClick={() => setIsOpen(false)} className="text-ink-muted hover:text-ink">
+                                    <X className="w-5 h-5" />
                                 </button>
                             </div>
 
                             {/* Search */}
                             <div className="px-4 pt-3 pb-2">
-                                <input
+                                <Input
                                     type="text"
                                     value={search}
                                     onChange={e => setSearch(e.target.value)}
                                     placeholder="Search granths..."
-                                    className="w-full px-3 py-1.5 border border-slate-300 rounded text-sm text-slate-800 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 bg-white"
+                                    className="text-sm"
                                 />
                             </div>
 
                             {/* List */}
-                            <div className="overflow-y-auto flex-1 px-4 pb-2" style={{ scrollbarWidth: 'thin', scrollbarColor: '#94a3b8 #f1f5f9' }}>
-                                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                            <div className="overflow-y-auto flex-1 px-4 pb-2">
+                                <div className="border border-border rounded-lg overflow-hidden">
                                     {filtered.length === 0 && (
-                                        <p className="p-4 text-sm text-slate-500 text-center">No granths found</p>
+                                        <p className="p-4 text-sm text-ink-muted text-center">No granths found</p>
                                     )}
                                     {filtered.map((name) => (
-                                        <label key={name}
-                                            className="flex items-center gap-3 p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-b-0">
+                                        <label key={name} className="filter-list-row">
                                             <input type="checkbox"
                                                 checked={pending.includes(name)}
                                                 onChange={() => toggle(name)}
-                                                className="form-checkbox h-4 w-4 text-sky-600 rounded" />
-                                            <span className="text-sm text-slate-800 flex-1">{name}</span>
+                                                style={{ accentColor: 'var(--color-brand)' }}
+                                                className="h-4 w-4 rounded" />
+                                            <span className="text-sm text-ink flex-1">{name}</span>
                                             {pending.includes(name) && (
-                                                <svg className="w-4 h-4 text-sky-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                                                </svg>
+                                                <Check className="w-4 h-4 text-brand flex-shrink-0" />
                                             )}
                                         </label>
                                     ))}
                                 </div>
                                 {pending.length > 0 && (
-                                    <p className="text-xs text-sky-700 font-medium mt-2">{pending.length} selected</p>
+                                    <p className="text-xs text-brand font-medium mt-2">{pending.length} selected</p>
                                 )}
                             </div>
 
@@ -1247,73 +1220,63 @@ const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, 
         <>
             <button
                 onClick={() => setIsOpen(true)}
-                className={`flex-1 py-1.5 px-2 border rounded text-sm font-medium flex items-center justify-between transition-colors ${
-                    disabled
-                        ? 'border-slate-200 bg-slate-50 text-slate-400'
-                        : activeCount > 0
-                            ? 'border-sky-500 bg-sky-50 text-sky-700'
-                            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
-                }`}
-                style={{ backgroundColor: (disabled || activeCount > 0) ? undefined : 'var(--bg-surface, white)' }}
+                className={`filter-trigger ${disabled ? 'filter-trigger-disabled' : activeCount > 0 ? 'filter-trigger-active' : ''}`}
                 title={disabled ? 'Not searched — pick a Books filter to include Books results again.' : undefined}
             >
-                <span className="truncate min-w-0">📚 Books{activeCount > 0 ? ` (${activeCount})` : ''}{disabled ? ' (off)' : ''}</span>
-                <svg className="w-3.5 h-3.5 ml-1 opacity-60 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
+                <span className="truncate min-w-0 flex items-center gap-1.5">
+                    <img src={CATEGORY_EMOJI_SRC.Books} alt="" className="w-4 h-4 flex-shrink-0" />
+                    Books{activeCount > 0 ? ` (${activeCount})` : ''}{disabled ? ' (off)' : ''}
+                </span>
+                <ChevronDown className="w-3.5 h-3.5 ml-1 opacity-60 flex-shrink-0" />
             </button>
 
             {isOpen && (
                 <>
-                    <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={() => setIsOpen(false)} />
+                    <div className="filter-overlay" onClick={() => setIsOpen(false)} />
                     <div className="fixed inset-x-0 bottom-0 md:inset-0 md:flex md:items-center md:justify-center z-50">
-                        <div className="bg-white rounded-t-lg md:rounded-lg shadow-2xl w-full md:max-w-lg md:max-h-[85vh] flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                        <div className="filter-sheet rounded-t-lg md:rounded-lg md:max-w-lg md:max-h-[85vh]" onClick={e => e.stopPropagation()}>
 
                             {/* Header */}
-                            <div className="p-4 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white rounded-t-lg">
-                                <h3 className="text-base font-bold text-slate-800">Filter by Books</h3>
-                                <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-slate-600">
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
+                            <div className="p-4 border-b border-border flex items-center justify-between sticky top-0 bg-surface rounded-t-lg">
+                                <h3 className="text-base font-bold text-ink">Filter by Books</h3>
+                                <button onClick={() => setIsOpen(false)} className="text-ink-muted hover:text-ink">
+                                    <X className="w-5 h-5" />
                                 </button>
                             </div>
 
                             {/* Search */}
                             <div className="px-4 pt-3 pb-2">
-                                <input
+                                <Input
                                     type="text"
                                     value={search}
                                     onChange={e => setSearch(e.target.value)}
                                     placeholder="Search books..."
-                                    className="w-full px-3 py-1.5 border border-slate-300 rounded text-sm text-slate-800 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 bg-white"
+                                    className="text-sm"
                                 />
                             </div>
 
                             {/* List */}
-                            <div className="overflow-y-auto flex-1 px-4 pb-2" style={{ scrollbarWidth: 'thin', scrollbarColor: '#94a3b8 #f1f5f9' }}>
-                                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                            <div className="overflow-y-auto flex-1 px-4 pb-2">
+                                <div className="border border-border rounded-lg overflow-hidden">
                                     {filtered.length === 0 && (
-                                        <p className="p-4 text-sm text-slate-500 text-center">No books found</p>
+                                        <p className="p-4 text-sm text-ink-muted text-center">No books found</p>
                                     )}
                                     {filtered.map((name) => (
-                                        <label key={name}
-                                            className="flex items-center gap-3 p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-b-0">
+                                        <label key={name} className="filter-list-row">
                                             <input type="checkbox"
                                                 checked={pending.includes(name)}
                                                 onChange={() => toggle(name)}
-                                                className="form-checkbox h-4 w-4 text-sky-600 rounded" />
-                                            <span className="text-sm text-slate-800 flex-1">{name}</span>
+                                                style={{ accentColor: 'var(--color-brand)' }}
+                                                className="h-4 w-4 rounded" />
+                                            <span className="text-sm text-ink flex-1">{name}</span>
                                             {pending.includes(name) && (
-                                                <svg className="w-4 h-4 text-sky-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                                                </svg>
+                                                <Check className="w-4 h-4 text-brand flex-shrink-0" />
                                             )}
                                         </label>
                                     ))}
                                 </div>
                                 {pending.length > 0 && (
-                                    <p className="text-xs text-sky-700 font-medium mt-2">{pending.length} selected</p>
+                                    <p className="text-xs text-brand font-medium mt-2">{pending.length} selected</p>
                                 )}
                             </div>
 
@@ -1333,9 +1296,9 @@ const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, 
 
 // ─── SearchFilters (public wrapper) ──────────────────────────────────────────
 
-const CHIP_COLORS = {
-    _pravachan_groups: 'bg-sky-100 text-sky-800 border-sky-200',
-    Name:              'bg-sky-100 text-sky-800 border-sky-200',
+const CHIP_VARIANT = {
+    _pravachan_groups: 'brand',
+    Name:              'brand',
 };
 const CHIP_LABELS = {
     Name: '',
@@ -1382,7 +1345,7 @@ export const SearchFilters = ({
         // overlapping the Language column -- CSS Grid tracks default to min-width: auto,
         // so a row of 3 filter buttons (vs. the old 2) can otherwise force the column wider.
         <div className="space-y-2 min-w-0">
-            <p className="text-xs text-slate-900 font-semibold uppercase tracking-wide">Refine search</p>
+            <p className="text-xs text-ink font-semibold uppercase tracking-wide">Refine search</p>
 
             <div className="flex gap-1.5">
                 {activeCategories.includes('Pravachan') && (
@@ -1428,23 +1391,23 @@ export const SearchFilters = ({
             {hasAnyFilter && (
                 <div className="flex flex-wrap gap-1.5 items-center">
                     {activeFilters.map((f, i) => {
-                        const color = CHIP_COLORS[f.key] || 'bg-slate-100 text-slate-700 border-slate-200';
+                        const variant = CHIP_VARIANT[f.key] || 'neutral';
                         const prefix = CHIP_LABELS[f.key];
                         const label = f.key === '_pravachan_groups'
                             ? pravachanGroupChipLabel(f.value)
                             : (prefix ? `${prefix}: ${f.value}` : f.value);
                         return (
-                            <span key={i} className={`${color} border text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1`}>
+                            <Badge key={i} variant={variant}>
                                 {label}
                                 <button onClick={() => onRemoveFilter(i)} className="opacity-60 hover:opacity-100 font-bold leading-none">&times;</button>
-                            </span>
+                            </Badge>
                         );
                     })}
                     {hasYearFilter && (
-                        <span className="bg-sky-100 text-sky-800 border border-sky-200 text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Badge variant="brand">
                             {startYear || '?'} – {endYear || '?'}
                             <button onClick={() => { setStartYear(null); setEndYear(null); }} className="opacity-60 hover:opacity-100 font-bold leading-none">&times;</button>
-                        </span>
+                        </Badge>
                     )}
                     {hasAnyFilter && (
                         <button
@@ -1452,7 +1415,7 @@ export const SearchFilters = ({
                                 [...activeFilters].map((_, i) => i).reverse().forEach(i => onRemoveFilter(i));
                                 setStartYear(null); setEndYear(null);
                             }}
-                            className="text-xs text-slate-400 hover:text-slate-600 underline ml-1"
+                            className="text-xs text-ink-muted hover:text-ink underline ml-1"
                         >
                             Clear all
                         </button>
@@ -1475,32 +1438,31 @@ export const AdvancedSearch = ({ textSearch, setTextSearch, exactMatch, setExact
 
     return (
         <div className="space-y-2">
-            <p className="text-xs text-slate-900 font-semibold uppercase tracking-wide">Advanced search</p>
+            <p className="text-xs text-ink font-semibold uppercase tracking-wide">Advanced search</p>
             <div className="space-y-2.5">
                 {/* Text Search toggle */}
                 <div className="relative flex items-center gap-2">
-                    <label className="flex items-center gap-2 text-slate-700 cursor-pointer select-none">
+                    <label className="flex items-center gap-2 text-ink cursor-pointer select-none">
                         <input
                             type="checkbox"
                             checked={textSearch}
                             onChange={(e) => handleTextSearchChange(e.target.checked)}
-                            className="form-checkbox h-3.5 w-3.5 text-sky-600 focus:ring-sky-500 rounded"
+                            style={{ accentColor: 'var(--color-brand)' }}
+                            className="h-3.5 w-3.5 rounded"
                         />
                         <span className="text-sm">Text search</span>
                     </label>
                     <button
                         type="button"
-                        className="text-slate-300 hover:text-slate-600 transition-colors"
+                        className="text-ink-muted hover:text-ink transition-colors"
                         onMouseEnter={() => setShowTextSearchTooltip(true)}
                         onMouseLeave={() => setShowTextSearchTooltip(false)}
                         onClick={() => setShowTextSearchTooltip(!showTextSearchTooltip)}
                     >
-                        <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-                        </svg>
+                        <Info className="h-3.5 w-3.5" />
                     </button>
                     {showTextSearchTooltip && (
-                        <div className="absolute left-0 top-full mt-1 bg-slate-800 text-white text-xs rounded px-2 py-1 z-10 whitespace-nowrap">
+                        <div className="tooltip-bubble absolute left-0 top-full mt-1 text-xs rounded px-2 py-1 z-10 whitespace-nowrap">
                             Force keyword-based search instead of semantic (vector) search
                         </div>
                     )}
@@ -1509,28 +1471,27 @@ export const AdvancedSearch = ({ textSearch, setTextSearch, exactMatch, setExact
                 {/* Exact phrase match — only shown when Text Search is enabled */}
                 {textSearch && (
                 <div className="relative flex items-center gap-2 pl-5">
-                    <label className="flex items-center gap-2 text-slate-600 cursor-pointer select-none">
+                    <label className="flex items-center gap-2 text-ink-muted cursor-pointer select-none">
                         <input
                             type="checkbox"
                             checked={exactMatch}
                             onChange={(e) => setExactMatch(e.target.checked)}
-                            className="form-checkbox h-3.5 w-3.5 text-sky-600 focus:ring-sky-500 rounded"
+                            style={{ accentColor: 'var(--color-brand)' }}
+                            className="h-3.5 w-3.5 rounded"
                         />
                         <span className="text-sm">Exact phrase match</span>
                     </label>
                     <button
                         type="button"
-                        className="text-slate-300 hover:text-slate-600 transition-colors"
+                        className="text-ink-muted hover:text-ink transition-colors"
                         onMouseEnter={() => setShowExactMatchTooltip(true)}
                         onMouseLeave={() => setShowExactMatchTooltip(false)}
                         onClick={() => setShowExactMatchTooltip(!showExactMatchTooltip)}
                     >
-                        <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-                        </svg>
+                        <Info className="h-3.5 w-3.5" />
                     </button>
                     {showExactMatchTooltip && (
-                        <div className="absolute left-0 top-full mt-1 bg-slate-800 text-white text-xs rounded px-2 py-1 z-10 whitespace-nowrap">
+                        <div className="tooltip-bubble absolute left-0 top-full mt-1 text-xs rounded px-2 py-1 z-10 whitespace-nowrap">
                             Search for the exact phrase rather than individual words
                         </div>
                     )}
@@ -1540,31 +1501,28 @@ export const AdvancedSearch = ({ textSearch, setTextSearch, exactMatch, setExact
                 {/* Exclude Words */}
                 <div className="relative">
                     <div className="flex items-center gap-1 mb-1">
-                        <span className="text-xs text-slate-600">Exclude words</span>
+                        <span className="text-xs text-ink-muted">Exclude words</span>
                         <button
                             type="button"
-                            className="text-slate-300 hover:text-slate-600 transition-colors"
+                            className="text-ink-muted hover:text-ink transition-colors"
                             onMouseEnter={() => setShowExcludeWordsTooltip(true)}
                             onMouseLeave={() => setShowExcludeWordsTooltip(false)}
                             onClick={() => setShowExcludeWordsTooltip(!showExcludeWordsTooltip)}
                         >
-                            <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-                            </svg>
+                            <Info className="h-3.5 w-3.5" />
                         </button>
                         {showExcludeWordsTooltip && (
-                            <div className="absolute left-0 top-full mt-1 bg-slate-800 text-white text-xs rounded px-2 py-1 z-10 whitespace-nowrap">
+                            <div className="tooltip-bubble absolute left-0 top-full mt-1 text-xs rounded px-2 py-1 z-10 whitespace-nowrap">
                                 Comma-separated words to exclude from results
                             </div>
                         )}
                     </div>
-                    <input
+                    <Input
                         type="text"
                         value={excludeWords}
                         onChange={(e) => setExcludeWords(e.target.value)}
                         placeholder="word1, word2, ..."
-                        style={{ backgroundColor: 'var(--bg-surface, white)' }}
-                        className="w-full py-1 px-2.5 bg-white border border-slate-200 rounded text-slate-800 text-sm focus:ring-1 focus:ring-sky-500 focus:border-sky-400 font-sans"
+                        className="text-sm"
                     />
                 </div>
             </div>
@@ -1574,15 +1532,15 @@ export const AdvancedSearch = ({ textSearch, setTextSearch, exactMatch, setExact
 
 export const SearchOptions = ({ language, setLanguage, inline = false }) => {
     const toggle = (
-        <div style={{ backgroundColor: 'var(--bg-surface, #f5f5f5)' }} className="flex items-center p-0.5 bg-neutral-100 rounded w-fit">
+        <div className="flex items-center p-0.5 bg-bg rounded w-fit">
             {[{ value: 'hindi', label: 'हिन्दी' }, { value: 'gujarati', label: 'ગુજરાતી' }].map(lang => (
                 <button
                     key={lang.value}
                     onClick={() => setLanguage(lang.value)}
-                    className={`px-3 py-0.5 text-sm font-medium rounded transition-all duration-150 ${
+                    className={`px-3 py-1.5 text-sm font-medium rounded transition-all duration-150 ${
                         language === lang.value
-                            ? 'bg-sky-600 text-white shadow-sm'
-                            : 'text-slate-400 hover:text-slate-600'
+                            ? 'bg-brand text-white shadow-sm'
+                            : 'text-ink-muted hover:text-ink'
                     }`}
                 >
                     {lang.label}
@@ -1597,7 +1555,7 @@ export const SearchOptions = ({ language, setLanguage, inline = false }) => {
 
     return (
         <div className="space-y-2">
-            <p className="text-xs text-slate-900 font-semibold uppercase tracking-wide">Language</p>
+            <p className="text-xs text-ink font-semibold uppercase tracking-wide">Language</p>
             {toggle}
         </div>
     );
