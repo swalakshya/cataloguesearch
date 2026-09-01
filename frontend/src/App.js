@@ -24,7 +24,11 @@ import ChatComposer from './components/chat/ChatComposer';
 import StatsStrip from './components/chat/StatsStrip';
 import AiDisclaimer from './components/chat/AiDisclaimer';
 import { Spinner, ChevronUpIcon, ChevronDownIcon, ExpandIcon, PdfIcon } from './components/SharedComponents';
-import { Mic, ScrollText, BookOpen, FileText, ChevronDown, Sparkles, AlertTriangle, Mail, Home, MessageCircleQuestion, PenLine, Copy, Check } from 'lucide-react';
+import { ChevronDown, Sparkles, AlertTriangle, Mail, Home, PenLine, Check } from 'lucide-react';
+import clipboardEmoji from './assets/emoji/clipboard.svg';
+import bulbEmoji from './assets/emoji/bulb.svg';
+import documentEmoji from './assets/emoji/document.svg';
+import { CATEGORY_EMOJI_SRC } from './components/chat/categoryEmoji';
 import { Modal } from './components/ui';
 
 // Import API service
@@ -199,7 +203,7 @@ const ShareAnswerButtons = ({ question, answer, citationBlocks }) => {
                     </>
                 ) : (
                     <>
-                        <Copy size={14} />
+                        <img src={clipboardEmoji} alt="" className="w-3.5 h-3.5" />
                         <span>Copy</span>
                     </>
                 )}
@@ -209,7 +213,7 @@ const ShareAnswerButtons = ({ question, answer, citationBlocks }) => {
                 className="btn btn-secondary flex items-center gap-1.5 text-xs py-1 px-2"
                 title="Share on WhatsApp"
             >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="#25D366">
                     <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
                     <path d="M12.001 2C6.478 2 2 6.478 2 12c0 1.892.526 3.66 1.438 5.166L2 22l4.955-1.4A9.94 9.94 0 0012.001 22C17.523 22 22 17.522 22 12S17.523 2 12.001 2zm0 18.2a8.19 8.19 0 01-4.19-1.147l-.3-.178-3.11.878.83-3.03-.196-.31A8.176 8.176 0 013.8 12c0-4.522 3.679-8.2 8.201-8.2 4.521 0 8.199 3.678 8.199 8.2 0 4.522-3.678 8.2-8.199 8.2z"/>
                 </svg>
@@ -1505,13 +1509,19 @@ const AppContent = () => {
                 }
                 // Small-gap line before citation blocks (grey quote lines)
                 if (/^__QUOT(?:CITE)?_\d+/.test(trimmed) && lastSegment !== '') {
-                    segments.push('<span style="display:block;height:0.3rem"></span>');
+                    segments.push('<span style="display:block;height:0"></span>');
                 }
             }
             segments.push(line);
         }
 
         let html = segments.join('<br/>');
+
+        // A blank line in the source (paragraph break) becomes an empty segment between
+        // two <br/>s, i.e. a full blank TEXT LINE (~1 line-height, ~26px) — much taller
+        // than intended just to separate paragraphs. Replace that specific pattern with a
+        // smaller fixed-height spacer instead of a whole empty line of text.
+        html = html.replace(/<br\/><br\/>/g, '<span style="display:block;height:0.5rem"></span>');
 
         // __PAREN__ first so any inner tokens (__BOLD__, __ITAL__, etc.) are resolved by subsequent steps
         html = html.replace(/__PAREN_(\d+)__/g, (match, idx) => {
@@ -1521,7 +1531,7 @@ const AppContent = () => {
 
         html = html.replace(/__HEADING_BOLD_(\d+)__/g, (match, idx) => {
             const content = headingParts[Number(idx)] || '';
-            return `<strong>${escapeHtml(content)}</strong><hr class=”llm-bold-separator”/>`;
+            return `<strong>${escapeHtml(content)}</strong><hr class="llm-bold-separator"/>`;
         });
         html = html.replace(/__BOLD_(\d+)__/g, (match, idx) => {
             const content = boldParts[Number(idx)] || '';
@@ -1547,17 +1557,19 @@ const AppContent = () => {
             const attrs = parseCitationAttrs(block.attrStr);
             const escapedText = escapeHtml(block.innerText.trim()).replace(/\r?\n/g, '<br/>');
             const label = buildCitationLabel(attrs);
-            const labelHtml = label ? `<span class="llm-quote-citation">${escapeHtml(label)}</span>` : '';
+            const marker = buildQuoteMetaMarker({ category: attrs.category, file_url: attrs.file_url, pdf_page_number: attrs.pdf_page_number, page_number: attrs.page });
+            const inner = `${escapeHtml(label)}${marker}`;
+            const labelHtml = (label || marker) ? `<span class="llm-quote-citation">${inner}</span>` : '';
             return `<span class="llm-quote-block">${escapedText}${labelHtml}</span>`;
         });
         html = html.replace(/__CITE_(\d+)__/g, (match, idx) => {
             const content = citationParts[Number(idx)] || '';
             const escaped = escapeHtml(content);
-            return `<div style=”display:block;text-align:right;margin-top:0.1rem”><sub style=”font-size:0.65em;color:#475569;font-style:italic”>${escaped}</sub></div>`;
+            return `<div style="display:block;text-align:right;margin-top:0.1rem"><sub style="font-size:0.65em;color:var(--color-ink-muted);font-style:italic">${escaped}</sub></div>`;
         });
         html = html.replace(/__CODE_(\d+)__/g, (match, idx) => {
             const content = codeParts[Number(idx)] || '';
-            return `<span class=”llm-code”>${escapeHtml(content)}</span>`;
+            return `<span class="llm-code">${escapeHtml(content)}</span>`;
         });
         html = html.replace(/__ACTION_FEEDBACK_(\d+)__/g, (match, idx) => {
             const label = actionLabelParts[Number(idx)] || 'Feedback';
@@ -1570,6 +1582,24 @@ const AppContent = () => {
 
         // Resolve detail-prompt break markers inserted before tokenization
         html = html.replace(/@@BREAK@@/g, '<br/>');
+
+        // Resolve QPDF markers (see buildQuoteMetaMarker) into "| <emoji> Category: X | <emoji> View PDF",
+        // now that escaping is done — the one place both citation paths (embedded
+        // <citation> tags, and {{chunk_id}} quotes) end up rendered.
+        html = html.replace(/\[\[QPDF:([^:\]]*):([^\]]*)\]\]/g, (match, category, encodedUrl) => {
+            const parts = [];
+            if (category) {
+                const meta = getCitationCategoryMeta(category);
+                const emojiSrc = CATEGORY_EMOJI_SRC[category];
+                const emojiHtml = emojiSrc ? `<img src="${emojiSrc}" alt="" class="llm-inline-emoji" />` : '';
+                parts.push(`<span class="llm-quote-meta-item">${emojiHtml}Category: ${escapeHtml(meta.label)}</span>`);
+            }
+            if (encodedUrl) {
+                const pdfUrl = decodeURIComponent(encodedUrl);
+                parts.push(`<a href="${escapeHtml(pdfUrl)}" target="_blank" rel="noopener noreferrer" class="llm-quote-meta-item llm-view-pdf-link"><img src="${documentEmoji}" alt="" class="llm-inline-emoji" />View PDF</a>`);
+            }
+            return parts.length ? ` | ${parts.join(' | ')}` : '';
+        });
 
         return html;
     };
@@ -1610,14 +1640,31 @@ const AppContent = () => {
         return parts.filter(Boolean).join(', ');
     };
 
+    // [[QPDF:category:url-encoded-pdf-url]] -- an inert marker carrying a quote's
+    // category + PDF link through the whole tokenize/escape pipeline, resolved into a
+    // real badge + "View PDF" link at the very end of formatAnswerHtml. Used by both
+    // citation paths (this chunk-quote path, and the <citation> tag path in
+    // formatAnswerHtml) so there's one single place that turns "category + url" into
+    // markup. Bracket-delimited rather than space-delimited -- a space-based version of
+    // this marker was silently losing its surrounding spaces somewhere in the pipeline
+    // (never root-caused), so this uses characters no realistic answer text or
+    // encodeURIComponent output can produce, no whitespace involved at all.
+    const buildQuoteMetaMarker = (source) => {
+        const pdfUrl = buildReferencePdfUrl(source?.file_url, source?.pdf_page_number, source?.page_number);
+        if (!source?.category && !pdfUrl) return '';
+        return `[[QPDF:${source?.category || ''}:${pdfUrl ? encodeURIComponent(pdfUrl) : ''}]]`;
+    };
+
     const resolveChunkQuotes = (text, citations, chunkTexts) => {
         if (!text || !chunkTexts) return text;
         return text.replace(/^(\s*>\s*)\{\{([^}]+)\}\}\s*$/gm, (match, prefix, chunkId) => {
             const chunkData = chunkTexts[chunkId];
             if (!chunkData?.text_content) return match;
-            const citationFromResponse = (citations || []).find(c => c.chunk_id === chunkId);
-            const label = buildInlineQuoteLabel(citationFromResponse || chunkData);
-            return `${prefix}${chunkData.text_content}${label ? ` (${label})` : ''}`;
+            const source = (citations || []).find(c => c.chunk_id === chunkId) || chunkData;
+            const label = buildInlineQuoteLabel(source);
+            const marker = buildQuoteMetaMarker(source);
+            const inner = [label, marker].filter(Boolean).join('');
+            return `${prefix}${chunkData.text_content}${inner ? ` (${inner})` : ''}`;
         });
     };
 
@@ -1644,80 +1691,20 @@ const AppContent = () => {
         return url.endsWith(`/${page}`) ? url : `${url}/${page}`;
     };
 
-    // Each content category gets a distinct token-driven accent (not literal colors),
-    // so this stays correct under any of the 6 candidate palettes / dark mode.
+    // Each content category gets a distinct token-driven badge variant (not a literal
+    // color), so this stays correct under any of the 6 candidate palettes / dark mode.
+    // Used to badge inline quote citations — see the QPDF marker in formatAnswerHtml.
     const getCitationCategoryMeta = (category) => {
         switch (category) {
             case 'Pravachan':
-                return { icon: Mic, label: 'Pravachan', colorVar: '--color-info' };
+                return { label: 'Pravachan', variant: 'info' };
             case 'Granth':
-                return { icon: ScrollText, label: 'Granth', colorVar: '--color-brand' };
+                return { label: 'Granth', variant: 'brand' };
             case 'Books':
-                return { icon: BookOpen, label: 'Books', colorVar: '--color-success' };
+                return { label: 'Books', variant: 'success' };
             default:
-                return { icon: FileText, label: 'Reference', colorVar: '--color-ink-muted' };
+                return { label: 'Reference', variant: 'neutral' };
         }
-    };
-
-    const getCitationLocationLabel = (citation) => {
-        if (!citation) return '';
-
-        const locationParts = [
-            citation.verse_type && citation.verse_number !== undefined
-                ? `${citation.verse_type} ${citation.verse_number}`
-                : null,
-            citation.gatha !== undefined && citation.gatha !== null ? `Gatha ${citation.gatha}` : null,
-            citation.shlok !== undefined && citation.shlok !== null ? `Shlok ${citation.shlok}` : null,
-            citation.dohra !== undefined && citation.dohra !== null ? `Dohra ${citation.dohra}` : null,
-            citation.doha !== undefined && citation.doha !== null ? `Doha ${citation.doha}` : null,
-            citation.kalash !== undefined && citation.kalash !== null ? `Kalash ${citation.kalash}` : null,
-            citation.kavya !== undefined && citation.kavya !== null ? `Kavya ${citation.kavya}` : null,
-            citation.sutra !== undefined && citation.sutra !== null ? `Sutra ${citation.sutra}` : null,
-        ].filter(Boolean);
-
-        return locationParts.join(' · ');
-    };
-
-    const getAibotReferenceCardData = (citation, ref) => {
-        const fallback = parseReference(ref);
-        const categoryMeta = getCitationCategoryMeta(citation?.category);
-        const locationLabel = getCitationLocationLabel(citation);
-        const granthLineBase = citation?.granth || fallback.text || ref;
-        const title = locationLabel ? `${granthLineBase} (${locationLabel})` : granthLineBase;
-        const speaker = citation?.pravachankar || citation?.Pravachankar;
-
-        const detailParts = [];
-        if (citation?.series) detailParts.push(citation.series);
-        if (citation?.volume !== undefined && citation?.volume !== null && citation?.volume !== '') {
-            detailParts.push(`Volume ${citation.volume}`);
-        }
-        if (citation?.pravachan_number) detailParts.push(`Pravachan Number ${citation.pravachan_number}`);
-        if (citation?.page_number !== undefined && citation?.page_number !== null && citation?.page_number !== '') {
-            detailParts.push(`Page ${citation.page_number}`);
-        }
-
-        const lines = [];
-        if (citation?.category === 'Pravachan') {
-            if (speaker) lines.push(speaker);
-            if (detailParts.length) lines.push(detailParts.join(', '));
-        } else {
-            if (citation?.author) lines.push(citation.author);
-            if (detailParts.length) lines.push(detailParts.join(', '));
-        }
-
-        return {
-            title,
-            lines,
-            categoryLabel: categoryMeta.label,
-            categoryIcon: categoryMeta.icon,
-            colorVar: categoryMeta.colorVar,
-            readChunkId: citation?.chunk_id || null,
-            viewPdfUrl: buildReferencePdfUrl(
-                citation?.file_url || fallback.url || null,
-                citation?.pdf_page_number,
-                citation?.page_number
-            )
-        };
     };
 
     return (
@@ -2123,25 +2110,22 @@ const AppContent = () => {
                                                                             {displayedTexts[key] === cleanAnswerText(msg.content) && shouldCollapseAnswer(msg.content) && (
                                                                                 <button
                                                                                     onClick={() => setExpandedAnswers(prev => ({ ...prev, [key]: prev[key] === false }))}
-                                                                                    className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-brand hover:text-brand-hover transition-colors"
+                                                                                    className="mt-6 inline-flex items-center gap-1 text-sm font-medium text-brand hover:text-brand-hover transition-colors"
                                                                                 >
                                                                                     {expandedAnswers[key] === false ? 'Show more' : 'Show less'}
                                                                                 </button>
                                                                             )}
                                                                         </div>
                                                                         {displayedTexts[key] === cleanAnswerText(msg.content) && msg.content && (
-                                                                            <div className="mt-4 w-full flex justify-end">
+                                                                            <div className="mt-2 w-full max-w-3xl flex justify-end">
                                                                                 <ShareAnswerButtons question={chatMessages[idx - 1]?.content} answer={cleanAnswerText(msg.content)} citationBlocks={msg.citationBlocks} />
                                                                             </div>
                                                                         )}
                                                                         {displayedTexts[key] === cleanAnswerText(msg.content) && msg.follow_up_questions && msg.follow_up_questions.length > 0 && (
-                                                                            <div
-                                                                                className="mt-8 w-full rounded-md p-4"
-                                                                                style={{ border: '1px solid color-mix(in srgb, var(--color-brand) 30%, var(--color-border))', backgroundColor: 'color-mix(in srgb, var(--color-brand) 8%, var(--color-surface))' }}
-                                                                            >
-                                                                                <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide mb-2.5" style={{ color: 'var(--color-brand)' }}>
-                                                                                    <MessageCircleQuestion size={13} />
-                                                                                    Suggested Follow up questions
+                                                                            <div className="mt-6 w-full max-w-3xl">
+                                                                                <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide mb-2.5 text-ink-muted">
+                                                                                    <img src={bulbEmoji} alt="" className="w-3.5 h-3.5" />
+                                                                                    Suggested Follow Up Questions
                                                                                 </p>
                                                                                 <div className="flex flex-wrap gap-2">
                                                                                     {msg.follow_up_questions.map((question, questionIdx) => (
@@ -2149,98 +2133,12 @@ const AppContent = () => {
                                                                                             key={`${idx}-follow-up-${questionIdx}`}
                                                                                             onClick={() => handleChatSend(chatSessionId, question)}
                                                                                             disabled={llmLoading || !chatSessionId}
-                                                                                            className="suggestion-chip px-3 py-1 text-sm rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                                            className="suggestion-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                                                         >
+                                                                                            <Sparkles size={13} style={{ color: 'var(--color-brand)' }} />
                                                                                             {question}
                                                                                         </button>
                                                                                     ))}
-                                                                                </div>
-                                                                            </div>
-                                                                        )}
-                                                                        {displayedTexts[key] === cleanAnswerText(msg.content) && msg.references && msg.references.length > 0 && (
-                                                                            <div
-                                                                                className="mt-5 w-full rounded-md p-4"
-                                                                                style={{ border: '1px solid color-mix(in srgb, var(--color-brand) 30%, var(--color-border))', backgroundColor: 'color-mix(in srgb, var(--color-brand) 8%, var(--color-surface))' }}
-                                                                            >
-                                                                                <h4 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide mb-3" style={{ color: 'var(--color-brand)' }}>
-                                                                                    <BookOpen size={13} />
-                                                                                    References
-                                                                                </h4>
-                                                                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                                                                                    {msg.references.map((ref, refIdx) => {
-                                                                                        const citation = (msg.citations || []).find(c => c.reference === ref) || msg.citations?.[refIdx];
-                                                                                        const card = getAibotReferenceCardData(citation, ref);
-                                                                                        const CategoryIcon = card.categoryIcon;
-                                                                                        const handleCardActivate = () => {
-                                                                                            if (card.readChunkId) {
-                                                                                                handleExpand(card.readChunkId);
-                                                                                            } else if (card.viewPdfUrl) {
-                                                                                                window.open(card.viewPdfUrl, '_blank', 'noopener,noreferrer');
-                                                                                            }
-                                                                                        };
-                                                                                        const isCardInteractive = Boolean(card.readChunkId || card.viewPdfUrl);
-                                                                                        return (
-                                                                                            <div
-                                                                                                key={`${ref}-${refIdx}`}
-                                                                                                onClick={isCardInteractive ? handleCardActivate : undefined}
-                                                                                                onKeyDown={isCardInteractive ? (event) => {
-                                                                                                    if (event.key === 'Enter' || event.key === ' ') {
-                                                                                                        event.preventDefault();
-                                                                                                        handleCardActivate();
-                                                                                                    }
-                                                                                                } : undefined}
-                                                                                                role={isCardInteractive ? 'button' : undefined}
-                                                                                                tabIndex={isCardInteractive ? 0 : undefined}
-                                                                                                className={`card flex flex-col justify-between p-3 text-sm transition-shadow ${isCardInteractive ? 'cursor-pointer hover:shadow-sm' : ''}`}
-                                                                                                style={{ borderColor: `var(${card.colorVar})` }}
-                                                                                            >
-                                                                                                <div className="mb-3">
-                                                                                                    <div className="mb-2 flex items-start justify-between gap-2">
-                                                                                                        <span
-                                                                                                            className="inline-block text-xs font-bold rounded px-1.5 py-0.5"
-                                                                                                            style={{ backgroundColor: `color-mix(in srgb, var(${card.colorVar}) 14%, var(--color-surface))`, color: `var(${card.colorVar})` }}
-                                                                                                        >
-                                                                                                            {refIdx + 1}
-                                                                                                        </span>
-                                                                                                        <span
-                                                                                                            className="inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.06em]"
-                                                                                                            style={{ backgroundColor: `color-mix(in srgb, var(${card.colorVar}) 14%, var(--color-surface))`, color: `var(${card.colorVar})`, borderColor: `color-mix(in srgb, var(${card.colorVar}) 35%, transparent)` }}
-                                                                                                        >
-                                                                                                            {CategoryIcon && <CategoryIcon size={10} />}
-                                                                                                            {card.categoryLabel}
-                                                                                                        </span>
-                                                                                                    </div>
-                                                                                                    <p className="font-bold text-ink leading-snug">{card.title}</p>
-                                                                                                    <div className="mt-2 space-y-1 text-ink leading-snug">
-                                                                                                        {card.lines.map((line, lineIdx) => (
-                                                                                                            <p key={`${refIdx}-${lineIdx}`} className="break-words">
-                                                                                                                {line}
-                                                                                                            </p>
-                                                                                                        ))}
-                                                                                                    </div>
-                                                                                                </div>
-                                                                                                <div className="flex items-center gap-2">
-                                                                                                    {card.readChunkId && (
-                                                                                                        <button onClick={(event) => {
-                                                                                                            event.stopPropagation();
-                                                                                                            handleExpand(card.readChunkId);
-                                                                                                        }}
-                                                                                                            className="btn btn-secondary text-xs py-1 px-2">
-                                                                                                            Expand
-                                                                                                        </button>
-                                                                                                    )}
-                                                                                                    {card.viewPdfUrl && (
-                                                                                                        <a href={card.viewPdfUrl} target="_blank" rel="noopener noreferrer"
-                                                                                                            onClick={(event) => event.stopPropagation()}
-                                                                                                            className="btn btn-secondary inline-flex items-center gap-1 text-xs py-1 px-2"
-                                                                                                            style={{ color: 'var(--color-danger)' }}>
-                                                                                                            <PdfIcon />View PDF
-                                                                                                        </a>
-                                                                                                    )}
-                                                                                                </div>
-                                                                                            </div>
-                                                                                        );
-                                                                                    })}
                                                                                 </div>
                                                                             </div>
                                                                         )}
