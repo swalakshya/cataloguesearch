@@ -7,7 +7,7 @@ import { useTheme } from './ThemeContext';
 // production — App.js only mounts this when process.env.NODE_ENV === 'development'.
 export default function PaletteSwitcher() {
     const { mode, toggleMode, palette, setPalette } = useTheme();
-    const [open, setOpen] = useState(true);
+    const [open, setOpen] = useState(false);
 
     if (!open) {
         return (

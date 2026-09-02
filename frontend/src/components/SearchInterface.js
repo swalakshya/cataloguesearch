@@ -829,6 +829,7 @@ const PravachanFilter = ({
         <>
             <button
                 onClick={() => setIsOpen(true)}
+                disabled={disabled}
                 className={`filter-trigger ${disabled ? 'filter-trigger-disabled' : activeCount > 0 ? 'filter-trigger-active' : ''}`}
                 title={disabled ? 'Not searched — a Granth-only filter is active. Pick a Pravachan filter to include Pravachan results again.' : undefined}
             >
@@ -1095,6 +1096,7 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
         <>
             <button
                 onClick={() => setIsOpen(true)}
+                disabled={disabled}
                 className={`filter-trigger ${disabled ? 'filter-trigger-disabled' : activeCount > 0 ? 'filter-trigger-active' : ''}`}
                 title={disabled ? 'Not searched — a Pravachan-only filter is active. Pick a Granth filter to include Granth results again.' : undefined}
             >
@@ -1220,6 +1222,7 @@ const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, 
         <>
             <button
                 onClick={() => setIsOpen(true)}
+                disabled={disabled}
                 className={`filter-trigger ${disabled ? 'filter-trigger-disabled' : activeCount > 0 ? 'filter-trigger-active' : ''}`}
                 title={disabled ? 'Not searched — pick a Books filter to include Books results again.' : undefined}
             >
