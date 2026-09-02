@@ -95,6 +95,22 @@ input::placeholder, textarea::placeholder { color: var(--color-ink-muted); }
     color: var(--color-brand);
     background-color: color-mix(in srgb, var(--color-brand) 8%, var(--color-surface));
 }
+
+/* Lighter sibling for "Try asking" / "Try searching for" query suggestions —
+   these should feel like lightweight, secondary hints rather than another
+   bordered box competing with the real controls (search box, filters). No
+   border or fill until hover. Follow-up-question chips and "Did you mean"
+   keep the bordered .suggestion-chip look, unchanged. */
+.chip-quiet {
+    background-color: transparent;
+    border: 1px solid var(--color-border);
+    color: var(--color-ink-muted);
+}
+.chip-quiet:hover {
+    border-color: color-mix(in srgb, var(--color-brand) 45%, var(--color-border));
+    background-color: color-mix(in srgb, var(--color-brand) 8%, transparent);
+    color: var(--color-brand);
+}
 .field:disabled {
     background-color: var(--color-bg);
     color: var(--color-ink-muted);

@@ -16,18 +16,18 @@ export default function StatsStrip() {
     const tiles = TILES(stats);
 
     return (
-        <div className="card flex items-stretch px-2 py-4">
+        <div className="card flex items-stretch px-2 py-2.5">
             {tiles.map(({ category, colorVar, value, label }, i) => (
-                <div key={label} className={`flex-1 flex items-center justify-center gap-3 px-4 ${i > 0 ? 'border-l' : ''}`} style={{ borderColor: 'var(--color-border)' }}>
+                <div key={label} className={`flex-1 flex items-center justify-center gap-2.5 px-3 ${i > 0 ? 'border-l' : ''}`} style={{ borderColor: 'var(--color-border)' }}>
                     <div
-                        className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                        className="w-7 h-7 rounded-md flex items-center justify-center shrink-0"
                         style={{ backgroundColor: `color-mix(in srgb, var(${colorVar}) 14%, var(--color-surface))` }}
                     >
-                        <CategoryEmojiIcon category={category} size={20} />
+                        <CategoryEmojiIcon category={category} size={16} />
                     </div>
                     <div className="leading-tight">
-                        {value && <div className="text-lg font-bold text-ink">{value}</div>}
-                        <div className={value ? 'text-xs text-ink-muted' : 'text-sm font-bold text-ink'}>{label}</div>
+                        {value && <div className="text-sm font-bold text-ink">{value}</div>}
+                        <div className={value ? 'text-xs text-ink-muted' : 'text-xs font-bold text-ink'}>{label}</div>
                     </div>
                 </div>
             ))}

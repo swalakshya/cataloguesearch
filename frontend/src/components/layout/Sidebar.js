@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Moon, MessageSquare, PanelLeftClose, PanelLeftOpen, Plus, Sun, User, X } from 'lucide-react';
+import { Moon, PanelLeftClose, PanelLeftOpen, Plus, Sun, User, X } from 'lucide-react';
 import { useTheme } from '../../theme/ThemeContext';
 import { useOverlayBehavior } from '../ui/Modal';
 import { NAV_ITEMS } from './navItems';
@@ -21,7 +21,7 @@ function BrandMark({ size = 22 }) {
                 width: size,
                 height: size,
                 flexShrink: 0,
-                backgroundColor: 'var(--color-brand)',
+                backgroundColor: 'var(--color-mark, var(--color-brand))',
                 WebkitMaskImage: `url(${swalakshyaMark})`,
                 maskImage: `url(${swalakshyaMark})`,
                 WebkitMaskSize: 'contain',
@@ -102,10 +102,7 @@ function SidebarContent({ collapsed, onToggleCollapse, closeButton, onNewChat, m
                 // multi-thread session storage exists server-side.
                 <div className="flex-1 overflow-y-auto px-3">
                     <div className="text-xs font-semibold text-ink-muted uppercase tracking-wide px-1 mb-2">History</div>
-                    <div className="text-sm text-ink-muted px-2 py-6 text-center">
-                        <MessageSquare size={20} className="mx-auto mb-2" style={{ opacity: 0.5 }} />
-                        Coming Soon!
-                    </div>
+                    <div className="text-sm text-ink-muted px-1 py-1">No conversations yet</div>
                 </div>
             )}
             {collapsed && <div className="flex-1" />}

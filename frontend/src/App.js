@@ -1795,10 +1795,10 @@ const AppContent = () => {
                                             Browse All
                                         </Link>
                                     </div>
-                                    <div className="mb-4">
+                                    <div className="mb-3">
                                         <StatsStrip />
                                     </div>
-                                    <div className="card p-3 shadow-sm mb-4">
+                                    <div className="card p-3 shadow-sm mb-3">
                                         <InputActionBar
                                             action={
                                                 <button
@@ -1837,7 +1837,7 @@ const AppContent = () => {
                                             </button>
                                         </div>
                                         {showFilters && (
-                                            <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--color-border)' }}>
+                                            <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--color-border)' }}>
                                                 <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr_1fr] gap-5">
                                                     <SearchFilters
                                                         allMetadata={allMetadata}
@@ -2006,7 +2006,7 @@ const AppContent = () => {
                                             <div className="flex flex-wrap gap-2">
                                                 {suggestedQueries.map(term => (
                                                     <button key={term} onClick={() => handleSuggestionClick(term)}
-                                                        className="suggestion-chip px-3 py-1 text-sm rounded transition-colors">
+                                                        className="chip-quiet px-3 py-1 text-sm rounded transition-colors">
                                                         {term}
                                                     </button>
                                                 ))}
@@ -2021,7 +2021,7 @@ const AppContent = () => {
                                 <>
                                     {/* Empty state — centered search bar */}
                                     {chatMessages.length === 0 && !llmLoading && (
-                                        <div className="flex flex-col items-center justify-center py-16">
+                                        <div className="flex flex-col items-center justify-center py-14">
                                             <div className="w-full max-w-4xl space-y-2">
                                                 <PageHeader
                                                     variant="hero"
@@ -2039,8 +2039,8 @@ const AppContent = () => {
                                                     setChatContentTypes={setChatContentTypes}
                                                     showDisclaimer={false}
                                                 />
-                                                <div className="w-full pt-10">
-                                                    <div className="flex items-center gap-3 mb-4">
+                                                <div className="w-full pt-8">
+                                                    <div className="flex items-center gap-3 mb-3">
                                                         <div className="flex-1 h-px" style={{ backgroundColor: 'var(--color-border)' }} />
                                                         <p className="text-xs text-ink-muted uppercase tracking-wider font-medium whitespace-nowrap">Try asking</p>
                                                         <div className="flex-1 h-px" style={{ backgroundColor: 'var(--color-border)' }} />
@@ -2048,14 +2048,14 @@ const AppContent = () => {
                                                     <div className="flex flex-wrap items-center gap-2 justify-center">
                                                         {suggestedQueries.map(term => (
                                                             <button key={term} onClick={() => handleChatStart(term)}
-                                                                className="suggestion-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded transition-colors">
+                                                                className="chip-quiet inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded transition-colors">
                                                                 <Sparkles size={13} style={{ color: 'var(--color-brand)' }} />
                                                                 {term}
                                                             </button>
                                                         ))}
                                                     </div>
                                                 </div>
-                                                <div className="w-full pt-8">
+                                                <div className="w-full pt-6">
                                                     <StatsStrip />
                                                 </div>
                                                 <div className="w-full pt-1">
@@ -2085,7 +2085,7 @@ const AppContent = () => {
                                                     <div key={msg.localId ? `${msg.role}-${msg.localId}` : `${msg.role}-${idx}`}>
                                                         {msg.role === 'user' ? (
                                                             <div ref={isLastUser ? latestUserBubbleRef : null} className="flex justify-end">
-                                                                <div className="shadow-sm rounded-lg rounded-tr-none px-4 py-2.5 max-w-[72%] text-white text-base" style={{ backgroundColor: 'var(--color-brand)' }}>
+                                                                <div className="shadow-sm rounded-lg rounded-tr-none px-4 py-2.5 max-w-[65%] text-white text-base" style={{ backgroundColor: 'var(--color-brand)' }}>
                                                                     {msg.content}
                                                                 </div>
                                                             </div>
@@ -2109,12 +2109,12 @@ const AppContent = () => {
                                                                     </div>
                                                                 ) : (
                                                                     <>
-                                                                        <div className="flex items-start justify-between gap-3 mb-3 max-w-3xl">
+                                                                        <div className="flex items-start justify-between gap-3 mb-3 max-w-[860px]">
                                                                             <div>
                                                                                 <div className="text-sm font-bold uppercase tracking-[0.12em] text-ink">Answer</div>
                                                                             </div>
                                                                         </div>
-                                                                        <div className="max-w-3xl">
+                                                                        <div className="max-w-[860px]">
                                                                             <div className={`text-ink leading-relaxed text-base ${displayedTexts[key] === cleanAnswerText(msg.content) && shouldCollapseAnswer(msg.content) && expandedAnswers[key] === false ? 'max-h-72 overflow-hidden' : ''}`}
                                                                                 onClick={handleAnswerActionClick}
                                                                                 dangerouslySetInnerHTML={{ __html: formatAnswerHtml(
@@ -2134,15 +2134,10 @@ const AppContent = () => {
                                                                                 </button>
                                                                             )}
                                                                         </div>
-                                                                        {displayedTexts[key] === cleanAnswerText(msg.content) && msg.content && (
-                                                                            <div className="mt-2 w-full max-w-3xl flex justify-end">
-                                                                                <ShareAnswerButtons question={chatMessages[idx - 1]?.content} answer={cleanAnswerText(msg.content)} citationBlocks={msg.citationBlocks} />
-                                                                            </div>
-                                                                        )}
                                                                         {displayedTexts[key] === cleanAnswerText(msg.content) && msg.follow_up_questions && msg.follow_up_questions.length > 0 && (
-                                                                            <div className="mt-6 w-full max-w-3xl">
-                                                                                <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide mb-2.5 text-ink-muted">
-                                                                                    <img src={bulbEmoji} alt="" className="w-3.5 h-3.5" />
+                                                                            <div className="mt-6 w-full max-w-[860px]">
+                                                                                <p className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide mb-2.5 text-ink">
+                                                                                    <img src={bulbEmoji} alt="" className="w-4 h-4" />
                                                                                     Suggested Follow Up Questions
                                                                                 </p>
                                                                                 <div className="flex flex-wrap gap-2">
@@ -2160,15 +2155,20 @@ const AppContent = () => {
                                                                                 </div>
                                                                             </div>
                                                                         )}
-                                                                        {displayedTexts[key] === cleanAnswerText(msg.content) && msg.content && msg.question && (
-                                                                            <FeedbackButtons
-                                                                                requestId={msg.tool_trace_id}
-                                                                                question={msg.question || ''}
-                                                                                answer={msg.rawAnswer || cleanAnswerText(msg.content)}
-                                                                                references={msg.references}
-                                                                                citations={msg.citations}
-                                                                                followUpQuestions={msg.follow_up_questions}
-                                                                            />
+                                                                        {displayedTexts[key] === cleanAnswerText(msg.content) && msg.content && (
+                                                                            <div className="mt-3 w-full max-w-[860px] flex items-center flex-wrap gap-2">
+                                                                                <ShareAnswerButtons question={chatMessages[idx - 1]?.content} answer={cleanAnswerText(msg.content)} citationBlocks={msg.citationBlocks} />
+                                                                                {msg.question && (
+                                                                                    <FeedbackButtons
+                                                                                        requestId={msg.tool_trace_id}
+                                                                                        question={msg.question || ''}
+                                                                                        answer={msg.rawAnswer || cleanAnswerText(msg.content)}
+                                                                                        references={msg.references}
+                                                                                        citations={msg.citations}
+                                                                                        followUpQuestions={msg.follow_up_questions}
+                                                                                    />
+                                                                                )}
+                                                                            </div>
                                                                         )}
                                                                     </>
                                                                 )}

@@ -405,9 +405,9 @@ function HelpfulSubmitter({ requestId, question, answer, references, onSubmitted
                 onClick={handleHelpfulVote}
                 disabled={isSubmitting}
                 aria-label="Mark as helpful"
-                className="btn btn-secondary inline-flex items-center gap-1.5 text-sm py-1.5 px-3"
+                className="btn btn-secondary inline-flex items-center gap-1.5 text-xs py-1 px-2"
             >
-                {isSubmitting ? <Spinner /> : <ThumbsUp size={15} />}
+                {isSubmitting ? <Spinner /> : <ThumbsUp size={14} />}
                 <span>Helpful</span>
             </button>
             {submitError && (
@@ -432,16 +432,15 @@ export function FeedbackButtons({ requestId, question, answer, references, citat
 
     return (
         <>
-            <div className="mt-5 flex items-center gap-2">
-                <span className="text-sm font-semibold text-ink-muted mr-1">Was this helpful?</span>
+            <div className="flex items-center gap-2">
                 {submitted ? (
                     <button
                         disabled
                         aria-label="Mark as helpful"
-                        className={`btn inline-flex items-center gap-1.5 text-sm py-1.5 px-3 ${submitted === 'helpful' ? 'badge-success' : 'btn-secondary'}`}
+                        className={`btn inline-flex items-center gap-1.5 text-xs py-1 px-2 ${submitted === 'helpful' ? 'badge-success' : 'btn-secondary'}`}
                         style={submitted !== 'helpful' ? { opacity: 0.4 } : undefined}
                     >
-                        <ThumbsUp size={15} /><span>Helpful</span>
+                        <ThumbsUp size={14} /><span>Helpful</span>
                     </button>
                 ) : (
                     <GoogleReCaptchaProvider reCaptchaKey={RECAPTCHA_KEY}>
@@ -459,10 +458,10 @@ export function FeedbackButtons({ requestId, question, answer, references, citat
                     onClick={() => handleVote('not_helpful')}
                     disabled={!!submitted}
                     aria-label="Mark as not helpful"
-                    className={`btn inline-flex items-center gap-1.5 text-sm py-1.5 px-3 ${submitted === 'not_helpful' ? 'badge-danger' : 'btn-secondary'}`}
+                    className={`btn inline-flex items-center gap-1.5 text-xs py-1 px-2 ${submitted === 'not_helpful' ? 'badge-danger' : 'btn-secondary'}`}
                     style={submitted && submitted !== 'not_helpful' ? { opacity: 0.4 } : undefined}
                 >
-                    <Leaf size={15} /><span>Not helpful</span>
+                    <Leaf size={14} /><span>Not helpful</span>
                 </button>
             </div>
 

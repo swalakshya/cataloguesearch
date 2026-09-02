@@ -22,6 +22,16 @@ const STATUS_COLORS = {
     },
 };
 
+// The sidebar lotus mark's own tint — a constant warm gold/copper identity
+// that stays put across every palette, independent of whichever --color-brand
+// accent is active. Keeps a subtle Jain visual identity even on the cooler,
+// more corporate palettes (e.g. Cobalt Slate) where the UI accent itself
+// isn't warm.
+const MARK_COLORS = {
+    light: { '--color-mark': '#B8860B' },
+    dark: { '--color-mark': '#E0AF4F' },
+};
+
 export const PALETTES = {
     saffron: {
         label: 'Saffron & Parchment',
@@ -35,6 +45,7 @@ export const PALETTES = {
             '--color-brand': '#C4571C',
             '--color-brand-hover': '#A84812',
             ...STATUS_COLORS.light,
+            ...MARK_COLORS.light,
         },
         dark: {
             '--color-bg': '#1C1712',
@@ -45,6 +56,7 @@ export const PALETTES = {
             '--color-brand': '#E07A42',
             '--color-brand-hover': '#F0955F',
             ...STATUS_COLORS.dark,
+            ...MARK_COLORS.dark,
         },
     },
     vermilion: {
@@ -59,6 +71,7 @@ export const PALETTES = {
             '--color-brand': '#D9351F',
             '--color-brand-hover': '#B52712',
             ...STATUS_COLORS.light,
+            ...MARK_COLORS.light,
         },
         dark: {
             '--color-bg': '#1D1310',
@@ -69,6 +82,7 @@ export const PALETTES = {
             '--color-brand': '#F0664A',
             '--color-brand-hover': '#F58868',
             ...STATUS_COLORS.dark,
+            ...MARK_COLORS.dark,
         },
     },
     copper: {
@@ -83,6 +97,7 @@ export const PALETTES = {
             '--color-brand': '#B5651D',
             '--color-brand-hover': '#935016',
             ...STATUS_COLORS.light,
+            ...MARK_COLORS.light,
         },
         dark: {
             '--color-bg': '#1D1610',
@@ -93,6 +108,7 @@ export const PALETTES = {
             '--color-brand': '#DE9046',
             '--color-brand-hover': '#E9AC6D',
             ...STATUS_COLORS.dark,
+            ...MARK_COLORS.dark,
         },
     },
     sapphire: {
@@ -107,6 +123,7 @@ export const PALETTES = {
             '--color-brand': '#1E56C7',
             '--color-brand-hover': '#163F94',
             ...STATUS_COLORS.light,
+            ...MARK_COLORS.light,
         },
         dark: {
             '--color-bg': '#0F1725',
@@ -117,6 +134,33 @@ export const PALETTES = {
             '--color-brand': '#6D9BF2',
             '--color-brand-hover': '#93B7F5',
             ...STATUS_COLORS.dark,
+            ...MARK_COLORS.dark,
+        },
+    },
+    cobalt: {
+        label: 'Cobalt Slate',
+        description: 'Restrained, modern blue — technology-forward',
+        light: {
+            '--color-bg': '#F7F8FA',
+            '--color-surface': '#FFFFFF',
+            '--color-border': '#DFE3EA',
+            '--color-ink': '#1B2430',
+            '--color-ink-muted': '#5B6472',
+            '--color-brand': '#2454B8',
+            '--color-brand-hover': '#1B3E8C',
+            ...STATUS_COLORS.light,
+            ...MARK_COLORS.light,
+        },
+        dark: {
+            '--color-bg': '#12161D',
+            '--color-surface': '#1A2029',
+            '--color-border': '#2C3542',
+            '--color-ink': '#E7EBF1',
+            '--color-ink-muted': '#9CA7B6',
+            '--color-brand': '#6F97E0',
+            '--color-brand-hover': '#95B3EA',
+            ...STATUS_COLORS.dark,
+            ...MARK_COLORS.dark,
         },
     },
 };
@@ -125,4 +169,4 @@ export const PALETTE_KEYS = Object.keys(PALETTES);
 
 // Whichever palette wins the review gets set here — this is the one and only
 // line that needs to change to lock in production's color scheme.
-export const DEFAULT_PALETTE = 'sapphire';
+export const DEFAULT_PALETTE = 'cobalt';

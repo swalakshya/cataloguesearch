@@ -6,7 +6,7 @@ import React from 'react';
 export default function PageHeader({ title, subtitle, className = '', variant = 'default' }) {
     if (variant === 'hero') {
         return (
-            <div className={`text-center mb-12 ${className}`}>
+            <div className={`text-center mb-10 ${className}`}>
                 <h1 className="text-4xl font-bold text-ink tracking-tight">{title}</h1>
                 {subtitle && <p className="mt-2 text-ink-muted max-w-xl mx-auto">{subtitle}</p>}
             </div>
