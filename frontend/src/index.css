@@ -1,3 +1,6 @@
+@import './styles/tokens.css';
+@import './styles/components.css';
+
 /* Import Tailwind CSS directives */
 @tailwind base;
 @tailwind components;
@@ -10,17 +13,17 @@ input[type="radio"] {
   -moz-appearance: none;
   width: 1rem;
   height: 1rem;
-  border: 2px solid #d1d5db;
+  border: 2px solid var(--color-border);
   border-radius: 50%;
-  background-color: white;
+  background-color: var(--color-surface);
   cursor: pointer;
   position: relative;
   transition: all 0.2s ease;
 }
 
 input[type="radio"]:checked {
-  border-color: #2563eb;
-  background-color: #2563eb;
+  border-color: var(--color-brand);
+  background-color: var(--color-brand);
 }
 
 input[type="radio"]:checked::after {
@@ -32,12 +35,12 @@ input[type="radio"]:checked::after {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background-color: white;
+  background-color: var(--color-surface);
 }
 
 input[type="radio"]:focus {
   outline: none;
-  box-shadow: 0 0 0 2px #3b82f6;
+  box-shadow: 0 0 0 2px var(--color-brand);
 }
 
 /* You can add any global custom styles here if needed */
@@ -72,8 +75,9 @@ code {
 
 /* Ensure the font-family is set correctly in your main CSS file (e.g., App.css) */
 body {
-  font-family: 'Noto Sans', 'Noto Sans Devanagari', sans-serif;
-  color: #1e293b; /* slate-800 — darker default so un-styled text is never washed out */
+  font-family: 'Noto Sans', 'Noto Sans Devanagari', 'Noto Sans Gujarati', sans-serif;
+  color: var(--color-ink);
+  background-color: var(--color-bg);
   font-weight: 450; /* between regular (400) and medium (500) — crisper without being bold */
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -89,7 +93,7 @@ body {
 .llm-citation {
   font-style: italic;
   font-size: 0.55em;
-  color: #475569;
+  color: var(--color-ink-muted);
   vertical-align: sub;
 }
 
@@ -99,29 +103,35 @@ body {
 
 .llm-bold-separator {
   border: 0;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--color-border);
   margin: 0.5rem 0;
 }
 
 .llm-code {
-  background-color: #e2e8f0;
+  background-color: var(--color-bg);
   border-radius: 3px;
   padding: 0.1em 0.35em;
   font-family: monospace;
   font-size: 0.9em;
-  color: #1e293b;
+  color: var(--color-ink);
 }
 
 .llm-quote-block {
   display: block;
-  margin: 0.2rem 0;
-  padding: 0.75rem 0.9rem;
-  border-left: 2px solid #78716c;
-  border-radius: 0.4rem;
-  background: linear-gradient(180deg, #fffdf7 0%, #faf7ef 100%);
-  color: #1f2937;
+  /* Consistent top+bottom gap so spacing between the preceding explanation,
+     this box, and the next explanation stays even regardless of whether the
+     source text happened to have a blank line around it. Inset 5% on each
+     side so the box reads as a distinct quoted excerpt, not full-bleed with
+     the surrounding paragraph text. */
+  margin: 0.5rem 5%;
+  padding: 0.6rem 0.85rem;
+  /* Full box, but a soft blended border rather than a strong solid brand
+     line — reads as a quotation card, not a selected/input UI element. */
+  border: 1px solid color-mix(in srgb, var(--color-brand) 25%, var(--color-border));
+  border-radius: 0.5rem;
+  background-color: color-mix(in srgb, var(--color-brand) 4%, var(--color-surface));
+  color: var(--color-ink);
   font-style: italic;
-  box-shadow: inset 0 0 0 1px #e7e0d1;
 }
 
 .llm-quote-citation {
@@ -129,8 +139,28 @@ body {
   margin-top: 0.45rem;
   text-align: right;
   font-size: 0.72em;
-  color: #57534e;
+  color: var(--color-ink-muted);
   font-style: italic;
+}
+
+.llm-inline-emoji {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.15em;
+  margin-right: 0.25em;
+}
+
+.llm-quote-meta-item {
+  font-style: normal;
+}
+
+.llm-view-pdf-link {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--color-danger);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 @keyframes aibotAnswerEnter {

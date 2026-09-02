@@ -3,6 +3,8 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App'; // This imports your main App.js component
 import reportWebVitals from './reportWebVitals';
+import { ThemeProvider } from './theme/ThemeContext';
+import PaletteSwitcher from './theme/PaletteSwitcher';
 
 // This finds the <div id="root"></div> in your public/index.html file
 const root = ReactDOM.createRoot(document.getElementById('root'));
@@ -10,7 +12,10 @@ const root = ReactDOM.createRoot(document.getElementById('root'));
 // This renders your App component inside that root div
 root.render(
   <React.StrictMode>
-    <App />
+    <ThemeProvider>
+      <App />
+      {process.env.NODE_ENV === 'development' && <PaletteSwitcher />}
+    </ThemeProvider>
   </React.StrictMode>
 );
 

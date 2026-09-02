@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GoogleReCaptchaProvider, useGoogleReCaptcha } from 'react-google-recaptcha-v3';
+import { ThumbsUp, Leaf } from 'lucide-react';
 import { Spinner } from './SharedComponents';
+import { Modal, Input, Textarea, Button, Card } from './ui';
 import { api } from '../services/api';
 
 const RECAPTCHA_KEY = process.env.REACT_APP_RECAPTCHA_SITE_KEY || '__REACT_APP_RECAPTCHA_SITE_KEY__';
@@ -52,47 +54,49 @@ function ContactField({ label, value, isEditing, onEdit, onChange, type = 'text'
     if (isEditing) {
         return (
             <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">
-                    {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+                <label className="block text-sm font-semibold text-ink mb-1">
+                    {label}{required && <span className="ml-0.5" style={{ color: 'var(--color-danger)' }}>*</span>}
                 </label>
-                <input
+                <Input
                     type={type}
                     value={value}
                     onChange={e => onChange(e.target.value)}
                     placeholder={placeholder}
-                    className={`w-full p-2.5 border rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-slate-900 text-sm ${error ? 'border-red-500' : 'border-slate-300'}`}
+                    error={Boolean(error)}
+                    className="text-sm"
                 />
-                {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+                {error && <p className="text-xs mt-1" style={{ color: 'var(--color-danger)' }}>{error}</p>}
             </div>
         );
     }
     return (
         <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1">
-                {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+            <label className="block text-sm font-semibold text-ink mb-1">
+                {label}{required && <span className="ml-0.5" style={{ color: 'var(--color-danger)' }}>*</span>}
             </label>
             <button
                 type="button"
                 onClick={onEdit}
-                className="w-full text-left p-2.5 border border-slate-200 rounded-md bg-slate-50 text-sm hover:border-sky-300 hover:bg-sky-50 transition-colors group"
+                className="suggestion-row w-full text-left p-2.5 rounded-md text-sm transition-colors group"
+                style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg)' }}
             >
                 {value
-                    ? <span className="text-slate-800">{value}</span>
-                    : <span className="text-slate-400 italic">{placeholder || 'Click to add'}</span>
+                    ? <span className="text-ink">{value}</span>
+                    : <span className="text-ink-muted italic">{placeholder || 'Click to add'}</span>
                 }
-                <span className="ml-2 text-xs text-sky-500 opacity-0 group-hover:opacity-100 transition-opacity">edit</span>
+                <span className="ml-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: 'var(--color-brand)' }}>edit</span>
             </button>
-            {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+            {error && <p className="text-xs mt-1" style={{ color: 'var(--color-danger)' }}>{error}</p>}
         </div>
     );
 }
 
 function ReadOnlyBlock({ label, children }) {
     return (
-        <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-1">{label}</p>
-            <div className="text-sm text-slate-700 leading-relaxed">{children}</div>
-        </div>
+        <Card className="p-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-ink-muted mb-1">{label}</p>
+            <div className="text-sm text-ink leading-relaxed">{children}</div>
+        </Card>
     );
 }
 
@@ -125,16 +129,9 @@ function FeedbackModalForm({ vote, requestId, question, answer, references, foll
         return () => { if (closeTimerRef.current) clearTimeout(closeTimerRef.current); };
     }, []);
 
-    useEffect(() => {
-        const handleEsc = (event) => {
-            if (event.key === 'Escape' && !succeeded) {
-                onClose();
-            }
-        };
-
-        window.addEventListener('keydown', handleEsc);
-        return () => window.removeEventListener('keydown', handleEsc);
-    }, [onClose, succeeded]);
+    // Escape/backdrop-close is suppressed while the success state's auto-close
+    // timer is running (Modal's overlay wires both to this single handler).
+    const guardedClose = () => { if (!succeeded) onClose(); };
 
     const setField = (field, value) => {
         setContact(prev => ({ ...prev, [field]: value }));
@@ -218,154 +215,131 @@ function FeedbackModalForm({ vote, requestId, question, answer, references, foll
         ? 'Please share what was missing or incorrect.'
         : 'Optionally share your contact info so we can reach you.';
 
+    if (succeeded) {
+        return (
+            <Modal open onClose={guardedClose} size="sm">
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                    {vote === 'helpful'
+                        ? <ThumbsUp size={40} className="mb-4" style={{ color: 'var(--color-success)' }} />
+                        : <Leaf size={40} className="mb-4" style={{ color: 'var(--color-success)' }} />}
+                    <h2 className="text-lg font-bold text-ink mb-1">Feedback submitted</h2>
+                    <p className="text-sm text-ink-muted">Thank you! This window will close shortly.</p>
+                </div>
+            </Modal>
+        );
+    }
+
     return (
-        // Overlay
-        <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
-            onClick={e => { if (e.target === e.currentTarget && !succeeded) onClose(); }}
+        <Modal
+            open
+            onClose={guardedClose}
+            title={title}
+            size="md"
+            footer={(
+                <>
+                    {submitError && (
+                        <div className="badge badge-danger mb-3" style={{ display: 'block', padding: '0.5rem 0.75rem' }}>
+                            {submitError}
+                        </div>
+                    )}
+                    <Button type="submit" form="feedback-modal-form" variant="primary" disabled={isSubmitting} className="w-full justify-center">
+                        {isSubmitting ? (<><Spinner /><span className="ml-2">Submitting…</span></>) : 'Submit'}
+                    </Button>
+                </>
+            )}
         >
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
-                {succeeded && (
-                    <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
-                        <div className="text-5xl mb-4">{vote === 'helpful' ? '🙏' : '🍃'}</div>
-                        <h2 className="text-lg font-bold text-slate-900 mb-1">Feedback submitted</h2>
-                        <p className="text-sm text-slate-500">Thank you! This window will close shortly.</p>
+            <p className="text-sm text-ink-muted -mt-2 mb-4">{subtitle}</p>
+            <form id="feedback-modal-form" onSubmit={handleSubmit} className="space-y-4">
+                {/* Context display — only for not_helpful */}
+                {isNotHelpful && (
+                    <div className="space-y-2">
+                        <ReadOnlyBlock label="Question">
+                            <p>{question}</p>
+                        </ReadOnlyBlock>
+                        <ReadOnlyBlock label="Answer">
+                            <p className="whitespace-pre-wrap line-clamp-6">{answer}</p>
+                        </ReadOnlyBlock>
+                        {references && references.length > 0 && (
+                            <ReadOnlyBlock label="References">
+                                <ul className="list-disc list-inside space-y-0.5">
+                                    {references.map((ref, i) => (
+                                        <li key={i} className="truncate">{ref}</li>
+                                    ))}
+                                </ul>
+                            </ReadOnlyBlock>
+                        )}
+                        {followUpQuestions && followUpQuestions.length > 0 && (
+                            <ReadOnlyBlock label="Follow-up questions">
+                                <ul className="list-disc list-inside space-y-0.5">
+                                    {followUpQuestions.map((q, i) => (
+                                        <li key={i}>{q}</li>
+                                    ))}
+                                </ul>
+                            </ReadOnlyBlock>
+                        )}
                     </div>
                 )}
-                {!succeeded && <>
-                {/* Header */}
-                <div className="flex items-start justify-between px-5 pt-5 pb-3 border-b border-slate-100 shrink-0">
-                    <div>
-                        <h2 className="text-base font-bold text-slate-900">{title}</h2>
-                        <p className="text-sm text-slate-500 mt-0.5">{subtitle}</p>
-                    </div>
-                    <button
-                        onClick={onClose}
-                        className="ml-4 text-slate-400 hover:text-slate-600 transition-colors shrink-0"
-                        aria-label="Close"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                        </svg>
-                    </button>
-                </div>
 
-                {/* Scrollable body */}
-                <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
-                    {/* Context display — only for not_helpful */}
-                    {isNotHelpful && (
-                        <div className="space-y-2">
-                            <ReadOnlyBlock label="Question">
-                                <p>{question}</p>
-                            </ReadOnlyBlock>
-                            <ReadOnlyBlock label="Answer">
-                                <p className="whitespace-pre-wrap line-clamp-6">{answer}</p>
-                            </ReadOnlyBlock>
-                            {references && references.length > 0 && (
-                                <ReadOnlyBlock label="References">
-                                    <ul className="list-disc list-inside space-y-0.5">
-                                        {references.map((ref, i) => (
-                                            <li key={i} className="truncate">{ref}</li>
-                                        ))}
-                                    </ul>
-                                </ReadOnlyBlock>
-                            )}
-                            {followUpQuestions && followUpQuestions.length > 0 && (
-                                <ReadOnlyBlock label="Follow-up questions">
-                                    <ul className="list-disc list-inside space-y-0.5">
-                                        {followUpQuestions.map((q, i) => (
-                                            <li key={i}>{q}</li>
-                                        ))}
-                                    </ul>
-                                </ReadOnlyBlock>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Contact fields */}
-                    <div className="grid grid-cols-1 gap-3">
+                {/* Contact fields */}
+                <div className="grid grid-cols-1 gap-3">
+                    <ContactField
+                        label="Name"
+                        value={contact.name}
+                        isEditing={editing.name}
+                        onEdit={() => startEditing('name')}
+                        onChange={v => setField('name', v)}
+                        required={vote === 'not_helpful'}
+                        error={errors.name}
+                        placeholder="Your name"
+                    />
+                    <div className="grid grid-cols-2 gap-3">
                         <ContactField
-                            label="Name"
-                            value={contact.name}
-                            isEditing={editing.name}
-                            onEdit={() => startEditing('name')}
-                            onChange={v => setField('name', v)}
-                            required={vote === 'not_helpful'}
-                            error={errors.name}
-                            placeholder="Your name"
+                            label="Email"
+                            type="email"
+                            value={contact.email}
+                            isEditing={editing.email}
+                            onEdit={() => startEditing('email')}
+                            onChange={v => setField('email', v)}
+                            required={false}
+                            error={errors.email}
+                            placeholder="your@email.com"
                         />
-                        <div className="grid grid-cols-2 gap-3">
-                            <ContactField
-                                label="Email"
-                                type="email"
-                                value={contact.email}
-                                isEditing={editing.email}
-                                onEdit={() => startEditing('email')}
-                                onChange={v => setField('email', v)}
-                                required={false}
-                                error={errors.email}
-                                placeholder="your@email.com"
-                            />
-                            <ContactField
-                                label="Phone"
-                                type="tel"
-                                value={contact.phone}
-                                isEditing={editing.phone}
-                                onEdit={() => startEditing('phone')}
-                                onChange={v => setField('phone', v)}
-                                required={false}
-                                error={errors.phone}
-                                placeholder="Phone number"
-                            />
-                        </div>
-                        {isNotHelpful && vote === 'not_helpful' && !contact.email.trim() && !contact.phone.trim() && errors.email && (
-                            <p className="text-xs text-slate-500 -mt-1">At least one of email or phone is required.</p>
-                        )}
+                        <ContactField
+                            label="Phone"
+                            type="tel"
+                            value={contact.phone}
+                            isEditing={editing.phone}
+                            onEdit={() => startEditing('phone')}
+                            onChange={v => setField('phone', v)}
+                            required={false}
+                            error={errors.phone}
+                            placeholder="Phone number"
+                        />
                     </div>
-
-                    {/* Message — only for not_helpful */}
-                    {isNotHelpful && (
-                        <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-1">
-                                Your message<span className="text-red-500 ml-0.5">*</span>
-                            </label>
-                            <textarea
-                                rows={4}
-                                value={message}
-                                onChange={e => { setMessage(e.target.value); if (errors.message) setErrors(p => ({ ...p, message: '' })); }}
-                                placeholder="What was missing or incorrect? How could the answer be improved?"
-                                className={`w-full p-2.5 border rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-slate-900 text-sm resize-vertical ${errors.message ? 'border-red-500' : 'border-slate-300'}`}
-                            />
-                            {errors.message && <p className="text-red-500 text-xs mt-1">{errors.message}</p>}
-                        </div>
+                    {isNotHelpful && vote === 'not_helpful' && !contact.email.trim() && !contact.phone.trim() && errors.email && (
+                        <p className="text-xs text-ink-muted -mt-1">At least one of email or phone is required.</p>
                     )}
-
-                    {submitError && (
-                        <div className="bg-red-50 border border-red-200 rounded-md p-3">
-                            <p className="text-red-700 text-sm">{submitError}</p>
-                        </div>
-                    )}
-                </form>
-
-                {/* Footer */}
-                <div className="px-5 pb-5 pt-3 border-t border-slate-100 shrink-0">
-                    <button
-                        type="submit"
-                        onClick={handleSubmit}
-                        disabled={isSubmitting}
-                        className="w-full bg-sky-600 text-white font-semibold py-2.5 px-4 rounded-md hover:bg-sky-700 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center justify-center text-sm"
-                    >
-                        {isSubmitting ? (
-                            <><Spinner /><span className="ml-2">Submitting…</span></>
-                        ) : (
-                            'Submit'
-                        )}
-                    </button>
                 </div>
-                </>}
-            </div>
-        </div>
+
+                {/* Message — only for not_helpful */}
+                {isNotHelpful && (
+                    <div>
+                        <label className="block text-sm font-semibold text-ink mb-1">
+                            Your message<span className="ml-0.5" style={{ color: 'var(--color-danger)' }}>*</span>
+                        </label>
+                        <Textarea
+                            rows={4}
+                            value={message}
+                            onChange={e => { setMessage(e.target.value); if (errors.message) setErrors(p => ({ ...p, message: '' })); }}
+                            placeholder="What was missing or incorrect? How could the answer be improved?"
+                            error={Boolean(errors.message)}
+                            className="text-sm resize-vertical"
+                        />
+                        {errors.message && <p className="text-xs mt-1" style={{ color: 'var(--color-danger)' }}>{errors.message}</p>}
+                    </div>
+                )}
+            </form>
+        </Modal>
     );
 }
 
@@ -431,13 +405,13 @@ function HelpfulSubmitter({ requestId, question, answer, references, onSubmitted
                 onClick={handleHelpfulVote}
                 disabled={isSubmitting}
                 aria-label="Mark as helpful"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-sky-200 border-slate-200 text-slate-700 hover:bg-green-50 hover:border-green-200 hover:text-green-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="btn btn-secondary inline-flex items-center gap-1.5 text-xs py-1 px-2"
             >
-                {isSubmitting ? <Spinner /> : <span>🙏</span>}
+                {isSubmitting ? <Spinner /> : <ThumbsUp size={14} />}
                 <span>Helpful</span>
             </button>
             {submitError && (
-                <span className="text-sm text-red-600">{submitError}</span>
+                <span className="text-sm" style={{ color: 'var(--color-danger)' }}>{submitError}</span>
             )}
         </>
     );
@@ -458,19 +432,15 @@ export function FeedbackButtons({ requestId, question, answer, references, citat
 
     return (
         <>
-            <div className="mt-5 flex items-center gap-2">
-                <span className="text-sm font-semibold text-slate-600 mr-1">Was this helpful?</span>
+            <div className="flex items-center gap-2">
                 {submitted ? (
                     <button
                         disabled
                         aria-label="Mark as helpful"
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-sky-200 ${
-                            submitted === 'helpful'
-                                ? 'bg-green-50 border-green-300 text-green-800'
-                                : 'opacity-40 cursor-not-allowed border-slate-200 text-slate-500'
-                        }`}
+                        className={`btn inline-flex items-center gap-1.5 text-xs py-1 px-2 ${submitted === 'helpful' ? 'badge-success' : 'btn-secondary'}`}
+                        style={submitted !== 'helpful' ? { opacity: 0.4 } : undefined}
                     >
-                        <span>🙏</span><span>Helpful</span>
+                        <ThumbsUp size={14} /><span>Helpful</span>
                     </button>
                 ) : (
                     <GoogleReCaptchaProvider reCaptchaKey={RECAPTCHA_KEY}>
@@ -488,15 +458,10 @@ export function FeedbackButtons({ requestId, question, answer, references, citat
                     onClick={() => handleVote('not_helpful')}
                     disabled={!!submitted}
                     aria-label="Mark as not helpful"
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-sky-200 ${
-                        submitted === 'not_helpful'
-                            ? 'bg-red-50 border-red-300 text-red-800'
-                            : submitted
-                            ? 'opacity-40 cursor-not-allowed border-slate-200 text-slate-500'
-                            : 'border-slate-200 text-slate-700 hover:bg-red-50 hover:border-red-200 hover:text-red-800'
-                    }`}
+                    className={`btn inline-flex items-center gap-1.5 text-xs py-1 px-2 ${submitted === 'not_helpful' ? 'badge-danger' : 'btn-secondary'}`}
+                    style={submitted && submitted !== 'not_helpful' ? { opacity: 0.4 } : undefined}
                 >
-                    <span>🍃</span><span>Not helpful</span>
+                    <Leaf size={14} /><span>Not helpful</span>
                 </button>
             </div>
 

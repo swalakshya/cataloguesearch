@@ -1,4 +1,4 @@
-// Share utilities for Aagam-Khoj search results
+// Share utilities for Swalakshya Chat search results
 
 // Generate shareable URL for a specific search result
 export const generateShareURL = () => {
@@ -9,7 +9,7 @@ export const generateShareURL = () => {
 export const formatGranthShareContent = (query, result, shareUrl) => {
     const cleanContent = result?.content_snippet
         ? result.content_snippet.replace(/<[^>]*>/g, '').trim()
-        : 'Search result from Aagam-Khoj';
+        : 'Search result from Swalakshya Chat';
 
     const granthName = result?.metadata?.Name || result?.filename?.replace('.pdf', '') || 'Unknown Granth';
     const author = result?.metadata?.Author || '';
@@ -27,7 +27,7 @@ export const formatGranthShareContent = (query, result, shareUrl) => {
     const locationInfo = locationParts.join(', ');
 
     return {
-        title: `Found in Aagam-Khoj: "${query}"`,
+        title: `Found in Swalakshya Chat: "${query}"`,
         text: `Query: ${query}\n\nExtract: "${cleanContent}"\n\nGranth: ${granthName}${subSection ? `\n\n${subSection.field}: ${subSection.name}` : ''}\n\nAuthor: ${author}\n\nLocation: ${locationInfo}\n\nSearch more at: ${shareUrl}`,
         url: shareUrl,
         isGranth: true,
@@ -43,7 +43,7 @@ export const formatGranthShareContent = (query, result, shareUrl) => {
 export const formatPravachanShareContent = (query, result, shareUrl, language = 'hindi') => {
     const cleanContent = result?.content_snippet
         ? result.content_snippet.replace(/<[^>]*>/g, '').trim()
-        : 'Search result from Aagam-Khoj';
+        : 'Search result from Swalakshya Chat';
 
     const granth = result?.metadata?.Name || 'Unknown Source';
     const series = result?.metadata?.Series || '';
@@ -61,7 +61,7 @@ export const formatPravachanShareContent = (query, result, shareUrl, language = 
     const pravachankarLabel = language === 'gujarati' ? 'પ્રવચનકાર' : 'प्रवचनकार';
 
     return {
-        title: `Found in Aagam-Khoj: "${query}"`,
+        title: `Found in Swalakshya Chat: "${query}"`,
         text: `Query: ${query}\n\nExtract: "${cleanContent}"\n\nGranth: ${granth}\n\n${pravachankarLabel}: ${pravachankar}\n\nPravachan Details: ${pravachanDetails}\n\nSearch more at: ${shareUrl}`,
         url: shareUrl,
         isGranth: false,

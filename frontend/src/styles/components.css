@@ -1,0 +1,286 @@
+/* Shared component styling, built only from tokens.css custom properties.
+   No component file should hardcode a color — everything here reads var(--color-*),
+   including "light tint" variants, computed via color-mix() so any of the 6
+   candidate palettes gets a correct tint automatically, with no per-palette
+   hand-authored shade values. */
+
+/* --- Buttons --- */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    padding: 0.55rem 1.1rem;
+    font-size: 0.875rem;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-primary { background-color: var(--color-brand); color: #fff; }
+.btn-primary:hover:not(:disabled) { background-color: var(--color-brand-hover); }
+
+.btn-secondary { background-color: var(--color-surface); color: var(--color-ink); border-color: var(--color-border); }
+.btn-secondary:hover:not(:disabled) { background-color: var(--color-bg); }
+
+.btn-ghost { background-color: transparent; color: var(--color-ink); }
+.btn-ghost:hover:not(:disabled) { background-color: var(--color-bg); }
+
+.btn-danger { background-color: var(--color-danger); color: #fff; }
+.btn-danger:hover:not(:disabled) { filter: brightness(0.92); }
+
+/* --- Badges --- */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 9999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.15rem 0.65rem;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+.badge-brand   { background-color: color-mix(in srgb, var(--color-brand) 14%, var(--color-surface));   color: var(--color-brand);   border-color: color-mix(in srgb, var(--color-brand) 35%, transparent); }
+.badge-success { background-color: color-mix(in srgb, var(--color-success) 14%, var(--color-surface)); color: var(--color-success); border-color: color-mix(in srgb, var(--color-success) 35%, transparent); }
+.badge-warning { background-color: color-mix(in srgb, var(--color-warning) 14%, var(--color-surface)); color: var(--color-warning); border-color: color-mix(in srgb, var(--color-warning) 35%, transparent); }
+.badge-danger  { background-color: color-mix(in srgb, var(--color-danger) 14%, var(--color-surface));  color: var(--color-danger);  border-color: color-mix(in srgb, var(--color-danger) 35%, transparent); }
+.badge-info    { background-color: color-mix(in srgb, var(--color-info) 14%, var(--color-surface));    color: var(--color-info);    border-color: color-mix(in srgb, var(--color-info) 35%, transparent); }
+.badge-neutral { background-color: var(--color-bg); color: var(--color-ink-muted); border-color: var(--color-border); }
+
+/* --- Cards --- */
+.card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 0.75rem;
+}
+
+/* --- Form fields --- */
+.field {
+    width: 100%;
+    padding: 0.65rem 0.8rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--color-border);
+    background-color: var(--color-surface);
+    color: var(--color-ink);
+    font-size: 0.9rem;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.field::placeholder { color: var(--color-ink-muted); }
+input::placeholder, textarea::placeholder { color: var(--color-ink-muted); }
+.field:focus {
+    outline: none;
+    border-color: var(--color-brand);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-brand) 25%, transparent);
+}
+.field-error { border-color: var(--color-danger); }
+.field-error:focus { box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-danger) 25%, transparent); }
+.suggestion-row:hover { background-color: var(--color-bg); }
+
+.suggestion-chip {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    color: var(--color-ink-muted);
+}
+.tooltip-bubble {
+    background-color: var(--color-ink);
+    color: var(--color-surface);
+}
+
+.suggestion-chip:hover {
+    border-color: color-mix(in srgb, var(--color-brand) 45%, var(--color-border));
+    color: var(--color-brand);
+    background-color: color-mix(in srgb, var(--color-brand) 8%, var(--color-surface));
+}
+
+/* Lighter sibling for "Try asking" / "Try searching for" query suggestions —
+   these should feel like lightweight, secondary hints rather than another
+   bordered box competing with the real controls (search box, filters). No
+   border or fill until hover. Follow-up-question chips and "Did you mean"
+   keep the bordered .suggestion-chip look, unchanged. */
+.chip-quiet {
+    background-color: transparent;
+    border: 1px solid var(--color-border);
+    color: var(--color-ink-muted);
+}
+.chip-quiet:hover {
+    border-color: color-mix(in srgb, var(--color-brand) 45%, var(--color-border));
+    background-color: color-mix(in srgb, var(--color-brand) 8%, transparent);
+    color: var(--color-brand);
+}
+.field:disabled {
+    background-color: var(--color-bg);
+    color: var(--color-ink-muted);
+    cursor: not-allowed;
+}
+
+/* --- Tables --- */
+.table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--color-border);
+    border-radius: 0.75rem;
+}
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.data-table th {
+    text-align: left;
+    padding: 0.65rem 0.9rem;
+    background-color: var(--color-bg);
+    color: var(--color-ink-muted);
+    font-weight: 600;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    border-bottom: 1px solid var(--color-border);
+    white-space: nowrap;
+}
+.data-table th.sortable { cursor: pointer; user-select: none; }
+.data-table td { padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--color-border); color: var(--color-ink); }
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tbody tr:hover td { background-color: var(--color-bg); }
+
+/* --- Lists --- */
+.list { display: flex; flex-direction: column; }
+.list-item { display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.35rem 0; color: var(--color-ink); }
+.list-item-dot { width: 0.4rem; height: 0.4rem; border-radius: 9999px; background-color: var(--color-brand); margin-top: 0.5rem; flex-shrink: 0; }
+
+/* --- Search result snippets --- */
+.search-highlight {
+    background-color: color-mix(in srgb, var(--color-brand) 28%, var(--color-surface));
+    color: var(--color-ink);
+    padding: 0 0.25rem;
+    border-radius: 0.25rem;
+}
+
+.result-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.75rem;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    color: var(--color-ink-muted);
+    transition: background-color 150ms ease, color 150ms ease;
+}
+.result-action:hover {
+    color: var(--color-brand);
+    background-color: color-mix(in srgb, var(--color-brand) 10%, transparent);
+}
+.result-action-danger { color: var(--color-danger); }
+.result-action-danger:hover {
+    color: var(--color-danger);
+    background-color: color-mix(in srgb, var(--color-danger) 10%, transparent);
+}
+
+/* --- Notice callouts --- */
+.notice { border-radius: 0.5rem; padding: 1rem; border: 1px solid; color: var(--color-ink); }
+.notice-warning {
+    background-color: color-mix(in srgb, var(--color-warning) 10%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-warning) 35%, transparent);
+}
+.notice-info {
+    background-color: color-mix(in srgb, var(--color-info) 10%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-info) 35%, transparent);
+}
+.notice-success {
+    background-color: color-mix(in srgb, var(--color-success) 10%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-success) 35%, transparent);
+}
+.notice-danger {
+    background-color: color-mix(in srgb, var(--color-danger) 10%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-danger) 35%, transparent);
+}
+.notice-brand {
+    background-color: color-mix(in srgb, var(--color-brand) 6%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-brand) 25%, transparent);
+}
+
+/* --- Code blocks (Developer API) --- */
+.code-block {
+    background-color: var(--color-bg);
+    color: var(--color-ink);
+    border: 1px solid var(--color-border);
+    border-radius: 0.375rem;
+    padding: 1rem;
+    overflow-x: auto;
+    font-family: monospace;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    margin: 1rem 0;
+}
+.inline-code {
+    background-color: var(--color-bg);
+    padding: 0.125rem 0.35rem;
+    border-radius: 0.25rem;
+    font-family: monospace;
+    font-size: 0.875em;
+    color: var(--color-ink);
+}
+
+/* --- Filter dropdown triggers (Refine Search) --- */
+.filter-trigger {
+    flex: 1 1 0%;
+    min-width: 0;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.25rem;
+    background-color: var(--color-surface);
+    color: var(--color-ink);
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+.filter-trigger:hover:not(.filter-trigger-disabled) { background-color: var(--color-bg); }
+.filter-trigger-active {
+    border-color: var(--color-brand);
+    background-color: color-mix(in srgb, var(--color-brand) 8%, var(--color-surface));
+    color: var(--color-brand);
+}
+.filter-trigger-disabled {
+    color: var(--color-ink-muted);
+    background-color: var(--color-bg);
+    cursor: default;
+}
+
+/* Bottom-sheet-on-mobile / centered-on-desktop filter dialog, shared by the
+   Pravachan/Granth/Books filter popups so their shell doesn't drift apart. */
+.filter-overlay { position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 40; }
+.filter-sheet {
+    background-color: var(--color-surface);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh;
+}
+.filter-list-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-ink);
+    cursor: pointer;
+}
+.filter-list-row:last-child { border-bottom: none; }
+.filter-list-row:hover { background-color: var(--color-bg); }
+
+/* --- Skeleton loading --- */
+.skeleton { background-color: var(--color-border); border-radius: 0.375rem; position: relative; overflow: hidden; }
+.skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-surface) 60%, transparent), transparent);
+    animation: skeleton-shimmer 1.4s infinite;
+}
+@keyframes skeleton-shimmer {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(100%); }
+}

@@ -1,0 +1,18 @@
+/* Design tokens. Values are set at runtime by ThemeContext (theme/palettes.js)
+   based on the active palette + light/dark mode. The declarations below are
+   just the light "saffron" defaults, so the app still looks correct for the
+   first paint before React mounts and ThemeProvider's effect runs. */
+:root {
+    --color-bg: #FAF8F5;
+    --color-surface: #FFFFFF;
+    --color-border: #E8E1D8;
+    --color-ink: #2A211A;
+    --color-ink-muted: #6B5D52;
+    --color-brand: #C4571C;
+    --color-brand-hover: #A84812;
+    --color-success: #4B7A51;
+    --color-warning: #A6791E;
+    --color-danger: #A6402E;
+    --color-info: #3D6E7A;
+    --color-mark: #B8860B;
+}
