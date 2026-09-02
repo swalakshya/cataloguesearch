@@ -4,7 +4,7 @@
 // route outside this shell and out of scope for this design pass.
 export const NAV_ITEMS = [
     { id: 'home', label: 'Home', path: '/' },
-    { id: 'chat', label: 'Chat', path: '/chat' },
+    { id: 'chat', label: 'Ask AI!', path: '/chat' },
     { id: 'about', label: 'About', path: '/about' },
     { id: 'search-index', label: 'Content', path: '/search-index' },
     { id: 'usage-guide', label: 'Usage Guide', path: '/usage-guide' },

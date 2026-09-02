@@ -647,7 +647,7 @@ const AppContent = () => {
             return;
         }
         const overrides = {
-            'chat':         'AI Bot',
+            'chat':         'Swalakshya AI',
             'search-index': 'Content',
             'usage-guide':  'Usage Guide',
             'whats-new':    "What's New",
