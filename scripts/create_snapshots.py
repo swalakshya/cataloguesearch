@@ -82,6 +82,7 @@ REPO_NAME       = "local_backup"
 SNAPSHOTS = [
     "cataloguesearch_prod",
     "cataloguesearch_prod_metadata",
+    "cataloguesearch_prod_catalogue",
 ]
 
 POLL_INTERVAL      = 2    # seconds between health polls
@@ -259,25 +260,26 @@ def _confirm(local_dir: Path, server: str | None, ssh_key: str | None, location:
     print("  3. Register new snapshot repository → /tmp/snapshots")
     print("  4. Create snapshot: cataloguesearch_prod")
     print("  5. Create snapshot: cataloguesearch_prod_metadata")
-    print("  6. Verify both snapshots have state=SUCCESS")
-    print("  7. Verify snapshot files exist on disk")
+    print("  6. Create snapshot: cataloguesearch_prod_catalogue")
+    print("  7. Verify all snapshots have state=SUCCESS")
+    print("  8. Verify snapshot files exist on disk")
     tarball_name = f"snapshots_{datetime.now():%Y%m%d}.tar.zst"
-    print(f"  8. Create {tarball_name} alongside the snapshots folder")
+    print(f"  9. Create {tarball_name} alongside the snapshots folder")
     print("     (multi-threaded zstd compression; overwrites same-named file if present)")
     if server:
         remote_path = f"{display_loc}/{local_dir.name}"
-        print(f"  9. Stream snapshots → {server}:{remote_path}")
+        print(f" 10. Stream snapshots → {server}:{remote_path}")
         print(f"     (wipes {remote_path} on remote first, then extracts)")
-        print(" 10. Verify checksums of all transferred files")
+        print(" 11. Verify checksums of all transferred files")
     print()
     print(f"⚠️  WARNING: Step 1 will CLEAR all existing files in:")
     print(f"           {local_dir}")
     print("         Make sure you do not need any files currently there.")
     print("⚠️  WARNING: OpenSearch will be briefly stopped and restarted.")
-    print(f"⚠️  WARNING: Step 8 will DELETE an existing {tarball_name} if one is already there.")
+    print(f"⚠️  WARNING: Step 9 will DELETE an existing {tarball_name} if one is already there.")
     if server:
         remote_path = f"{display_loc}/{local_dir.name}"
-        print(f"⚠️  WARNING: Step 9 will DELETE {remote_path} on {server} before extracting.")
+        print(f"⚠️  WARNING: Step 10 will DELETE {remote_path} on {server} before extracting.")
     print()
 
     answer = input("Do you want to proceed? (yes/no): ").strip().lower()
@@ -477,12 +479,18 @@ def step5_create_snapshot_metadata():
     log_handle.info("✅ Step 5 done.")
 
 
+def step6_create_snapshot_catalogue():
+    log_handle.info("🔄 Step 6: Creating snapshot for cataloguesearch_prod_catalogue...")
+    _create_one_snapshot("cataloguesearch_prod_catalogue")
+    log_handle.info("✅ Step 6 done.")
+
+
 # ---------------------------------------------------------------------------
-# Step 6: Verify both snapshots show state=SUCCESS in the repository
+# Step 7: Verify all snapshots show state=SUCCESS in the repository
 # ---------------------------------------------------------------------------
 
-def step6_verify_snapshots():
-    log_handle.info("🔄 Step 6: Verifying both snapshots in repository...")
+def step7_verify_snapshots():
+    log_handle.info("🔄 Step 7: Verifying all snapshots in repository...")
     status, body = _os_request("GET", f"/_snapshot/{REPO_NAME}/_all")
     if status != 200:
         raise RuntimeError(
@@ -501,15 +509,15 @@ def step6_verify_snapshots():
             )
         log_handle.info("✅ Snapshot '%s': state=%s — OK", name, state)
 
-    log_handle.info("✅ Step 6 done. Both snapshots verified successfully.")
+    log_handle.info("✅ Step 7 done. All snapshots verified successfully.")
 
 
 # ---------------------------------------------------------------------------
-# Step 7: Verify snapshot files exist on disk
+# Step 8: Verify snapshot files exist on disk
 # ---------------------------------------------------------------------------
 
-def step7_verify_files_on_disk(local_dir: Path):
-    log_handle.info("🔄 Step 7: Verifying snapshot files on disk at %s...", local_dir)
+def step8_verify_files_on_disk(local_dir: Path):
+    log_handle.info("🔄 Step 8: Verifying snapshot files on disk at %s...", local_dir)
     errors = []
 
     for required in ("index.latest", "indices"):
@@ -537,15 +545,15 @@ def step7_verify_files_on_disk(local_dir: Path):
     # Log total size on disk
     total_bytes = sum(f.stat().st_size for f in local_dir.rglob("*") if f.is_file())
     log_handle.info(
-        "✅ Step 7 done. Total snapshot size on disk: %.1f MB", total_bytes / (1024 * 1024)
+        "✅ Step 8 done. Total snapshot size on disk: %.1f MB", total_bytes / (1024 * 1024)
     )
 
 
 # ---------------------------------------------------------------------------
-# Step 8: Create dated .tar.zst of the snapshots directory (always, local file)
+# Step 9: Create dated .tar.zst of the snapshots directory (always, local file)
 # ---------------------------------------------------------------------------
 
-def step8_create_tarball(local_dir: Path) -> Path:
+def step9_create_tarball(local_dir: Path) -> Path:
     """
     Write local_dir into a snapshots_YYYYMMDD.tar.zst archive next to it,
     using the `zstandard` library directly (tarfile streamed into a
@@ -557,7 +565,7 @@ def step8_create_tarball(local_dir: Path) -> Path:
         log_handle.warning("🟠 Existing %s found — deleting before recreating it.", tarball_path.name)
         tarball_path.unlink()
 
-    log_handle.info("🔄 Step 8: Creating %s (zstandard, multi-threaded)...", tarball_path.name)
+    log_handle.info("🔄 Step 9: Creating %s (zstandard, multi-threaded)...", tarball_path.name)
 
     # threads=-1 lets libzstd pick worker count from available CPUs (like `zstd -T0`).
     # level=1 favors speed over ratio, matching this script's prior compressor choice.
@@ -567,21 +575,21 @@ def step8_create_tarball(local_dir: Path) -> Path:
             tar.add(local_dir, arcname=local_dir.name)
 
     size_mb = tarball_path.stat().st_size / (1024 * 1024)
-    log_handle.info("✅ Step 8 done. Tarball created: %s (%.1f MB)", tarball_path, size_mb)
+    log_handle.info("✅ Step 9 done. Tarball created: %s (%.1f MB)", tarball_path, size_mb)
     return tarball_path
 
 
 # ---------------------------------------------------------------------------
-# Step 9: Stream snapshots directly to remote server
+# Step 10: Stream snapshots directly to remote server
 # ---------------------------------------------------------------------------
 
-def step9_stream_to_remote(local_dir: Path, server: str, ssh_key: str | None, location: str) -> None:
+def step10_stream_to_remote(local_dir: Path, server: str, ssh_key: str | None, location: str) -> None:
     """Pipe tar | compress | ssh (decompress | tar -x) — no intermediate file."""
     compressor, comp_args = _detect_compressor()
     remote_path = f"{location}/{local_dir.name}"
 
     log_handle.info(
-        "🔄 Step 9: Streaming %s → %s:%s (compressor=%s)...",
+        "🔄 Step 10: Streaming %s → %s:%s (compressor=%s)...",
         local_dir.name, server, remote_path, compressor,
     )
 
@@ -645,7 +653,7 @@ def step9_stream_to_remote(local_dir: Path, server: str, ssh_key: str | None, lo
 
     display_loc = "~" if location == "." else location
     display_path = f"{display_loc}/{local_dir.name}"
-    log_handle.info("✅ Step 9 done. Snapshots landed at %s:%s", server, display_path)
+    log_handle.info("✅ Step 10 done. Snapshots landed at %s:%s", server, display_path)
     log_handle.info(
         "💡 On the remote, run:\n"
         "   python restore_snapshots.py --snapshots-dir %s", display_path,
@@ -653,7 +661,7 @@ def step9_stream_to_remote(local_dir: Path, server: str, ssh_key: str | None, lo
 
 
 # ---------------------------------------------------------------------------
-# Checksum manifest + Step 10: remote verification
+# Checksum manifest + Step 11: remote verification
 # ---------------------------------------------------------------------------
 
 def _generate_manifest(local_dir: Path) -> dict[str, str]:
@@ -672,13 +680,13 @@ def _generate_manifest(local_dir: Path) -> dict[str, str]:
     return manifest
 
 
-def step10_verify_checksums(
+def step11_verify_checksums(
     manifest: dict[str, str],
     server: str,
     ssh_key: str | None,
     remote_path: str,
 ) -> None:
-    log_handle.info("🔄 Step 10: Verifying checksums on remote (%d files)...", len(manifest))
+    log_handle.info("🔄 Step 11: Verifying checksums on remote (%d files)...", len(manifest))
 
     ssh_base = ["ssh"]
     if ssh_key:
@@ -715,7 +723,7 @@ def step10_verify_checksums(
             + "\n".join(f"   {e}" for e in errors)
         )
 
-    log_handle.info("✅ Step 10 done. All %d files verified OK.", len(manifest))
+    log_handle.info("✅ Step 11 done. All %d files verified OK.", len(manifest))
 
 
 # ---------------------------------------------------------------------------
@@ -739,16 +747,17 @@ def main():
         step3_create_repository()
         step4_create_snapshot_prod()
         step5_create_snapshot_metadata()
-        step6_verify_snapshots()
-        step7_verify_files_on_disk(local_dir)
+        step6_create_snapshot_catalogue()
+        step7_verify_snapshots()
+        step8_verify_files_on_disk(local_dir)
 
-        tarball_path = step8_create_tarball(local_dir)
+        tarball_path = step9_create_tarball(local_dir)
 
         if server:
             manifest = _generate_manifest(local_dir)
-            step9_stream_to_remote(local_dir, server, ssh_key, location)
+            step10_stream_to_remote(local_dir, server, ssh_key, location)
             remote_path = f"{location}/{local_dir.name}"
-            step10_verify_checksums(manifest, server, ssh_key, remote_path)
+            step11_verify_checksums(manifest, server, ssh_key, remote_path)
 
         elapsed = time.time() - start_time
         mins, secs = divmod(int(elapsed), 60)

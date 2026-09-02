@@ -18,7 +18,7 @@ from backend.config import Config
 from backend.crawler.index_generator import IndexGenerator
 from backend.crawler.llm_index_generator import LLMIndexGenerator
 from backend.crawler.index_state import IndexState
-from backend.common.utils import get_merged_config
+from backend.common.utils import get_merged_config, list_directories
 
 # Setup logging for this module
 log_handle = logging.getLogger(__name__)
@@ -609,34 +609,7 @@ class Discovery:
         Returns:
             list: List of directory paths to crawl
         """
-        directories_to_crawl = []
-
-        def _recurse_directory(directory_path):
-            """Recursively traverse directory and collect paths to crawl"""
-            # Check if this directory should be ignored
-            ignore_file_path = os.path.join(directory_path, "_ignore")
-            if os.path.exists(ignore_file_path):
-                log_handle.info(f"Ignoring directory {directory_path} due to _ignore file")
-                return  # Skip this directory and all its subdirectories
-
-            # Add current directory to crawl list
-            directories_to_crawl.append(directory_path)
-
-            # Recursively process subdirectories
-            try:
-                for item in sorted(os.listdir(directory_path)):
-                    # Skip directories that start with a dot (like .git, .vscode, etc.)
-                    if item.startswith('.'):
-                        continue
-                    item_path = os.path.join(directory_path, item)
-                    if os.path.isdir(item_path):
-                        _recurse_directory(item_path)
-            except (OSError, PermissionError) as e:
-                log_handle.warning(f"Cannot access directory {directory_path}: {e}")
-
-        _recurse_directory(root or self.base_pdf_folder)
-
-        return directories_to_crawl
+        return list_directories(root or self.base_pdf_folder)
 
     def _download_missing_pdfs(self, directory: str):
         """

@@ -2,6 +2,12 @@
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
 const LLM_API_BASE_URL = process.env.REACT_APP_LLM_API_BASE_URL || 'http://localhost:8012';
 
+// Shared client-side cache for getCatalogue() -- see its definition below for
+// why this lives at module scope instead of on the `api` object.
+const CATALOGUE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+let catalogueCache = { data: null, timestamp: 0 };
+let catalogueInFlight = null;
+
 export const api = {
     getAppConfig: async () => {
         try {
@@ -55,7 +61,39 @@ export const api = {
             return {};
         }
     },
-    
+
+    // Content catalogue: one row per (category, language, Granth, Series) that has
+    // a curated `count` in cataloguesearch-configs. Backs the /search-index page.
+    // Shared client-side cache: whoever calls getCatalogue() first (StatsStrip,
+    // SearchIndex.js, ...) triggers the fetch; everyone else -- even a
+    // concurrent caller in the same tick -- gets the same cached array or the
+    // same in-flight promise, never a duplicate request. TTL expiry makes the
+    // *next* call re-fetch lazily; no background timer, since there's no
+    // reason to poll while nothing using this data is even mounted.
+    getCatalogue: async () => {
+        const isFresh = catalogueCache.data
+            && (Date.now() - catalogueCache.timestamp) < CATALOGUE_TTL_MS;
+        if (isFresh) return catalogueCache.data;
+        if (catalogueInFlight) return catalogueInFlight;
+
+        catalogueInFlight = (async () => {
+            try {
+                const response = await fetch(`${API_BASE_URL}/catalogue`);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const rows = await response.json();
+                catalogueCache = { data: rows, timestamp: Date.now() };
+                return rows;
+            } catch (error) {
+                console.error("API Error: Could not fetch content catalogue", error);
+                // Serve stale data over nothing if we have it; otherwise empty.
+                return catalogueCache.data || [];
+            } finally {
+                catalogueInFlight = null;
+            }
+        })();
+        return catalogueInFlight;
+    },
+
     // onProgress(category, partialResult) is called after each category arrives.
     // Returns the final merged result when the stream closes.
     search: async (requestPayload, onProgress) => {

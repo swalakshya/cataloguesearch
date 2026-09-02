@@ -95,6 +95,20 @@ def get_metadata_index_config(config: Config) -> dict:
 
     return metadata_config
 
+def get_catalogue_index_config(config: Config) -> dict:
+    """Loads the OpenSearch configuration for the content catalogue index."""
+    opensearch_config_path = config.OPENSEARCH_CONFIG_PATH
+    with open(opensearch_config_path, 'r', encoding='utf-8') as f:
+        full_config = yaml.safe_load(f)
+
+    catalogue_config = full_config.get('catalogue_index', {})
+
+    if not catalogue_config:
+        log_handle.warning(f"catalogue_index configuration not found in {opensearch_config_path}")
+        return {}
+
+    return catalogue_config
+
 def _create_index_if_not_exists(opensearch_client: OpenSearch, index_name: str, index_body: dict):
     """Helper to create a single index if it doesn't exist."""
     if not index_body:
@@ -125,6 +139,11 @@ def create_indices_if_not_exists(config: Config, opensearch_client: OpenSearch):
     metadata_index_name = config.OPENSEARCH_METADATA_INDEX_NAME
     _create_index_if_not_exists(opensearch_client, metadata_index_name, metadata_index_config)
 
+    # 3. Create content catalogue index
+    catalogue_index_config = get_catalogue_index_config(config)
+    catalogue_index_name = config.OPENSEARCH_CATALOGUE_INDEX_NAME
+    _create_index_if_not_exists(opensearch_client, catalogue_index_name, catalogue_index_config)
+
 def delete_index(config: Config):
     """
     Deletes the specified OpenSearch indices if they exist.
@@ -143,6 +162,7 @@ def delete_index(config: Config):
     indices_to_delete = [
         config.OPENSEARCH_INDEX_NAME,
         config.OPENSEARCH_METADATA_INDEX_NAME,
+        config.OPENSEARCH_CATALOGUE_INDEX_NAME,
     ]
 
     for index_name in indices_to_delete:

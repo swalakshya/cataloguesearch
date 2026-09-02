@@ -122,6 +122,7 @@ input::placeholder, textarea::placeholder { color: var(--color-ink-muted); }
     overflow-x: auto;
     border: 1px solid var(--color-border);
     border-radius: 0.75rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 .data-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
 .data-table th {
@@ -139,6 +140,10 @@ input::placeholder, textarea::placeholder { color: var(--color-ink-muted); }
 .data-table th.sortable { cursor: pointer; user-select: none; }
 .data-table td { padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--color-border); color: var(--color-ink); }
 .data-table tr:last-child td { border-bottom: none; }
+/* Zebra striping reads better than an all-white grid once a table runs past a
+   handful of rows -- the tint is deliberately fainter than the hover tint
+   below it so hovering an even row still reads as a state change. */
+.data-table tbody tr:nth-child(even) td { background-color: color-mix(in srgb, var(--color-bg) 55%, var(--color-surface)); }
 .data-table tbody tr:hover td { background-color: var(--color-bg); }
 
 /* --- Lists --- */
@@ -235,6 +240,12 @@ input::placeholder, textarea::placeholder { color: var(--color-ink-muted); }
     background-color: var(--color-surface);
     color: var(--color-ink);
     transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+    /* When a row of these gets squeezed narrower than its labels' combined
+       natural width, the label (given min-w-0 at each usage) shrinks first --
+       this just makes sure that shrink clips cleanly at the button's own
+       rounded edge instead of the chevron (flex-shrink-0, so it never shrinks)
+       spilling out past the border looking broken. */
+    overflow: hidden;
 }
 .filter-trigger:hover:not(.filter-trigger-disabled) { background-color: var(--color-bg); }
 .filter-trigger-active {

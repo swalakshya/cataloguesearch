@@ -1,24 +1,42 @@
 import React from 'react';
-import { getAllStats } from '../../utils/searchableContent';
+import { Link } from 'react-router-dom';
+import useCatalogue from '../../hooks/useCatalogue';
+import { getGranthStats, getContemporaryLiteratureStats } from '../../utils/searchableContent';
 import { CategoryEmojiIcon } from './categoryEmoji';
 
 // category keys match categoryEmoji.js's CATEGORY_EMOJI_SRC, and colorVar
 // matches the same category->color mapping used in ChatFilters and the
 // reference-card badges, so "Pravachan" means the same color everywhere.
-const TILES = (stats) => [
-    { category: 'Pravachan', colorVar: '--color-info', value: stats.pravachan.grandTotal.toLocaleString(), label: 'Pravachans' },
-    { category: 'Granth', colorVar: '--color-brand', value: stats.granth.searchable.toLocaleString(), label: 'Granths' },
-    { category: 'Curated', colorVar: '--color-danger', label: 'Curated Jain Literature' },
+// `anchor` is the matching <section id> on SearchIndex.js -- each tile is a
+// real link there, so the strip doubles as a mini table-of-contents from
+// anywhere in the app.
+const TILES = (pravachanTotal, granthSearchable, literatureSearchable) => [
+    { category: 'Pravachan', colorVar: '--color-info', value: pravachanTotal != null ? pravachanTotal.toLocaleString() : undefined, label: 'Pravachans', anchor: 'pravachan-index' },
+    { category: 'Granth', colorVar: '--color-brand', value: granthSearchable.toLocaleString(), label: 'Granths', anchor: 'granth-index' },
+    { category: 'Curated', colorVar: '--color-danger', value: literatureSearchable.toLocaleString(), label: 'Contemporary Jain Books', anchor: 'contemporary-index' },
 ];
 
 export default function StatsStrip() {
-    const stats = getAllStats();
-    const tiles = TILES(stats);
+    // useCatalogue() shares its underlying fetch/cache with every other
+    // caller (e.g. SearchIndex.js) -- see hooks/useCatalogue.js.
+    const { rows, loading } = useCatalogue();
+    const pravachanTotal = loading ? null : rows.reduce(
+        (sum, r) => sum + (r.count !== 'compiled' ? (parseInt(r.count, 10) || 0) : 0), 0
+    );
+
+    const granthStats = getGranthStats();
+    const literatureStats = getContemporaryLiteratureStats();
+    const tiles = TILES(pravachanTotal, granthStats.searchable, literatureStats.searchable);
 
     return (
         <div className="card flex items-stretch px-2 py-2.5">
-            {tiles.map(({ category, colorVar, value, label }, i) => (
-                <div key={label} className={`flex-1 flex items-center justify-center gap-2.5 px-3 ${i > 0 ? 'border-l' : ''}`} style={{ borderColor: 'var(--color-border)' }}>
+            {tiles.map(({ category, colorVar, value, label, anchor }, i) => (
+                <Link
+                    key={label}
+                    to={`/search-index#${anchor}`}
+                    className={`flex-1 flex items-center justify-center gap-2.5 px-3 py-1 rounded-md hover:bg-bg transition-colors ${i > 0 ? 'border-l' : ''}`}
+                    style={{ borderColor: 'var(--color-border)' }}
+                >
                     <div
                         className="w-7 h-7 rounded-md flex items-center justify-center shrink-0"
                         style={{ backgroundColor: `color-mix(in srgb, var(${colorVar}) 14%, var(--color-surface))` }}
@@ -29,7 +47,7 @@ export default function StatsStrip() {
                         {value && <div className="text-sm font-bold text-ink">{value}</div>}
                         <div className={value ? 'text-xs text-ink-muted' : 'text-xs font-bold text-ink'}>{label}</div>
                     </div>
-                </div>
+                </Link>
             ))}
         </div>
     );

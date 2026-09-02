@@ -830,10 +830,10 @@ const PravachanFilter = ({
             <button
                 onClick={() => setIsOpen(true)}
                 disabled={disabled}
-                className={`filter-trigger ${disabled ? 'filter-trigger-disabled' : activeCount > 0 ? 'filter-trigger-active' : ''}`}
+                className={`filter-trigger flex-none ${disabled ? 'filter-trigger-disabled' : activeCount > 0 ? 'filter-trigger-active' : ''}`}
                 title={disabled ? 'Not searched — a Granth-only filter is active. Pick a Pravachan filter to include Pravachan results again.' : undefined}
             >
-                <span className="whitespace-nowrap flex items-center gap-1.5">
+                <span className="flex items-center gap-1.5 whitespace-nowrap">
                     <img src={CATEGORY_EMOJI_SRC.Pravachan} alt="" className="w-4 h-4 flex-shrink-0" />
                     Pravachan{activeCount > 0 ? ` (${activeCount})` : ''}{disabled ? ' (off)' : ''}
                 </span>
@@ -1097,10 +1097,10 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
             <button
                 onClick={() => setIsOpen(true)}
                 disabled={disabled}
-                className={`filter-trigger ${disabled ? 'filter-trigger-disabled' : activeCount > 0 ? 'filter-trigger-active' : ''}`}
+                className={`filter-trigger flex-none ${disabled ? 'filter-trigger-disabled' : activeCount > 0 ? 'filter-trigger-active' : ''}`}
                 title={disabled ? 'Not searched — a Pravachan-only filter is active. Pick a Granth filter to include Granth results again.' : undefined}
             >
-                <span className="whitespace-nowrap flex items-center gap-1.5">
+                <span className="flex items-center gap-1.5 whitespace-nowrap">
                     <img src={CATEGORY_EMOJI_SRC.Granth} alt="" className="w-4 h-4 flex-shrink-0" />
                     Granth{activeCount > 0 ? ` (${activeCount})` : ''}{disabled ? ' (off)' : ''}
                 </span>
@@ -1223,10 +1223,10 @@ const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, 
             <button
                 onClick={() => setIsOpen(true)}
                 disabled={disabled}
-                className={`filter-trigger ${disabled ? 'filter-trigger-disabled' : activeCount > 0 ? 'filter-trigger-active' : ''}`}
+                className={`filter-trigger flex-none ${disabled ? 'filter-trigger-disabled' : activeCount > 0 ? 'filter-trigger-active' : ''}`}
                 title={disabled ? 'Not searched — pick a Books filter to include Books results again.' : undefined}
             >
-                <span className="whitespace-nowrap flex items-center gap-1.5">
+                <span className="flex items-center gap-1.5 whitespace-nowrap">
                     <img src={CATEGORY_EMOJI_SRC.Books} alt="" className="w-4 h-4 flex-shrink-0" />
                     Books{activeCount > 0 ? ` (${activeCount})` : ''}{disabled ? ' (off)' : ''}
                 </span>
@@ -1557,7 +1557,7 @@ export const SearchOptions = ({ language, setLanguage, inline = false }) => {
     }
 
     return (
-        <div className="space-y-2">
+        <div className="space-y-2 flex flex-col items-center text-center">
             <p className="text-xs text-ink font-semibold uppercase tracking-wide">Language</p>
             {toggle}
         </div>

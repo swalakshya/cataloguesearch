@@ -28,6 +28,7 @@ opensearch:
   password: Admin@Password123!
   index_name: cataloguesearch_pytest
   metadata_index_name: cataloguesearch_pytest_metadata
+  catalogue_index_name: cataloguesearch_pytest_catalogue
 
 vector_embeddings:
   embedding_model: BAAI/bge-m3

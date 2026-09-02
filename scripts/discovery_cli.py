@@ -20,6 +20,7 @@ from threading import Event
 from backend.common.opensearch import get_opensearch_client, get_metadata, delete_documents_by_filename
 from backend.common.opensearch import create_indices_if_not_exists, refresh_pravachan_series_metadata
 from backend.common import opensearch
+from backend.common.catalogue import rebuild_catalogue_index
 from backend.config import Config
 from backend.crawler.discovery import Discovery
 from backend.crawler.index_state import IndexState
@@ -146,6 +147,10 @@ class DiscoveryDaemon:
             # Run discovery
             self.discovery.crawl()
 
+            # Rebuild the content catalogue index (config.json-driven, cheap)
+            logging.info("Rebuilding content catalogue index...")
+            rebuild_catalogue_index(self.config, get_opensearch_client(self.config))
+
             # Update metadata cache after discovery
             logging.info("Updating metadata cache...")
             metadata = get_metadata(self.config)
@@ -226,6 +231,10 @@ def run_discovery_once(config: Config, crawl=False, index=False, dry_run=False,
 
         # Run discovery
         discovery.crawl(crawl, index, dry_run, reindex_metadata_only, root_folder=folder)
+
+        # Rebuild the content catalogue index (config.json-driven, cheap)
+        logging.info("Rebuilding content catalogue index...")
+        rebuild_catalogue_index(config, client)
 
         # Update metadata cache after discovery
         logging.info("Updating metadata cache...")
@@ -358,7 +367,8 @@ def main():
                         help='Force re-processing: clears ocr_checksum if --crawl is set, '
                              'config_hash if --index is set, before running.')
     parser.add_argument('--refresh-metadata', action='store_true', default=False,
-                        help='Refresh the Pravachan series cascade in the metadata index and exit.')
+                        help='Refresh the Pravachan series cascade in the metadata index and '
+                             'rebuild the content catalogue index, then exit.')
 
     args = parser.parse_args()
 
@@ -376,6 +386,7 @@ def main():
     if args.refresh_metadata:
         client = get_opensearch_client(config)
         refresh_pravachan_series_metadata(config, client)
+        rebuild_catalogue_index(config, client)
         sys.exit(0)
 
     if args.cleanup:

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { flushSync } from 'react-dom';
-import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation, Link } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { GoogleReCaptchaProvider } from 'react-google-recaptcha-v3';
 
 // Import components
@@ -1789,12 +1789,6 @@ const AppContent = () => {
                                         title="Aagam Khoj (आगम खोज)"
                                         subtitle="Explore and search across the Jain literature comprising authentic Digambar Jain Scriptures, Pravachans of Pujya Gurudevshri Kanji Swami, and literature by contemporary Jain scholars."
                                     />
-                                    <div className="flex items-center justify-between mb-2">
-                                        <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Content Available</p>
-                                        <Link to="/search-index" className="text-sm font-semibold text-brand hover:text-brand-hover">
-                                            Browse All
-                                        </Link>
-                                    </div>
                                     <div className="mb-3">
                                         <StatsStrip />
                                     </div>

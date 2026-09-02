@@ -60,6 +60,7 @@ REPO_NAME         = "local_backup"
 SNAPSHOTS = [
     "cataloguesearch_prod",
     "cataloguesearch_prod_metadata",
+    "cataloguesearch_prod_catalogue",
 ]
 
 # Resolved in main() — see _resolve_snapshots_dir()
@@ -284,9 +285,9 @@ def _confirm():
     print("     and VERIFY them with stat")
     print("  3. Delete existing snapshot repository (local_backup)")
     print("  4. Register new snapshot repository → /tmp/snapshots")
-    print("  5. Verify both snapshots are present and state=SUCCESS")
+    print("  5. Verify all snapshots are present and state=SUCCESS")
     print("  6. Delete existing OpenSearch indices")
-    print("  7. Restore both snapshots")
+    print("  7. Restore all snapshots")
     print("  8. Poll until all indices are fully restored, then print")
     print("     document counts")
     print("  9. Restart cataloguesearch-api and cataloguesearch-frontend")
@@ -465,7 +466,7 @@ def step4_create_repository():
 # ---------------------------------------------------------------------------
 
 def step5_verify_snapshots():
-    log_handle.info("🔄 Step 5: Verifying both snapshots are accessible in repository...")
+    log_handle.info("🔄 Step 5: Verifying all snapshots are accessible in repository...")
     status, body = _os_request("GET", f"/_snapshot/{REPO_NAME}/_all")
     if status != 200:
         raise RuntimeError(
@@ -490,7 +491,7 @@ def step5_verify_snapshots():
             )
         log_handle.info("✅ Snapshot '%s': state=%s", name, state)
 
-    log_handle.info("✅ Step 5 done. Both snapshots verified.")
+    log_handle.info("✅ Step 5 done. All snapshots verified.")
 
 
 # ---------------------------------------------------------------------------
@@ -529,7 +530,7 @@ def step6_delete_indices():
 # ---------------------------------------------------------------------------
 
 def step7_restore_snapshots():
-    log_handle.info("🔄 Step 7: Initiating restore of both snapshots...")
+    log_handle.info("🔄 Step 7: Initiating restore of all snapshots...")
     for name in SNAPSHOTS:
         log_handle.info("🔄 Restoring '%s'...", name)
         status, body = _os_request(
@@ -547,7 +548,7 @@ def step7_restore_snapshots():
             raise RuntimeError(
                 f"❌ Restore of '{name}' not accepted: HTTP {status} — {body}"
             )
-    log_handle.info("✅ Step 7 done. Both restores accepted, now waiting for completion...")
+    log_handle.info("✅ Step 7 done. All restores accepted, now waiting for completion...")
 
 
 # ---------------------------------------------------------------------------
@@ -656,7 +657,7 @@ def main():
         description=(
             "Automated OpenSearch snapshot restore script.\n"
             "Restarts the opensearch-node container, fixes permissions, registers\n"
-            "the snapshot repository, and restores both production indices."
+            "the snapshot repository, and restores all production indices."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

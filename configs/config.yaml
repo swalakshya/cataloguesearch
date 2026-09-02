@@ -35,6 +35,7 @@ opensearch:
   port: "{OPENSEARCH_PORT}"
   index_name: cataloguesearch_prod
   metadata_index_name: cataloguesearch_prod_metadata
+  catalogue_index_name: cataloguesearch_prod_catalogue
 
 vector_embeddings:
   embedding_model: BAAI/bge-m3

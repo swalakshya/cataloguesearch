@@ -1,670 +1,91 @@
 /**
- * Searchable Content Index
+ * Static content indexes for the /search-index page.
  *
- * This file maintains a list of all pravachans and content available for search.
- * Update this file as new content is indexed and made searchable.
+ * Pravachan content is no longer listed here — it's fetched live from
+ * GET /api/catalogue (see SearchIndex.js). Granth (Mool Shastra) and
+ * Contemporary Jain Literature don't have a curated `count` per work, so
+ * they stay as hand-maintained lists here until a similar catalogue exists
+ * for those categories.
  */
 
-export const searchableContent = [
-  {
-    granth: "Samaysaar",
-    series: "1978-80 (19th time)",
-    count: 536,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Pravachansaar",
-    series: "1979-80",
-    count: 287,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Niyamsaar",
-    series: "1979-80",
-    count: 214,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Niyamsaar",
-    series: "1971",
-    count: 202,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Niyamsaar",
-    series: "1975-76",
-    count: 183,
-    hindi: "searchable",
-    gujarati: "searchable"
-  },
-  {
-    granth: "Panchastikaya",
-    series: "1970",
-    count: 88,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Asht Pahud",
-    series: "1970-71",
-    count: 195,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Asht Pahud",
-    series: "1973-74",
-    count: 198,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Samaysaar Kalash Tika",
-    series: "1977-78",
-    count: 308,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Parmatma Prakash",
-    series: "1976-77",
-    count: 245,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Parmatma Prakash",
-    series: "1965-66",
-    count: 214,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Samadhi Tantra",
-    series: "1974",
-    count: 110,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Purusharth Siddhi Upay",
-    series: "1966",
-    count: 89,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Padmanandi Panchvinshati",
-    series: "1960",
-    count: 69,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Natak Samaysaar",
-    series: "1971-72",
-    count: 197,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Ishtopadesh",
-    series: "1966",
-    count: 55,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Yogsaar",
-    series: "1966",
-    count: 45,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Kartikeya Anupreksha",
-    series: "1952",
-    count: null,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Bahinshree Nu Vachanamrut",
-    series: 1978,
-    count: 181,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Bahinshree Nu Vachanamrut",
-    series: 1980,
-    count: 50,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Pravachan Navneet",
-    series: 1977,
-    count: 142,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Samaysaar",
-    series: "1971-74 (17th time)",
-    count: 639,
-    hindi: null,
-    gujarati: "searchable"
-  },
-  {
-    granth: "Samaysaar",
-    series: "1966-68 (15th time)",
-    count: 595,
-    hindi: null,
-    gujarati: "searchable"
-  },
-  {
-    granth: "Pravachansaar",
-    series: "1968-69",
-    count: 280,
-    hindi: null,
-    gujarati: "searchable"
-  },
-  {
-    granth: "Samaysaar",
-    series: "1975 (18th time)",
-    count: 535,
-    hindi: null,
-    gujarati: "searchable"
-  },
-  {
-    granth: "Mokshmarg Prakashak",
-    series: "1952 Series",
-    count: null,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Bruhad Dravya Sangrah",
-    count: null,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Mool ma Bhool",
-    count: null,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Dhanya Munidasha",
-    count: null,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Panchkalyanak Pravachan",
-    count: null,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Chhah Dhala",
-    count: 50,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Bhaktamar Stotra",
-    count: null,
-    hindi: "searchable",
-    gujarati: null
-  },
-  {
-    granth: "Rishabh Stotra",
-    count: null,
-    hindi: "searchable",
-    gujarati: null
-  }
-];
-
 /**
- * Get searchable content statistics
- */
-export const getSearchableStats = () => {
-  const hindiSearchable = searchableContent.filter(item => item.hindi === 'searchable');
-  const gujaratiSearchable = searchableContent.filter(item => item.gujarati === 'searchable');
-
-  const hindiTotal = hindiSearchable.reduce((sum, item) => sum + (item.count || 0), 0);
-  const gujaratiTotal = gujaratiSearchable.reduce((sum, item) => sum + (item.count || 0), 0);
-
-  const hindiSeries = hindiSearchable.length;
-  const gujaratiSeries = gujaratiSearchable.length;
-
-  return {
-    hindiTotal,
-    gujaratiTotal,
-    hindiSeries,
-    gujaratiSeries,
-    grandTotal: hindiTotal + gujaratiTotal
-  };
-};
-
-/**
- * Get content by status
- */
-export const getContentByStatus = (status = 'searchable') => {
-  return {
-    hindi: searchableContent.filter(item => item.hindi === status),
-    gujarati: searchableContent.filter(item => item.gujarati === status)
-  };
-};
-
-/**
- * Get all unique granths
- */
-export const getAllGranths = () => {
-  const granths = searchableContent.map(item => item.granth);
-  return [...new Set(granths)];
-};
-
-/**
- * Searchable Granth/Mool Shastra Index
+ * Searchable Granth / Mool Shastra Index. `anuyog` and `language` mirror the
+ * real cataloguesearch-configs folder structure (Granth/<language>/<Anuyog>/<Name>).
  */
 export const searchableGranths = [
-  {
-    name: "Aadi Puran",
-    author: "Acharya Jinsen",
-    status: "searchable"
-  },
-  {
-    name: "Aaradhansaar",
-    author: "Acharya Devsen",
-    tikakaar: "Pandit Ratnakeerti Dev",
-    status: "searchable"
-  },
-  {
-    name: "Aatmavlokan",
-    author: "Pandit Deepchand Kasliwal",
-    status: "searchable"
-  },
-  {
-    name: "Anagaar Dharmamrut",
-    author: "Pandit Ashadhar",
-    status: "searchable"
-  },
-  {
-    name: "Anubhav Anand",
-    author: "Pandit Deepchand Kasliwal",
-    status: "searchable"
-  },
-  {
-    name: "Anubhav Prakash",
-    author: "Pandit Deepchand Kasliwal",
-    status: "searchable"
-  },
-  {
-    name: "Asht Pahud",
-    author: "Acharya Kund Kund",
-    status: "searchable"
-  },
-  {
-    name: "Atmanushashan",
-    author: "Acharya Gunbhadra",
-    tikakaar: "Pandit Todarmal",
-    status: "searchable"
-  },
-  {
-    name: "Bhagwan Hanuman",
-    author: "Br. Harilal Jain",
-    status: "searchable"
-  },
-  {
-    name: "Bhagwan Parshvanath",
-    author: "Br. Harilal Jain",
-    status: "searchable"
-  },
-  {
-    name: "Bhagwan Shantinath",
-    author: "Br. Harilal Jain",
-    status: "searchable"
-  },
-  {
-    name: "Bhagwati Aradhana",
-    author: "Acharya Shivarya",
-    status: "searchable"
-  },
-  {
-    name: "Bhartesh Vaibhav",
-    author: "Mahakavi Ratnakar Varni",
-    status: "searchable"
-  },
-  {
-    name: "Bhav Deepika",
-    author: "Pandit Deepchand Kasliwal",
-    status: "searchable"
-  },
-  {
-    name: "Bruhad Dravya Sangrah",
-    author: "Acharya Nemichand Siddhant Chakravarti",
-    tikakaar: "Acharya Brahmadev",
-    status: "searchable"
-  },
-  {
-    name: "Charcha Sangrah",
-    author: "Pandit Raimall",
-    status: "searchable"
-  },
-  {
-    name: "Chid Vilas",
-    author: "Pandit Deepchand Kasliwal",
-    status: "searchable"
-  },
-  {
-    name: "Chhah Dhala",
-    author: "Pandit Shri Daulat Ram",
-    status: "searchable"
-  },
-  {
-    name: "Dravya Drushti Prakash",
-    author: "Nihal Chandra Sogani",
-    status: "searchable"
-  },
-  {
-    name: "Gautam Charitra",
-    author: "Mandalacharya Shri Dharmchandra",
-    status: "searchable"
-  },
-  {
-    name: "Gnaanarnav",
-    author: "Acharya Shubhchandra",
-    status: "searchable"
-  },
-  {
-    name: "Gommatsaar Jeevkand",
-    author: "Acharya Nemichand Siddhant Chakravarti",
-    tikakaar: "Pandit Keshav Varni",
-    status: "searchable"
-  },
-  {
-    name: "Gommatsaar Karmkand",
-    author: "Acharya Nemichand Siddhant Chakravarti",
-    tikakaar: "Pandit Keshav Varni",
-    status: "searchable"
-  },
-  {
-    name: "Gurudevshri ke Vachanamrut",
-    author: "Shri Kanji Swami",
-    status: "searchable"
-  },
-  {
-    name: "Gyan Darpan",
-    author: "Pandit Deepchand Kasliwal",
-    status: "searchable"
-  },
-  {
-    name: "Gyan Goshthi",
-    author: "Shri Kanji Swami",
-    status: "searchable"
-  },
-  {
-    name: "Harivansh Puran",
-    author: "Acharya Jinsen",
-    status: "searchable"
-  },
-  {
-    name: "Ishtopadesh",
-    author: "Shrimad Pujyapad Swami",
-    tikakaar: "Pandit Ashadhar",
-    status: "searchable"
-  },
-  {
-    name: "Jain Siddhant Darpan",
-    author: "Pandit Gopaldas Baraiyya",
-    status: "searchable"
-  },
-  {
-    name: "Jain Siddhant Praveshika",
-    author: "Pandit Gopal Das Baraiya",
-    status: "searchable"
-  },
-  {
-    name: "Jambu Swami Charitra",
-    author: "Pandit Rajmal Pandey",
-    status: "searchable"
-  },
-  {
-    name: "Kartikeya Anupreksha",
-    author: "Swami Kartikeya",
-    status: "searchable"
-  },
-  {
-    name: "Laghu Tattvasphot",
-    author: "Acharya Amritchandra",
-    status: "searchable"
-  },
-  {
-    name: "Maharani Chelna",
-    author: "Br. Harilal Jain",
-    status: "searchable"
-  },
-  {
-    name: "Moksh Marg Prakashak",
-    author: "Pandit Shri Todarmal",
-    status: "searchable"
-  },
-  {
-    name: "Moksh Marg Prakashak Parishisht",
-    author: "Pandit Banarasidas",
-    status: "searchable"
-  },
-  {
-    name: "Moksha Shastra",
-    author: "Acharya Umaswami",
-    tikakaar: "Shri Ramji Manekchand Doshi",
-    status: "searchable"
-  },
-  {
-    name: "Niyamsaar",
-    author: "Acharya Kund Kund",
-    tikakaar: "Muni Padmaprabhmal Dhari Dev",
-    status: "searchable"
-  },
-  {
-    name: "Padma Puran",
-    author: "Acharya Ravisen",
-    tikakaar: "Pandit Daulatram",
-    status: "searchable"
-  },
-  {
-    name: "Padmanandi Panchvinchhati",
-    author: "Acharya Padmanandi",
-    tikakaar: "Pandit Gajadharlal Nyayateerth",
-    status: "searchable"
-  },
-  {
-    name: "Panchastikaya",
-    author: "Acharya Kund Kund",
-    tikakaar: "Acharya Amritchandra",
-    status: "searchable"
-  },
-  {
-    name: "Panchastikaya — Tattparyavratti",
-    author: "Acharya Kund Kund",
-    tikakaar: "Acharya Jaysen",
-    status: "searchable"
-  },
-  {
-    name: "Pandav Puran",
-    author: "Acharya Shubhchandra",
-    status: "searchable"
-  },
-  {
-    name: "Param Adhyatm Tarangini",
-    author: "Acharya Shubhchandra",
-    status: "searchable"
-  },
-  {
-    name: "Parmatma Prakash",
-    author: "Shrimad Yogindu Dev",
-    tikakaar: "Shrimad Brahma Dev",
-    status: "searchable"
-  },
-  {
-    name: "Parmatma Puran",
-    author: "Pandit Deepchand Kasliwal",
-    status: "searchable"
-  },
-  {
-    name: "Pravachansaar",
-    author: "Acharya Kund Kund",
-    tikakaar: "Acharya Amritchandra",
-    status: "searchable"
-  },
-  {
-    name: "Pravachansaar — Tattparyavratti",
-    author: "Acharya Kund Kund",
-    tikakaar: "Acharya Jaysen",
-    status: "searchable"
-  },
-  {
-    name: "Purusharth Siddhi Upay",
-    author: "Acharya Amritchandra",
-    tikakaar: "Pandit Todarmal",
-    status: "searchable"
-  },
-  {
-    name: "Ratnakarand Shravakachar",
-    author: "Acharya Samant Bhadra",
-    tikakaar: "Pandit Sadasukhdas Kasliwal",
-    status: "searchable"
-  },
-  {
-    name: "Rayansaar",
-    author: "Acharya Kund Kund",
-    status: "searchable"
-  },
-  {
-    name: "Sagaar Dharmamrut",
-    author: "Pandit Ashadhar",
-    status: "searchable"
-  },
-  {
-    name: "Samadhi Tantra",
-    author: "Shrimad Pujyapaad Swami",
-    tikakaar: "Pandit Prabhachandra",
-    status: "searchable"
-  },
-  {
-    name: "Samaysaar",
-    author: "Acharya Kund Kund",
-    tikakaar: "Acharya Amritchandra",
-    status: "searchable"
-  },
-  {
-    name: "Samaysaar Kalash Tika",
-    author: "Acharya Amritchandra",
-    status: "searchable"
-  },
-  {
-    name: "Samyag Gyan Chandrika Jeevkand",
-    author: "Acharya Nemichand Siddhant Chakravarti",
-    tikakaar: "Pandit Todarmal",
-    status: "searchable"
-  },
-  {
-    name: "Samyag Gyan Chandrika Karmkand",
-    author: "Acharya Nemichand Siddhant Chakravarti",
-    tikakaar: "Pandit Todarmal",
-    status: "searchable"
-  },
-  {
-    name: "Samyag Gyan Chandrika Kshapanasaar",
-    author: "Acharya Nemichand Siddhant Chakravarti",
-    tikakaar: "Pandit Todarmal",
-    status: "searchable"
-  },
-  {
-    name: "Samyag Gyan Chandrika Labdhisaar",
-    author: "Acharya Nemichand Siddhant Chakravarti",
-    tikakaar: "Pandit Todarmal",
-    status: "searchable"
-  },
-  {
-    name: "Sarvartha Siddhi",
-    author: "Pujyapaad Swami",
-    status: "searchable"
-  },
-  {
-    name: "Satta Swaroop",
-    author: "Pandit Bhagchandra Chhajed",
-    status: "searchable"
-  },
-  {
-    name: "Savaiya Teeka",
-    author: "Pandit Deepchand Kasliwal",
-    status: "searchable"
-  },
-  {
-    name: "Shantinath Puran",
-    author: "Acharya Sakalkirti",
-    status: "searchable"
-  },
-  {
-    name: "Shrenik Charitra",
-    author: "Bhattarak Shubhchandra",
-    status: "searchable"
-  },
-  {
-    name: "Sukumal Charitra",
-    author: "Acharya Sakalkirti",
-    status: "searchable"
-  },
-  {
-    name: "Swanubhuti Darshan",
-    author: "Bahinshree Champaben",
-    status: "searchable"
-  },
-  {
-    name: "Tattvagyan Tarangini",
-    author: "Bhattarak Shri Gyanbhushan",
-    status: "searchable"
-  },
-  {
-    name: "Tattvanushashan",
-    author: "Muni Nagsen",
-    status: "searchable"
-  },
-  {
-    name: "Triloksaar",
-    author: "Acharya Nemichand Siddhant Chakravarti",
-    tikakaar: "Pandit Todarmal",
-    status: "searchable"
-  },
-  {
-    name: "Updesh Siddhant Ratnamala",
-    author: "Shri Nemichand Bhandari",
-    status: "searchable"
-  },
-  {
-    name: "Uttar Puran",
-    author: "Acharya Gunbhadra",
-    status: "searchable"
-  },
-  {
-    name: "Varasanuvekkha",
-    author: "Acharya Kund Kund",
-    status: "searchable"
-  },
-  {
-    name: "Yogsaar",
-    author: "Acharya Amitgati",
-    status: "searchable"
-  }
+  { name: "Aadi Puran", author: "Acharya Jinsen", anuyog: "Prathmanuyog", language: "hi", status: "searchable" },
+  { name: "Aaradhansaar", author: "Acharya Devsen", tikakaar: "Pandit Ratnakeerti Dev", anuyog: "Charananuyog", language: "hi", status: "searchable" },
+  { name: "Aatmavlokan", author: "Pandit Deepchand Kasliwal", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Anagaar Dharmamrut", author: "Pandit Ashadhar", anuyog: "Charananuyog", language: "hi", status: "searchable" },
+  { name: "Anubhav Anand", author: "Pandit Deepchand Kasliwal", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Anubhav Prakash", author: "Pandit Deepchand Kasliwal", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Asht Pahud", author: "Acharya Kund Kund", anuyog: "Charananuyog", language: "hi", status: "searchable" },
+  { name: "Atmanushashan", author: "Acharya Gunbhadra", tikakaar: "Pandit Todarmal", anuyog: "Charananuyog", language: "hi", status: "searchable" },
+  { name: "Bhagwan Hanuman", author: "Br. Harilal Jain", anuyog: "Prathmanuyog", language: "hi", status: "searchable" },
+  { name: "Bhagwan Parshvanath", author: "Br. Harilal Jain", anuyog: "Prathmanuyog", language: "hi", status: "searchable" },
+  { name: "Bhagwan Shantinath", author: "Br. Harilal Jain", anuyog: "Prathmanuyog", language: "hi", status: "searchable" },
+  { name: "Bhagwati Aradhana", author: "Acharya Shivarya", anuyog: "Charananuyog", language: "hi", status: "searchable" },
+  { name: "Bhartesh Vaibhav", author: "Mahakavi Ratnakar Varni", anuyog: "Prathmanuyog", language: "hi", status: "searchable" },
+  { name: "Bhav Deepika", author: "Pandit Deepchand Kasliwal", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Bruhad Dravya Sangrah", author: "Acharya Nemichand Siddhant Chakravarti", tikakaar: "Acharya Brahmadev", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Charcha Sangrah", author: "Pandit Raimall", anuyog: "Miscellaneous", language: "hi", status: "searchable" },
+  { name: "Chid Vilas", author: "Pandit Deepchand Kasliwal", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Chhah Dhala", author: "Pandit Shri Daulat Ram", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Dravya Drushti Prakash", author: "Nihal Chandra Sogani", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Gautam Charitra", author: "Mandalacharya Shri Dharmchandra", anuyog: "Prathmanuyog", language: "hi", status: "searchable" },
+  { name: "Gnaanarnav", author: "Acharya Shubhchandra", anuyog: "Charananuyog", language: "hi", status: "searchable" },
+  { name: "Gommatsaar Jeevkand", author: "Acharya Nemichand Siddhant Chakravarti", tikakaar: "Pandit Keshav Varni", anuyog: "Karananuyog", language: "hi", status: "searchable" },
+  { name: "Gommatsaar Karmkand", author: "Acharya Nemichand Siddhant Chakravarti", tikakaar: "Pandit Keshav Varni", anuyog: "Karananuyog", language: "hi", status: "searchable" },
+  { name: "Gurudevshri ke Vachanamrut", author: "Shri Kanji Swami", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Gyan Darpan", author: "Pandit Deepchand Kasliwal", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Gyan Goshthi", author: "Shri Kanji Swami", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Harivansh Puran", author: "Acharya Jinsen", anuyog: "Prathmanuyog", language: "hi", status: "searchable" },
+  { name: "Ishtopadesh", author: "Shrimad Pujyapad Swami", tikakaar: "Pandit Ashadhar", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Jain Siddhant Darpan", author: "Pandit Gopaldas Baraiyya", anuyog: "Miscellaneous", language: "hi", status: "searchable" },
+  { name: "Jain Siddhant Praveshika", author: "Pandit Gopal Das Baraiya", anuyog: "Miscellaneous", language: "hi", status: "searchable" },
+  { name: "Jambu Swami Charitra", author: "Pandit Rajmal Pandey", anuyog: "Prathmanuyog", language: "hi", status: "searchable" },
+  { name: "Kartikeya Anupreksha", author: "Swami Kartikeya", anuyog: "Charananuyog", language: "hi", status: "searchable" },
+  { name: "Laghu Tattvasphot", author: "Acharya Amritchandra", anuyog: "Others", language: "hi", status: "searchable" },
+  { name: "Maharani Chelna", author: "Br. Harilal Jain", anuyog: "Prathmanuyog", language: "hi", status: "searchable" },
+  { name: "Moksh Marg Prakashak", author: "Pandit Shri Todarmal", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Moksh Marg Prakashak Parishisht", author: "Pandit Banarasidas", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Moksha Shastra", author: "Acharya Umaswami", tikakaar: "Shri Ramji Manekchand Doshi", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Niyamsaar", author: "Acharya Kund Kund", tikakaar: "Muni Padmaprabhmal Dhari Dev", anuyog: "Charananuyog", language: "hi", status: "searchable" },
+  { name: "Padma Puran", author: "Acharya Ravisen", tikakaar: "Pandit Daulatram", anuyog: "Prathmanuyog", language: "gu", status: "searchable" },
+  { name: "Padmanandi Panchvinchhati", author: "Acharya Padmanandi", tikakaar: "Pandit Gajadharlal Nyayateerth", anuyog: "Charananuyog", language: "hi", status: "searchable" },
+  { name: "Panchastikaya", author: "Acharya Kund Kund", tikakaar: "Acharya Amritchandra", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Panchastikaya — Tattparyavratti", author: "Acharya Kund Kund", tikakaar: "Acharya Jaysen", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Pandav Puran", author: "Acharya Shubhchandra", anuyog: "Prathmanuyog", language: "gu", status: "searchable" },
+  { name: "Param Adhyatm Tarangini", author: "Acharya Shubhchandra", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Parmatma Prakash", author: "Shrimad Yogindu Dev", tikakaar: "Shrimad Brahma Dev", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Parmatma Puran", author: "Pandit Deepchand Kasliwal", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Pravachansaar", author: "Acharya Kund Kund", tikakaar: "Acharya Amritchandra", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Pravachansaar — Tattparyavratti", author: "Acharya Kund Kund", tikakaar: "Acharya Jaysen", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Purusharth Siddhi Upay", author: "Acharya Amritchandra", tikakaar: "Pandit Todarmal", anuyog: "Charananuyog", language: "hi", status: "searchable" },
+  { name: "Ratnakarand Shravakachar", author: "Acharya Samant Bhadra", tikakaar: "Pandit Sadasukhdas Kasliwal", anuyog: "Charananuyog", language: "hi", status: "searchable" },
+  { name: "Rayansaar", author: "Acharya Kund Kund", anuyog: "Charananuyog", language: "hi", status: "searchable" },
+  { name: "Sagaar Dharmamrut", author: "Pandit Ashadhar", anuyog: "Charananuyog", language: "hi", status: "searchable" },
+  { name: "Samadhi Tantra", author: "Shrimad Pujyapaad Swami", tikakaar: "Pandit Prabhachandra", anuyog: "Charananuyog", language: "hi", status: "searchable" },
+  { name: "Samaysaar", author: "Acharya Kund Kund", tikakaar: "Acharya Amritchandra", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Samaysaar Kalash Tika", author: "Acharya Amritchandra", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Samyag Gyan Chandrika Jeevkand", author: "Acharya Nemichand Siddhant Chakravarti", tikakaar: "Pandit Todarmal", anuyog: "Karananuyog", language: "hi", status: "searchable" },
+  { name: "Samyag Gyan Chandrika Karmkand", author: "Acharya Nemichand Siddhant Chakravarti", tikakaar: "Pandit Todarmal", anuyog: "Karananuyog", language: "hi", status: "searchable" },
+  { name: "Samyag Gyan Chandrika Kshapanasaar", author: "Acharya Nemichand Siddhant Chakravarti", tikakaar: "Pandit Todarmal", anuyog: "Karananuyog", language: "hi", status: "searchable" },
+  { name: "Samyag Gyan Chandrika Labdhisaar", author: "Acharya Nemichand Siddhant Chakravarti", tikakaar: "Pandit Todarmal", anuyog: "Karananuyog", language: "hi", status: "searchable" },
+  { name: "Sarvartha Siddhi", author: "Pujyapaad Swami", anuyog: "Karananuyog", language: "hi", status: "searchable" },
+  { name: "Satta Swaroop", author: "Pandit Bhagchandra Chhajed", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Savaiya Teeka", author: "Pandit Deepchand Kasliwal", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Shantinath Puran", author: "Acharya Sakalkirti", anuyog: "Prathmanuyog", language: "gu", status: "searchable" },
+  { name: "Shrenik Charitra", author: "Bhattarak Shubhchandra", anuyog: "Prathmanuyog", language: "hi", status: "searchable" },
+  { name: "Sukumal Charitra", author: "Acharya Sakalkirti", anuyog: "Prathmanuyog", language: "hi", status: "searchable" },
+  { name: "Swanubhuti Darshan", author: "Bahinshree Champaben", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Tattvagyan Tarangini", author: "Bhattarak Shri Gyanbhushan", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Tattvanushashan", author: "Muni Nagsen", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Triloksaar", author: "Acharya Nemichand Siddhant Chakravarti", tikakaar: "Pandit Todarmal", anuyog: "Karananuyog", language: "hi", status: "searchable" },
+  { name: "Updesh Siddhant Ratnamala", author: "Shri Nemichand Bhandari", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
+  { name: "Uttar Puran", author: "Acharya Gunbhadra", anuyog: "Prathmanuyog", language: "hi", status: "searchable" },
+  { name: "Varasanuvekkha", author: "Acharya Kund Kund", anuyog: "Charananuyog", language: "hi", status: "searchable" },
+  { name: "Yogsaar", author: "Acharya Amitgati", anuyog: "Dravyanuyog", language: "hi", status: "searchable" },
 ];
 
 /**
@@ -683,14 +104,40 @@ export const getGranthStats = () => {
 };
 
 /**
- * Get combined statistics for Pravachan and Granth
+ * Contemporary Jain Literature — books by modern authors and scholars, distinct
+ * from the canonical Granths above. All titles currently come from the Hindi
+ * Books/ tree in cataloguesearch-configs.
  */
-export const getAllStats = () => {
-  const pravachanStats = getSearchableStats();
-  const granthStats = getGranthStats();
+export const contemporaryLiterature = [
+  { name: "Gunasthan Vivechan", author: "Br. Yashpal Jain", language: "hi", status: "searchable" },
+  { name: "Anekant Syadvad", author: "Dr. Hukumdchand Bharill", language: "hi", status: "searchable" },
+  { name: "Dharm ke Das Lakshan", author: "Dr. Hukumdchand Bharill", language: "hi", status: "searchable" },
+  { name: "Krambaddh Paryay", author: "Dr. Hukumdchand Bharill", language: "hi", status: "searchable" },
+  { name: "Naichakra", author: "Dr. Hukumdchand Bharill", language: "hi", status: "searchable" },
+  { name: "Nimitt Upadan", author: "Dr. Hukumdchand Bharill", language: "hi", status: "searchable" },
+  { name: "Shakahaar", author: "Dr. Hukumdchand Bharill", language: "hi", status: "searchable" },
+  { name: "Jain Parva Charcha", author: "Dr. Praveen Jain", language: "hi", status: "searchable" },
+  { name: "Bhed Vigyan", author: "Dr. Sanjeev Godha", language: "hi", status: "searchable" },
+  { name: "Jeevan ka Aadhar — Samadhi", author: "Dr. Sanjeev Godha", language: "hi", status: "searchable" },
+  { name: "Kaal Chakra", author: "Dr. Sanjeev Godha", language: "hi", status: "searchable" },
+  { name: "Karmchakra se Siddhchakra", author: "Dr. Sanjeev Godha", language: "hi", status: "searchable" },
+  { name: "Mokshmarg Sanjeevani", author: "Dr. Sanjeev Godha", language: "hi", status: "searchable" },
+  { name: "Samudghat", author: "Dr. Sanjeev Godha", language: "hi", status: "searchable" },
+  { name: "Teen Lok", author: "Dr. Sanjeev Godha", language: "hi", status: "searchable" },
+  { name: "Acharya Kund Kund Dev", author: "—", language: "hi", status: "searchable" },
+  { name: "Jain Shraman", author: "—", language: "hi", status: "searchable" },
+  { name: "Jain Tattva Mimamsa", author: "—", language: "hi", status: "searchable" },
+  { name: "Jin Poojan Rahasya", author: "Pandit Ratanchand Bharill", language: "hi", status: "searchable" },
+  { name: "Namokaar Mahamantra", author: "Pandit Ratanchand Bharill", language: "hi", status: "searchable" },
+  { name: "Shalaksha Purush", author: "Pandit Ratanchand Bharill", language: "hi", status: "searchable" },
+];
 
-  return {
-    pravachan: pravachanStats,
-    granth: granthStats
-  };
+/**
+ * Get contemporary literature statistics
+ */
+export const getContemporaryLiteratureStats = () => {
+  const searchable = contemporaryLiterature.filter(b => b.status === 'searchable').length;
+  const total = contemporaryLiterature.length;
+
+  return { searchable, total };
 };

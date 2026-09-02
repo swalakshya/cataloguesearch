@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.logger import setup_logging
 from backend.config import Config
 from backend.common.opensearch import get_opensearch_client, create_indices_if_not_exists, refresh_pravachan_series_metadata
+from backend.common.catalogue import rebuild_catalogue_index
 from opensearchpy import helpers
 
 log_handle = logging.getLogger(__name__)
@@ -241,6 +242,7 @@ def main():
     t_write = time.time()
     write_metadata_index(config, client, merged_values, merged_date_ranges)
     refresh_pravachan_series_metadata(config, client)
+    rebuild_catalogue_index(config, client)
     write_time = time.time() - t_write
     log_handle.info(f"Write phase: {write_time:.2f}s")
 

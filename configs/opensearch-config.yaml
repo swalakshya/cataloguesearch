@@ -208,3 +208,34 @@ metadata_index:
       values:
         type: keyword
 
+# One row per (category, language, Granth, Series) that a curator has assigned a
+# `count` to in cataloguesearch-configs -- see backend/common/catalogue.py.
+# Driven entirely off the config.json tree, independent of whether anything has
+# actually been indexed yet.
+catalogue_index:
+  settings:
+    number_of_shards: 1
+    number_of_replicas: 0
+  mappings:
+    properties:
+      category:
+        type: keyword
+      language:
+        type: keyword
+      anuyog:
+        type: keyword
+      granth:
+        type: keyword
+      series:
+        type: keyword
+      author:
+        type: keyword
+      series_start_date:
+        type: date
+      series_end_date:
+        type: date
+      count:
+        type: keyword
+      relative_path:
+        type: keyword
+

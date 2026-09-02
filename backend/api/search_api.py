@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.common.embedding_models import get_embedding_model_factory
 from backend.common.opensearch import get_opensearch_client, get_metadata
+from backend.common.catalogue import get_catalogue
 from backend.config import Config
 from backend.search.index_searcher import IndexSearcher
 from backend.utils import json_dumps, JSONResponse, log_memory_usage
@@ -123,6 +124,20 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log_handle.exception(f"Failed to populate metadata cache at startup: {e}")
 
+    app.state.catalogue_cache = {
+        "data": None,
+        "timestamp": 0,
+        "ttl": 1800
+    }
+    try:
+        log_handle.info("Populating content catalogue cache at startup...")
+        app.state.catalogue_cache["data"] = get_catalogue(config, client)
+        app.state.catalogue_cache["timestamp"] = time.time()
+        log_handle.info(
+            f"Catalogue cache populated with {len(app.state.catalogue_cache['data'])} rows")
+    except Exception as e:
+        log_handle.exception(f"Failed to populate catalogue cache at startup: {e}")
+
     log_memory_usage()
     yield
 
@@ -208,17 +223,49 @@ async def get_metadata_api(request: Request):
         log_handle.exception(f"Error retrieving metadata: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
 
+@app.get("/api/catalogue", response_model=List[Dict[str, Any]])
+async def get_catalogue_api(request: Request):
+    """
+    Returns the content catalogue: one row per (category, language, Granth, Series)
+    that has a curated `count` in cataloguesearch-configs. Backs the /search-index
+    page. Uses the same in-memory cache pattern as /api/metadata.
+    """
+    try:
+        current_time = time.time()
+        cache = request.app.state.catalogue_cache
+
+        if (cache["data"] is not None and
+            current_time - cache["timestamp"] < cache["ttl"]):
+            log_handle.info("Retrieving catalogue from in-memory cache")
+            return JSONResponse(content=cache["data"], status_code=200)
+
+        log_handle.info("Cache expired or empty, fetching catalogue from OpenSearch")
+        rows = get_catalogue(request.app.state.config)
+
+        cache["data"] = rows
+        cache["timestamp"] = current_time
+
+        log_handle.info(f"Catalogue retrieved and cached: {len(rows)} rows")
+        return JSONResponse(content=rows, status_code=200)
+    except Exception as e:
+        log_handle.exception(f"Error retrieving catalogue: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
+
 @app.post("/api/cache/invalidate")
 async def invalidate_cache(request: Request):
     """
-    Invalidates the metadata cache by clearing cached data.
+    Invalidates the metadata and catalogue caches by clearing cached data.
     """
     try:
         cache = request.app.state.metadata_cache
         cache["data"] = None
         cache["timestamp"] = 0
-        
-        log_handle.info("Metadata cache invalidated successfully")
+
+        catalogue_cache = request.app.state.catalogue_cache
+        catalogue_cache["data"] = None
+        catalogue_cache["timestamp"] = 0
+
+        log_handle.info("Metadata and catalogue caches invalidated successfully")
         return {"message": "Cache invalidated successfully", "status": "success"}
     except Exception as e:
         log_handle.exception(f"Error invalidating cache: {e}")
