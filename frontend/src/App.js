@@ -13,6 +13,8 @@ import { ResultsList, SuggestionsCard, Tabs, SimilarSourceInfoCard, SkeletonResu
 import { ExpandModal, GranthVerseModal, GranthProseModal, WelcomeModal } from './components/Modals';
 import { FeedbackForm } from './components/Feedback';
 import { FeedbackButtons } from './components/AibotFeedback';
+import Home from './components/Home';
+import Footer from './components/layout/Footer';
 import About from './components/About';
 import WhatsNew from './components/WhatsNew';
 import UsageGuide from './components/UsageGuide';
@@ -23,7 +25,7 @@ import ChatComposer from './components/chat/ChatComposer';
 import StatsStrip from './components/chat/StatsStrip';
 import AiDisclaimer from './components/chat/AiDisclaimer';
 import { Spinner, ChevronUpIcon, ChevronDownIcon, ExpandIcon, PdfIcon } from './components/SharedComponents';
-import { ChevronDown, Sparkles, AlertTriangle, Mail, Home, PenLine, Check, SendHorizontal } from 'lucide-react';
+import { ChevronDown, Sparkles, AlertTriangle, Mail, Home as HomeIcon, PenLine, Check, SendHorizontal } from 'lucide-react';
 import clipboardEmoji from './assets/emoji/clipboard.svg';
 import bulbEmoji from './assets/emoji/bulb.svg';
 import documentEmoji from './assets/emoji/document.svg';
@@ -249,6 +251,7 @@ const AppContent = () => {
         if (path === '/search-index') return 'search-index';
         if (path === '/eval') return 'eval';
         if (path === '/chat') return 'chat';
+        if (path === '/aagam-khoj') return 'aagam-khoj';
         return 'home'; // Default to 'home' for root path
     });
     
@@ -270,6 +273,8 @@ const AppContent = () => {
             setCurrentPageState('eval');
         } else if (path === '/chat') {
             setCurrentPageState('chat');
+        } else if (path === '/aagam-khoj') {
+            setCurrentPageState('aagam-khoj');
         } else if (path === '/') {
             setCurrentPageState('home');
         }
@@ -309,11 +314,11 @@ const AppContent = () => {
     const setCurrentPage = (page) => {
         setCurrentPageState(page);
         
-        // Reset search state when navigating to Home
-        if (page === 'home') {
+        // Reset search state when navigating to Aagam Khoj
+        if (page === 'aagam-khoj') {
             resetSearchState();
         }
-        
+
         const routes = {
             'home': '/',
             'about': '/about',
@@ -321,7 +326,9 @@ const AppContent = () => {
             'whats-new': '/whats-new',
             'usage-guide': '/usage-guide',
             'search-index': '/search-index',
-            'eval': '/eval'
+            'eval': '/eval',
+            'aagam-khoj': '/aagam-khoj',
+            'chat': '/chat'
         };
         navigate(routes[page] || '/');
     };
@@ -1132,6 +1139,29 @@ const AppContent = () => {
         }
     }
 
+    // Home page's Swalakshya Khoj card: setQuery + handleSearch race, since
+    // handleSearch reads `query` via closure — this waits for the query state
+    // (and handleSearch's own recreated closure over it) to actually land
+    // before firing the search, rather than calling handleSearch synchronously
+    // with what would still be the pre-update query.
+    const [pendingHomeSearch, setPendingHomeSearch] = useState(false);
+    useEffect(() => {
+        if (!pendingHomeSearch) return;
+        setPendingHomeSearch(false);
+        handleSearch(1);
+    }, [pendingHomeSearch, handleSearch]);
+
+    const handleHomeKhojSubmit = (text) => {
+        setCurrentPage('aagam-khoj'); // resets search state, including query — must run first
+        setQuery(text);
+        setPendingHomeSearch(true);
+    };
+
+    const handleHomeChatSubmit = (text) => {
+        setCurrentPage('chat');
+        handleChatStart(text);
+    };
+
     async function handleAnswer() {
         if (!query.trim()) {
             alert("Please enter a search query.");
@@ -1350,7 +1380,7 @@ const AppContent = () => {
 
     const paginatedSimilarResults = getPaginatedResults(similarDocumentsData?.results, similarDocsPage);
 
-    const showSearchInterface = currentPage === 'home' || (currentPage === 'chat' && llmAvailable);
+    const showSearchInterface = currentPage === 'aagam-khoj' || (currentPage === 'chat' && llmAvailable);
 
     const cleanAnswerText = (answerText) => {
         if (!answerText) return '';
@@ -1753,18 +1783,17 @@ const AppContent = () => {
             <TopBar
                 currentPage={currentPage}
                 setCurrentPage={setCurrentPage}
-                onOpenMobileSidebar={currentPage === 'chat' ? () => setSidebarMobileOpen(true) : undefined}
+                onOpenMobileSidebar={() => setSidebarMobileOpen(true)}
             />
 
-            {currentPage === 'chat' && (
-                <Sidebar
-                    currentPage={currentPage}
-                    setCurrentPage={setCurrentPage}
-                    onNewChat={handleNewChat}
-                    mobileOpen={sidebarMobileOpen}
-                    onCloseMobile={() => setSidebarMobileOpen(false)}
-                />
-            )}
+            <Sidebar
+                chatMode={currentPage === 'chat'}
+                currentPage={currentPage}
+                setCurrentPage={setCurrentPage}
+                onNewChat={handleNewChat}
+                mobileOpen={sidebarMobileOpen}
+                onCloseMobile={() => setSidebarMobileOpen(false)}
+            />
 
             <div className="flex flex-col min-w-0 col-start-2 row-start-2">
                 <div className="p-4 md:p-5">
@@ -1786,7 +1815,7 @@ const AppContent = () => {
                                 <>
                                     <PageHeader
                                         variant="hero"
-                                        title="Aagam Khoj"
+                                        title="Swalakshya Khoj"
                                         subtitle="Explore and search across the Jain literature comprising authentic Digambar Jain Scriptures, Pravachans of Pujya Gurudevshri Kanji Swami, and literature by contemporary Jain scholars."
                                     />
                                     <div className="mb-3">
@@ -2230,8 +2259,18 @@ const AppContent = () => {
                             <GoogleReCaptchaProvider
                                 reCaptchaKey={process.env.REACT_APP_RECAPTCHA_SITE_KEY || "__REACT_APP_RECAPTCHA_SITE_KEY__"}
                             >
-                                <FeedbackForm onReturnToAagamKhoj={() => setCurrentPage('home')} />
+                                <FeedbackForm onReturnToAagamKhoj={() => setCurrentPage('aagam-khoj')} />
                             </GoogleReCaptchaProvider>
+                        </main>
+                    )}
+
+                    {currentPage === 'home' && (
+                        <main>
+                            <Home
+                                setCurrentPage={setCurrentPage}
+                                onKhojSubmit={handleHomeKhojSubmit}
+                                onChatSubmit={handleHomeChatSubmit}
+                            />
                         </main>
                     )}
 
@@ -2272,6 +2311,7 @@ const AppContent = () => {
                     )}
                 </div>
                 </div>
+                {currentPage !== 'eval' && <Footer />}
             </div>
 
             {/* Mobile Navigation Buttons - Only visible on mobile, hidden while a filter modal is open
@@ -2292,7 +2332,7 @@ const AppContent = () => {
                     className="btn btn-secondary md:hidden fixed bottom-6 left-6 p-3 rounded-full shadow-lg z-50"
                     aria-label="Home"
                 >
-                    <Home size={20} />
+                    <HomeIcon size={20} />
                 </button>
             )}
 
@@ -2331,6 +2371,7 @@ export default function App() {
                 <Route path="/eval" element={<AppContent />} />
                 <Route path="/developer" element={<AppContent />} />
                 <Route path="/chat" element={<AppContent />} />
+                <Route path="/aagam-khoj" element={<AppContent />} />
                 <Route path="/admin" element={<AdminRoute />} />
             </Routes>
         </Router>

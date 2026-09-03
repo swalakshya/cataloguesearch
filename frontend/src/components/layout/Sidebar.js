@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { PanelLeftClose, PanelLeftOpen, Plus, User, X } from 'lucide-react';
 import { useOverlayBehavior } from '../ui/Modal';
-import { NAV_ITEMS } from './navItems';
+import { ALL_NAV_ITEMS } from './navItems';
 import swalakshyaMark from '../../assets/swalakshya-mark.png';
 
 const COLLAPSE_KEY = 'sidebar_collapsed';
@@ -44,7 +44,7 @@ function MobileNavLinks({ currentPage, setCurrentPage, onNavigate }) {
     };
     return (
         <div className="px-3 pb-3" style={{ borderBottom: '1px solid var(--color-border)' }}>
-            {NAV_ITEMS.map((item) => (
+            {ALL_NAV_ITEMS.map((item) => (
                 <Link
                     key={item.id}
                     to={item.path}
@@ -119,9 +119,12 @@ function SidebarContent({ collapsed, onToggleCollapse, closeButton, onNewChat, n
     );
 }
 
-// Persistent left sidebar on desktop; an off-canvas drawer on mobile
-// (backdrop + Escape-to-close, sharing the same overlay behavior as Modal).
-export default function Sidebar({ currentPage, setCurrentPage, onNewChat, mobileOpen, onCloseMobile }) {
+// Persistent left sidebar on desktop (chat only); an off-canvas drawer on
+// mobile carrying full site navigation, available on every page regardless of
+// chatMode (backdrop + Escape-to-close, sharing the same overlay behavior as
+// Modal) — this is the only way to reach the nav links below the `lg`
+// breakpoint, since TopBar's own link row is desktop-only.
+export default function Sidebar({ chatMode, currentPage, setCurrentPage, onNewChat, mobileOpen, onCloseMobile }) {
     const [collapsed, setCollapsed] = useState(() => {
         try { return localStorage.getItem(COLLAPSE_KEY) === '1'; } catch { return false; }
     });
@@ -146,13 +149,15 @@ export default function Sidebar({ currentPage, setCurrentPage, onNewChat, mobile
                 column — a higher z-index than TopBar (z-40 vs z-30) means it
                 visually sits on top of the bar rather than being pushed below it,
                 so TopBar itself stays full-width regardless of sidebar state. */}
-            <div className={`hidden lg:flex shrink-0 sticky top-0 h-screen z-40 col-start-1 row-start-1 row-span-2 transition-[width] duration-200 ${collapsed ? 'w-24' : 'w-64'}`}>
-                <SidebarContent
-                    collapsed={collapsed}
-                    onToggleCollapse={toggleCollapsed}
-                    onNewChat={onNewChat}
-                />
-            </div>
+            {chatMode && (
+                <div className={`hidden lg:flex shrink-0 sticky top-0 h-screen z-40 col-start-1 row-start-1 row-span-2 transition-[width] duration-200 ${collapsed ? 'w-24' : 'w-64'}`}>
+                    <SidebarContent
+                        collapsed={collapsed}
+                        onToggleCollapse={toggleCollapsed}
+                        onNewChat={onNewChat}
+                    />
+                </div>
+            )}
 
             {/* Mobile off-canvas drawer */}
             {mobileOpen && (

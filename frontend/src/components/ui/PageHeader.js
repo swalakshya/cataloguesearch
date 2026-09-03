@@ -7,8 +7,18 @@ export default function PageHeader({ title, subtitle, className = '', variant = 
     if (variant === 'hero') {
         return (
             <div className={`text-center mb-10 ${className}`}>
-                <h1 className="text-4xl font-bold text-ink tracking-tight">{title}</h1>
-                {subtitle && <p className="mt-2 text-ink-muted max-w-xl mx-auto">{subtitle}</p>}
+                <h1
+                    className="text-4xl font-bold tracking-tight"
+                    style={{
+                        background: 'linear-gradient(to right, var(--color-brand), var(--color-mark))',
+                        WebkitBackgroundClip: 'text',
+                        backgroundClip: 'text',
+                        color: 'transparent',
+                    }}
+                >
+                    {title}
+                </h1>
+                {subtitle && <p className="mt-2 text-ink-muted max-w-xl mx-auto whitespace-pre-line">{subtitle}</p>}
             </div>
         );
     }

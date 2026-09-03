@@ -295,3 +295,13 @@ input::placeholder, textarea::placeholder { color: var(--color-ink-muted); }
     from { transform: translateX(-100%); }
     to { transform: translateX(100%); }
 }
+
+/* --- Ticker (Home page corpus rotator) --- */
+.ticker-item { animation: ticker-fade-in 350ms ease; }
+@keyframes ticker-fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ticker-item { animation: none; }
+}
