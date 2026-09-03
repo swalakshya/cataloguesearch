@@ -45,7 +45,7 @@ export default function StatsStrip({ topAccent, spacious = false, labels }) {
     return (
         <div className={`card flex flex-col sm:flex-row items-stretch relative overflow-hidden ${spacious ? 'px-3 py-4' : 'px-2 py-2.5'}`}>
             {topAccent && <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: topAccent }} />}
-            {tiles.map(({ category, colorVar, value, label, anchor }, i) => (
+            {tiles.map(({ category, value, label, anchor }, i) => (
                 <Link
                     key={label}
                     to={`/search-index#${anchor}`}
@@ -53,8 +53,7 @@ export default function StatsStrip({ topAccent, spacious = false, labels }) {
                     style={{ borderColor: 'var(--color-border)' }}
                 >
                     <div
-                        className={`rounded-md flex items-center justify-center shrink-0 ${spacious ? 'w-11 h-11' : 'w-7 h-7'}`}
-                        style={{ backgroundColor: `color-mix(in srgb, var(${colorVar}) 14%, var(--color-surface))` }}
+                        className={`flex items-center justify-center shrink-0 ${spacious ? 'w-11 h-11' : 'w-7 h-7'}`}
                     >
                         <CategoryEmojiIcon category={category} size={iconSize} />
                     </div>
