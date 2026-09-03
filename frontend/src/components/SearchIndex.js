@@ -2,17 +2,9 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Check, ChevronDown } from 'lucide-react';
 import useCatalogue from '../hooks/useCatalogue';
-import { searchableGranths, contemporaryLiterature } from '../utils/searchableContent.js';
 import { PageHeader, Table, Badge } from './ui';
 import StatsStrip from './chat/StatsStrip';
 import { CategoryEmojiIcon } from './chat/categoryEmoji';
-
-// Static per this session, computed once at module scope rather than on
-// every render (unlike the Pravachan Granth list, which depends on the
-// fetched catalogue and so has to be a useMemo inside the component).
-const GRANTH_AUTHOR_OPTIONS = [...new Set(searchableGranths.map((g) => g.author))].sort();
-const GRANTH_ANUYOG_OPTIONS = [...new Set(searchableGranths.map((g) => g.anuyog))].sort();
-const BOOKS_AUTHOR_OPTIONS = [...new Set(contemporaryLiterature.map((b) => b.author))].sort();
 
 // Rows must already be sorted by `key`. Annotates each row with `_span`: the
 // rowSpan for the first row of a group, 0 for the rest of the group (meaning
@@ -158,24 +150,40 @@ const SearchIndex = () => {
   const [hiOn, setHiOn] = useState(true);
   const [guOn, setGuOn] = useState(true);
 
-  const [selectedGranthAuthors, setSelectedGranthAuthors] = useState(new Set(GRANTH_AUTHOR_OPTIONS));
-  const [selectedGranthAnuyogs, setSelectedGranthAnuyogs] = useState(new Set(GRANTH_ANUYOG_OPTIONS));
+  const [selectedGranthAuthors, setSelectedGranthAuthors] = useState(new Set());
+  const [selectedGranthAnuyogs, setSelectedGranthAnuyogs] = useState(new Set());
   const [granthHiOn, setGranthHiOn] = useState(true);
   const [granthGuOn, setGranthGuOn] = useState(true);
 
-  const [selectedBookAuthors, setSelectedBookAuthors] = useState(new Set(BOOKS_AUTHOR_OPTIONS));
+  const [selectedBookAuthors, setSelectedBookAuthors] = useState(new Set());
 
-  // Defaults the Granth filter to "everything" the first time the catalogue
+  // The catalogue holds all three categories now (Pravachan, Granth, Books) --
+  // one row per leaf work each, straight from cataloguesearch-configs (see
+  // backend/common/catalogue.py). Split it once so every section below reads
+  // only its own category.
+  const pravachanRows = useMemo(() => catalogue.filter((r) => r.category === 'Pravachan'), [catalogue]);
+  const granthRows = useMemo(() => catalogue.filter((r) => r.category === 'Granth'), [catalogue]);
+  const bookRows = useMemo(() => catalogue.filter((r) => r.category === 'Books'), [catalogue]);
+
+  const granthAuthorOptions = useMemo(() => [...new Set(granthRows.map((r) => r.author))].sort(), [granthRows]);
+  const granthAnuyogOptions = useMemo(() => [...new Set(granthRows.map((r) => r.anuyog))].sort(), [granthRows]);
+  const bookAuthorOptions = useMemo(() => [...new Set(bookRows.map((r) => r.author))].sort(), [bookRows]);
+
+  // Defaults every filter to "everything" the first time the catalogue
   // actually arrives -- loading only flips true -> false once per mount, so
   // this fires exactly once (not on every re-render the cache causes elsewhere).
   useEffect(() => {
-    if (!loading) setSelectedGranths(new Set(catalogue.map((r) => r.granth)));
+    if (loading) return;
+    setSelectedGranths(new Set(pravachanRows.map((r) => r.granth)));
+    setSelectedGranthAuthors(new Set(granthAuthorOptions));
+    setSelectedGranthAnuyogs(new Set(granthAnuyogOptions));
+    setSelectedBookAuthors(new Set(bookAuthorOptions));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading]);
 
   const granthOptions = useMemo(
-    () => [...new Set(catalogue.map((r) => r.granth))].sort(),
-    [catalogue]
+    () => [...new Set(pravachanRows.map((r) => r.granth))].sort(),
+    [pravachanRows]
   );
 
   // One row per (Granth, Series) -- a series recorded in both languages (rare;
@@ -184,7 +192,7 @@ const SearchIndex = () => {
   // series shows a tick in exactly one language column, "-" in the other.
   const groupedPravachan = useMemo(() => {
     const map = new Map();
-    catalogue.forEach((r) => {
+    pravachanRows.forEach((r) => {
       const key = `${r.granth}::${r.series || ''}`;
       if (!map.has(key)) {
         map.set(key, { granth: r.granth, series: r.series, anuyog: r.anuyog, count: r.count, hi: false, gu: false });
@@ -195,7 +203,7 @@ const SearchIndex = () => {
       if (!group.anuyog) group.anuyog = r.anuyog;
     });
     return Array.from(map.values());
-  }, [catalogue]);
+  }, [pravachanRows]);
 
   const filteredPravachan = useMemo(() => {
     return groupedPravachan
@@ -207,22 +215,24 @@ const SearchIndex = () => {
   const mergedPravachan = useMemo(() => withRowSpans(filteredPravachan, 'granth'), [filteredPravachan]);
 
   const filteredTotals = useMemo(() => {
-    const flatFiltered = catalogue.filter((r) => selectedGranths.has(r.granth));
+    const flatFiltered = pravachanRows.filter((r) => selectedGranths.has(r.granth));
     const sum = (lang, on) => on ? flatFiltered
       .filter((r) => r.language === lang && r.count !== 'compiled')
       .reduce((acc, r) => acc + (parseInt(r.count, 10) || 0), 0) : 0;
     return { hindi: sum('hi', hiOn), gujarati: sum('gu', guOn) };
-  }, [catalogue, selectedGranths, hiOn, guOn]);
+  }, [pravachanRows, selectedGranths, hiOn, guOn]);
 
-  const filteredGranths = useMemo(() => searchableGranths
+  const filteredGranths = useMemo(() => granthRows
     .filter((g) => selectedGranthAuthors.has(g.author))
     .filter((g) => selectedGranthAnuyogs.has(g.anuyog))
-    .filter((g) => (granthHiOn && g.language === 'hi') || (granthGuOn && g.language === 'gu')),
-    [selectedGranthAuthors, selectedGranthAnuyogs, granthHiOn, granthGuOn]);
+    .filter((g) => (granthHiOn && g.language === 'hi') || (granthGuOn && g.language === 'gu'))
+    .sort((a, b) => a.granth.localeCompare(b.granth)),
+    [granthRows, selectedGranthAuthors, selectedGranthAnuyogs, granthHiOn, granthGuOn]);
 
-  const filteredBooks = useMemo(() => contemporaryLiterature
-    .filter((b) => selectedBookAuthors.has(b.author)),
-    [selectedBookAuthors]);
+  const filteredBooks = useMemo(() => bookRows
+    .filter((b) => selectedBookAuthors.has(b.author))
+    .sort((a, b) => a.granth.localeCompare(b.granth)),
+    [bookRows, selectedBookAuthors]);
 
   return (
     <div className="max-w-5xl mx-auto px-5 pb-10">
@@ -305,23 +315,23 @@ const SearchIndex = () => {
         <SectionHeader category="Granth" colorVar="--color-brand" title="Granth / Mool Shastra" />
 
         <div className="flex flex-wrap items-center gap-2 mb-4">
-          <MultiSelectFilter label="Author" options={GRANTH_AUTHOR_OPTIONS} selected={selectedGranthAuthors} onChange={setSelectedGranthAuthors} />
-          <MultiSelectFilter label="Anuyog" options={GRANTH_ANUYOG_OPTIONS} selected={selectedGranthAnuyogs} onChange={setSelectedGranthAnuyogs} />
+          <MultiSelectFilter label="Author" options={granthAuthorOptions} selected={selectedGranthAuthors} onChange={setSelectedGranthAuthors} />
+          <MultiSelectFilter label="Anuyog" options={granthAnuyogOptions} selected={selectedGranthAnuyogs} onChange={setSelectedGranthAnuyogs} />
           <LanguageToggle hiOn={granthHiOn} guOn={granthGuOn} onToggleHi={() => setGranthHiOn((v) => !v)} onToggleGu={() => setGranthGuOn((v) => !v)} />
         </div>
 
         <Table
           columns={[
-            { key: 'name', label: 'Granth' },
+            { key: 'granth', label: 'Granth' },
             { key: 'author', label: 'Author' },
             { key: 'tikakaar', label: 'Tikakaar / Bhasha Vachanika' },
             { key: 'anuyog', label: 'Anuyog' },
           ]}
           rows={filteredGranths}
-          rowKey={(row) => row.name}
+          rowKey={(row) => row.relative_path}
           renderRow={(row) => (
             <>
-              <td className="font-medium text-ink">{row.name}</td>
+              <td className="font-medium text-ink">{row.granth}</td>
               <td className="text-ink-muted">{row.author}</td>
               <td className="text-ink-muted">{row.tikakaar || '-'}</td>
               <td><AnuyogBadge anuyog={row.anuyog} /></td>
@@ -338,20 +348,20 @@ const SearchIndex = () => {
         <SectionHeader category="Curated" colorVar="--color-danger" title="Contemporary Jain Literature" />
 
         <div className="flex flex-wrap items-center gap-2 mb-4">
-          <MultiSelectFilter label="Author" options={BOOKS_AUTHOR_OPTIONS} selected={selectedBookAuthors} onChange={setSelectedBookAuthors} />
+          <MultiSelectFilter label="Author" options={bookAuthorOptions} selected={selectedBookAuthors} onChange={setSelectedBookAuthors} />
         </div>
 
         <Table
           columns={[
-            { key: 'name', label: 'Title' },
+            { key: 'granth', label: 'Title' },
             { key: 'author', label: 'Author' },
             { key: 'language', label: 'Language' },
           ]}
           rows={filteredBooks}
-          rowKey={(row) => row.name}
+          rowKey={(row) => row.relative_path}
           renderRow={(row) => (
             <>
-              <td className="font-medium text-ink">{row.name}</td>
+              <td className="font-medium text-ink">{row.granth}</td>
               <td className="text-ink-muted">{row.author}</td>
               <td className="text-ink-muted">{row.language === 'hi' ? 'Hindi' : 'Gujarati'}</td>
             </>

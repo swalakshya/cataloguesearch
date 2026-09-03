@@ -29,8 +29,17 @@ FROM python:3.13-slim
 WORKDIR /app
 
 # Install minimal runtime dependencies for API only
+# libpango/libpangoft2/libharfbuzz(-subset)/libfontconfig/libglib are needed at
+# runtime by weasyprint (backend/api/pdf_export.py, Aagam Khoj "Export to PDF")
+# for correct Devanagari/Gujarati text shaping — see backend/assets/fonts.
 RUN apt-get update && apt-get install -y \
     curl \
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    libharfbuzz0b \
+    libharfbuzz-subset0 \
+    libfontconfig1 \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy only the Python packages and essential binaries from the builder stage

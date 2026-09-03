@@ -1,7 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import useCatalogue from '../../hooks/useCatalogue';
-import { getGranthStats, getContemporaryLiteratureStats } from '../../utils/searchableContent';
 import { CategoryEmojiIcon } from './categoryEmoji';
 
 // category keys match categoryEmoji.js's CATEGORY_EMOJI_SRC, and colorVar
@@ -12,10 +11,10 @@ import { CategoryEmojiIcon } from './categoryEmoji';
 // anywhere in the app.
 const DEFAULT_LABELS = { Pravachan: 'Pravachans', Granth: 'Granths', Curated: 'Contemporary Jain Books' };
 
-const TILES = (pravachanTotal, granthSearchable, literatureSearchable, labels) => [
+const TILES = (pravachanTotal, granthCount, booksCount, labels) => [
     { category: 'Pravachan', colorVar: '--color-info', value: pravachanTotal != null ? pravachanTotal.toLocaleString() : undefined, label: labels.Pravachan, anchor: 'pravachan-index' },
-    { category: 'Granth', colorVar: '--color-brand', value: granthSearchable.toLocaleString(), label: labels.Granth, anchor: 'granth-index' },
-    { category: 'Curated', colorVar: '--color-danger', value: literatureSearchable.toLocaleString(), label: labels.Curated, anchor: 'contemporary-index' },
+    { category: 'Granth', colorVar: '--color-brand', value: granthCount != null ? granthCount.toLocaleString() : undefined, label: labels.Granth, anchor: 'granth-index' },
+    { category: 'Curated', colorVar: '--color-danger', value: booksCount != null ? booksCount.toLocaleString() : undefined, label: labels.Curated, anchor: 'contemporary-index' },
 ];
 
 // Icon box is w-11/h-11 (44px) when spacious, w-7/h-7 (28px) otherwise (must
@@ -35,12 +34,12 @@ export default function StatsStrip({ topAccent, spacious = false, labels }) {
     // caller (e.g. SearchIndex.js) -- see hooks/useCatalogue.js.
     const { rows, loading } = useCatalogue();
     const pravachanTotal = loading ? null : rows.reduce(
-        (sum, r) => sum + (r.count !== 'compiled' ? (parseInt(r.count, 10) || 0) : 0), 0
+        (sum, r) => sum + (r.category === 'Pravachan' && r.count !== 'compiled' ? (parseInt(r.count, 10) || 0) : 0), 0
     );
+    const granthCount = loading ? null : rows.filter((r) => r.category === 'Granth').length;
+    const booksCount = loading ? null : rows.filter((r) => r.category === 'Books').length;
 
-    const granthStats = getGranthStats();
-    const literatureStats = getContemporaryLiteratureStats();
-    const tiles = TILES(pravachanTotal, granthStats.searchable, literatureStats.searchable, resolvedLabels);
+    const tiles = TILES(pravachanTotal, granthCount, booksCount, resolvedLabels);
 
     return (
         <div className={`card flex flex-col sm:flex-row items-stretch relative overflow-hidden ${spacious ? 'px-3 py-4' : 'px-2 py-2.5'}`}>

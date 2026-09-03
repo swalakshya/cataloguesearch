@@ -10,6 +10,7 @@ import {
     Send,
     Info,
     Share2,
+    Download,
 } from 'lucide-react';
 
 // --- HELPER & ICON COMPONENTS ---
@@ -93,3 +94,5 @@ export const InformationCircleIcon = () => (
 );
 
 export const ShareIcon = () => <Share2 className="h-4 w-4 mr-1" />;
+
+export const DownloadIcon = () => <Download className="h-4 w-4 mr-1" />;

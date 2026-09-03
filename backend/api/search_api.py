@@ -7,7 +7,7 @@ import time
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
-from fastapi import Body, FastAPI, HTTPException, Query, Request
+from fastapi import Body, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,6 +19,7 @@ from backend.config import Config
 from backend.search.index_searcher import IndexSearcher
 from backend.utils import json_dumps, JSONResponse, log_memory_usage
 from utils.logger import setup_logging, VERBOSE_LEVEL_NUM, METRICS_LEVEL_NUM, set_query_id, get_query_id
+from backend.api.pdf_export import render_export_pdf
 from backend.api.feedback_api import router as feedback_router
 from backend.api.agent.router import router as agent_router
 from backend.api.agent.app import agent_app
@@ -47,6 +48,100 @@ def _filter_categories_for(cat: str, categories: Dict[str, List[str]]) -> Dict[s
     """Return only the category-filter entries that are valid for the given category."""
     allowed = _CATEGORY_FILTER_FIELDS.get(cat, set(categories.keys()))
     return {k: v for k, v in categories.items() if k in allowed}
+
+def _resolve_search_mode(config, index_searcher, keywords: str, text_search: bool,
+                          exact_match: bool, exclude_words: List[str]) -> tuple[str, Optional[bool]]:
+    """Determines the effective search mode and, for non-rrf modes, whether the query is lexical."""
+    has_advanced_options = exact_match or (exclude_words and len(exclude_words) > 0)
+    effective_mode = "lexical" if text_search else config.SEARCH_MODE
+    if effective_mode == "lexical":
+        is_lexical_query = True
+    elif effective_mode == "vector":
+        is_lexical_query = False
+    elif effective_mode == "rrf":
+        is_lexical_query = None
+    else:  # "auto"
+        is_lexical_query = (index_searcher.is_lexical_query(keywords) or has_advanced_options)
+    return effective_mode, is_lexical_query
+
+async def _maybe_get_embedding(loop, embedding_model, keywords: str, needs_embedding: bool):
+    """Fetches the query embedding when the search mode requires one, else returns None."""
+    if not needs_embedding:
+        return None
+    try:
+        return await loop.run_in_executor(None, lambda: embedding_model.get_embedding(keywords))
+    except Exception as emb_err:
+        log_handle.error(f"Embedding generation failed: {emb_err}")
+        return None
+
+async def _search_category(
+    loop, index_searcher, cat: str, cat_config: Dict[str, Any], keywords: str,
+    exact_match: bool, exclude_words: List[str], categories: Dict[str, List[str]],
+    language: str, effective_mode: str, is_lexical_query: Optional[bool], query_embedding,
+    enable_reranking: bool, rerank_oversample: int,
+    start_year: Optional[int], end_year: Optional[int],
+) -> tuple[List[Dict[str, Any]], int]:
+    """Runs the search for a single category using the configured search mode.
+    Shared by /api/search (per-category streaming loop) and /api/export-pdf."""
+    try:
+        if effective_mode == "rrf":
+            results, hits = await loop.run_in_executor(
+                None,
+                lambda: index_searcher.perform_rrf_search(
+                    category=cat,
+                    keywords=keywords,
+                    exact_match=exact_match,
+                    exclude_words=exclude_words,
+                    categories=_filter_categories_for(cat, categories),
+                    embedding=query_embedding,
+                    detected_language=language,
+                    page_size=cat_config.get("page_size", 20),
+                    page_number=cat_config.get("page_number", 1),
+                    oversample=rerank_oversample,
+                    rerank=enable_reranking,
+                    start_year=start_year,
+                    end_year=end_year,
+                )
+            )
+            log_handle.info(f"{cat} RRF search returned {len(results)} results (total: {hits}).")
+        elif is_lexical_query:
+            results, hits = await loop.run_in_executor(
+                None,
+                lambda: index_searcher.perform_category_search(
+                    category=cat,
+                    keywords=keywords,
+                    exact_match=exact_match,
+                    exclude_words=exclude_words,
+                    categories=_filter_categories_for(cat, categories),
+                    detected_language=language,
+                    page_size=cat_config.get("page_size", 20),
+                    page_number=cat_config.get("page_number", 1),
+                    start_year=start_year,
+                    end_year=end_year,
+                )
+            )
+            log_handle.info(f"{cat} lexical search returned {len(results)} results (total: {hits}).")
+        else:
+            results, hits = await loop.run_in_executor(
+                None,
+                lambda: index_searcher.perform_vector_search(
+                    keywords=keywords,
+                    embedding=query_embedding,
+                    categories={**_filter_categories_for(cat, categories), 'category': [cat]},
+                    page_size=cat_config.get("page_size", 20),
+                    page_number=cat_config.get("page_number", 1),
+                    language=language,
+                    rerank=enable_reranking,
+                    rerank_top_k=rerank_oversample,
+                    start_year=start_year,
+                    end_year=end_year,
+                )
+            )
+            log_handle.info(f"{cat} vector search returned {len(results)} results (total: {hits}).")
+        return results, hits
+    except Exception as cat_err:
+        log_handle.error(f"Error searching category {cat}: {cat_err}")
+        return [], 0
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -226,9 +321,10 @@ async def get_metadata_api(request: Request):
 @app.get("/api/catalogue", response_model=List[Dict[str, Any]])
 async def get_catalogue_api(request: Request):
     """
-    Returns the content catalogue: one row per (category, language, Granth, Series)
-    that has a curated `count` in cataloguesearch-configs. Backs the /search-index
-    page. Uses the same in-memory cache pattern as /api/metadata.
+    Returns the content catalogue: one row per leaf work in cataloguesearch-configs
+    (Pravachan rows keyed by Granth/Series with a curated `count`, Granth/Books rows
+    one per work). Backs the /search-index page. Uses the same in-memory cache
+    pattern as /api/metadata.
     """
     try:
         current_time = time.time()
@@ -374,16 +470,9 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
         )
     )
 
-    has_advanced_options = exact_match or (exclude_words and len(exclude_words) > 0)
-    effective_mode = "lexical" if text_search else config.SEARCH_MODE
-    if effective_mode == "lexical":
-        is_lexical_query = True
-    elif effective_mode == "vector":
-        is_lexical_query = False
-    elif effective_mode == "rrf":
-        is_lexical_query = None
-    else:  # "auto"
-        is_lexical_query = (index_searcher.is_lexical_query(keywords) or has_advanced_options)
+    effective_mode, is_lexical_query = _resolve_search_mode(
+        config, index_searcher, keywords, text_search, exact_match, exclude_words
+    )
 
     rerank_oversample = config.RERANK_OVERSAMPLE
     start_time = time.time()
@@ -407,29 +496,22 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
         category_results = {}
 
         # --- Embedding (for rrf / vector modes, and auto mode routed to vector) ---
-        query_embedding = None
         needs_embedding = effective_mode in ("rrf", "vector") or (effective_mode == "auto" and not is_lexical_query)
-        if needs_embedding:
-            try:
-                query_embedding = await loop.run_in_executor(
-                    None, lambda: embedding_model.get_embedding(keywords)
-                )
-            except Exception as emb_err:
-                log_handle.error(f"Embedding generation failed: {emb_err}")
-            if not query_embedding:
-                log_handle.warning("Could not generate embedding. All categories skipped.")
-                for cat in all_search_cats:
-                    cfg = search_types.get(cat, {})
-                    event = json.dumps({
-                        "type": "category", "category": cat,
-                        "results": [], "total_hits": 0,
-                        "page_size": cfg.get("page_size", 20),
-                        "page_number": cfg.get("page_number", 1),
-                    }, ensure_ascii=False)
-                    yield f"data: {event}\n\n"
-                    category_results[cat] = ([], 0)
-                yield f"data: {json.dumps({'type': 'done', 'suggestions': []}, ensure_ascii=False)}\n\n"
-                return
+        query_embedding = await _maybe_get_embedding(loop, embedding_model, keywords, needs_embedding)
+        if needs_embedding and not query_embedding:
+            log_handle.warning("Could not generate embedding. All categories skipped.")
+            for cat in all_search_cats:
+                cfg = search_types.get(cat, {})
+                event = json.dumps({
+                    "type": "category", "category": cat,
+                    "results": [], "total_hits": 0,
+                    "page_size": cfg.get("page_size", 20),
+                    "page_number": cfg.get("page_number", 1),
+                }, ensure_ascii=False)
+                yield f"data: {event}\n\n"
+                category_results[cat] = ([], 0)
+            yield f"data: {json.dumps({'type': 'done', 'suggestions': []}, ensure_ascii=False)}\n\n"
+            return
 
         # --- Per-category search (sequential, streamed) ---
         for cat in all_search_cats:
@@ -437,64 +519,11 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
             if not cat_config.get("enabled", False):
                 results, hits = [], 0
             else:
-                try:
-                    if effective_mode == "rrf":
-                        results, hits = await loop.run_in_executor(
-                            None,
-                            lambda c=cat, cfg=cat_config: index_searcher.perform_rrf_search(
-                                category=c,
-                                keywords=keywords,
-                                exact_match=exact_match,
-                                exclude_words=exclude_words,
-                                categories=_filter_categories_for(c, categories),
-                                embedding=query_embedding,
-                                detected_language=language,
-                                page_size=cfg.get("page_size", 20),
-                                page_number=cfg.get("page_number", 1),
-                                oversample=rerank_oversample,
-                                rerank=enable_reranking,
-                                start_year=start_year,
-                                end_year=end_year,
-                            )
-                        )
-                        log_handle.info(f"{cat} RRF search returned {len(results)} results (total: {hits}).")
-                    elif is_lexical_query:
-                        results, hits = await loop.run_in_executor(
-                            None,
-                            lambda c=cat, cfg=cat_config: index_searcher.perform_category_search(
-                                category=c,
-                                keywords=keywords,
-                                exact_match=exact_match,
-                                exclude_words=exclude_words,
-                                categories=_filter_categories_for(c, categories),
-                                detected_language=language,
-                                page_size=cfg.get("page_size", 20),
-                                page_number=cfg.get("page_number", 1),
-                                start_year=start_year,
-                                end_year=end_year,
-                            )
-                        )
-                        log_handle.info(f"{cat} lexical search returned {len(results)} results (total: {hits}).")
-                    else:
-                        results, hits = await loop.run_in_executor(
-                            None,
-                            lambda c=cat, cfg=cat_config: index_searcher.perform_vector_search(
-                                keywords=keywords,
-                                embedding=query_embedding,
-                                categories={**_filter_categories_for(c, categories), 'category': [c]},
-                                page_size=cfg.get("page_size", 20),
-                                page_number=cfg.get("page_number", 1),
-                                language=language,
-                                rerank=enable_reranking,
-                                rerank_top_k=rerank_oversample,
-                                start_year=start_year,
-                                end_year=end_year,
-                            )
-                        )
-                        log_handle.info(f"{cat} vector search returned {len(results)} results (total: {hits}).")
-                except Exception as cat_err:
-                    log_handle.error(f"Error searching category {cat}: {cat_err}")
-                    results, hits = [], 0
+                results, hits = await _search_category(
+                    loop, index_searcher, cat, cat_config, keywords, exact_match, exclude_words,
+                    categories, language, effective_mode, is_lexical_query, query_embedding,
+                    enable_reranking, rerank_oversample, start_year, end_year,
+                )
 
             category_results[cat] = (results, hits)
             event = json.dumps({
@@ -553,6 +582,90 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
         _generate(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+_EXPORT_PDF_MAX_COUNT = 50
+_EXPORT_PDF_CATEGORIES = {"Pravachan", "Granth", "Books"}
+
+class ExportPdfRequest(BaseModel):
+    """
+    Pydantic model for an "Export to PDF" request. Mirrors the relevant subset of
+    SearchRequest (same query/filters the frontend already has active) plus the
+    single category and result count to export.
+    """
+    query: str = Field(..., example="Bangalore city history")
+    language: str = Field(..., description="Language of the query.", example="hindi")
+    text_search: bool = Field(False, description="Force keyword/BM25 search instead of semantic (vector) search.")
+    exact_match: bool = Field(False, description="Use exact phrase matching instead of regular match.")
+    exclude_words: List[str] = Field([], description="List of words to exclude from search results.")
+    categories: Dict[str, List[str]] = Field({}, example={"author": ["John Doe"]})
+    start_year: int | None = Field(None, description="Start year for date range filter.", example=1985)
+    end_year: int | None = Field(None, description="End year for date range filter.", example=1987)
+    enable_reranking: bool = Field(True, description="Enable re-ranking for better relevance.")
+
+    category: str = Field(..., description="Which category to export.", example="Pravachan")
+    count: int = Field(20, description="Number of results to export (max 50).", example=20)
+
+@app.post("/api/export-pdf")
+async def export_pdf(request: Request, request_data: ExportPdfRequest = Body(...)):
+    """
+    Exports up to `count` (max 50) results for a single category (Pravachan, Granth,
+    or Books) as a downloadable PDF, using the exact same search behind /api/search —
+    always starting from page 1, regardless of what page the caller is currently on.
+    """
+    category = request_data.category
+    if category not in _EXPORT_PDF_CATEGORIES:
+        raise HTTPException(status_code=400, detail=f"Invalid category: {category!r}. Must be one of {sorted(_EXPORT_PDF_CATEGORIES)}.")
+
+    count = max(1, min(request_data.count, _EXPORT_PDF_MAX_COUNT))
+
+    index_searcher = request.app.state.index_searcher
+    embedding_model = request.app.state.embedding_model
+    config = request.app.state.config
+
+    keywords = request_data.query
+    exact_match = request_data.exact_match
+    exclude_words = request_data.exclude_words
+    categories = request_data.categories
+    language = request_data.language
+    start_year = request_data.start_year
+    end_year = request_data.end_year
+    enable_reranking = request_data.enable_reranking
+
+    effective_mode, is_lexical_query = _resolve_search_mode(
+        config, index_searcher, keywords, request_data.text_search, exact_match, exclude_words
+    )
+    rerank_oversample = config.RERANK_OVERSAMPLE
+    loop = asyncio.get_running_loop()
+
+    needs_embedding = effective_mode in ("rrf", "vector") or (effective_mode == "auto" and not is_lexical_query)
+    query_embedding = await _maybe_get_embedding(loop, embedding_model, keywords, needs_embedding)
+    if needs_embedding and not query_embedding:
+        raise HTTPException(status_code=502, detail="Could not generate embedding for the query.")
+
+    cat_config = {"page_size": count, "page_number": 1}
+    results, _total_hits = await _search_category(
+        loop, index_searcher, category, cat_config, keywords, exact_match, exclude_words,
+        categories, language, effective_mode, is_lexical_query, query_embedding,
+        enable_reranking, rerank_oversample, start_year, end_year,
+    )
+
+    log_handle.info(f"Export PDF: category={category}, count={count}, keywords='{keywords}', "
+                    f"returned={len(results)} results")
+
+    try:
+        pdf_bytes = await loop.run_in_executor(
+            None, lambda: render_export_pdf(category, keywords, results[:count])
+        )
+    except Exception as pdf_err:
+        log_handle.exception(f"PDF export rendering failed: {pdf_err}")
+        raise HTTPException(status_code=500, detail="Failed to render PDF export.")
+
+    filename = f"swalakshya-khoj-{category.lower()}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 @app.get("/api/similar-documents/{doc_id}", response_model=Dict[str, Any])

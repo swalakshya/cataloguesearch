@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SimilarIcon, ExpandIcon, PdfIcon, ShareIcon } from './SharedComponents';
+import { SimilarIcon, ExpandIcon, PdfIcon, ShareIcon, DownloadIcon } from './SharedComponents';
 import ShareModal from './ShareModal';
 import { Badge, Pagination as UiPagination, Skeleton } from './ui';
 import { CATEGORY_EMOJI_SRC } from './chat/categoryEmoji';
@@ -260,7 +260,11 @@ const CategoryTabButton = ({ active, isLoading, onClick, emojiSrc, label, count 
     </button>
 );
 
-export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData, onClearSimilar, loadingCategories, activeCategories }) => {
+// Maps the active results tab to the category name /api/export-pdf expects.
+// 'similar' has no entry -- there's no "Export PDF" button on that tab.
+export const EXPORT_CATEGORY_BY_TAB = { pravachan: 'Pravachan', granth: 'Granth', books: 'Books' };
+
+export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData, onClearSimilar, loadingCategories, activeCategories, onExportClick }) => {
     const pravachanCount = searchData?.pravachan_results?.total_hits || 0;
     const granthCount = searchData?.granth_results?.total_hits || 0;
     const booksCount = searchData?.books_results?.total_hits || 0;
@@ -277,6 +281,16 @@ export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData
     const showBooks = !hasSuggestions && (isLoadingBooks || booksCount > 0);
 
     if (!anyLoading && !hasAnyResults) return null;
+
+    // Export only once the active tab's results have actually finished loading
+    // and there's at least one to export -- not while it's still a spinner.
+    const ACTIVE_TAB_STATE = {
+        pravachan: { loading: isLoadingPravachan, count: pravachanCount },
+        granth: { loading: isLoadingGranth, count: granthCount },
+        books: { loading: isLoadingBooks, count: booksCount },
+    };
+    const activeTabState = ACTIVE_TAB_STATE[activeTab];
+    const showExport = activeTabState && !activeTabState.loading && activeTabState.count > 0;
 
     return (
         <div className="flex items-center border-b border-border bg-surface px-3 rounded-t">
@@ -327,6 +341,11 @@ export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData
                     >
                         &times;
                     </span>
+                </button>
+            )}
+            {showExport && (
+                <button onClick={() => onExportClick(EXPORT_CATEGORY_BY_TAB[activeTab])} className="result-action ml-auto">
+                    <DownloadIcon />Export PDF
                 </button>
             )}
         </div>

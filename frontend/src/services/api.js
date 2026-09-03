@@ -151,6 +151,27 @@ export const api = {
         }
     },
     
+    // Exports up to `count` results for a single category as a downloadable PDF.
+    // `searchPayload` carries the same query/filters as the active search (see
+    // buildSearchPayload in App.js) so the export matches what's on screen.
+    exportPdf: async ({ category, count, ...searchPayload }) => {
+        const response = await fetch(`${API_BASE_URL}/export-pdf`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...searchPayload, category, count }),
+        });
+        if (!response.ok) {
+            let detail = null;
+            try { const body = await response.json(); detail = body?.detail || null; } catch { detail = null; }
+            throw new Error(detail || `HTTP error! status: ${response.status}`);
+        }
+        const blob = await response.blob();
+        const disposition = response.headers.get('Content-Disposition') || '';
+        const match = disposition.match(/filename="?([^"]+)"?/);
+        const filename = match ? match[1] : `swalakshya-khoj-${category.toLowerCase()}.pdf`;
+        return { blob, filename };
+    },
+
     getSimilarDocuments: async (docId) => {
         try {
             const response = await fetch(`${API_BASE_URL}/similar-documents/${docId}`);

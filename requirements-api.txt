@@ -3,5 +3,7 @@
 # Include base requirements
 -r requirements-base.txt
 
-# No additional API-specific libraries needed beyond base requirements
+## PDF export (Aagam Khoj "Export to PDF")
+weasyprint==69.0            # HTML/CSS -> PDF rendering with correct Devanagari/Gujarati shaping (needs system Pango/Cairo libs, see docker/api/Dockerfile)
+
 # This file exists to explicitly separate API dependencies from crawler dependencies

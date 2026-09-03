@@ -25,6 +25,7 @@ import ChatComposer from './components/chat/ChatComposer';
 import StatsStrip from './components/chat/StatsStrip';
 import AiDisclaimer from './components/chat/AiDisclaimer';
 import { Spinner, ChevronUpIcon, ChevronDownIcon, ExpandIcon, PdfIcon } from './components/SharedComponents';
+import ExportPdfModal from './components/ExportPdfModal';
 import { ChevronDown, Sparkles, AlertTriangle, Mail, Home as HomeIcon, PenLine, Check, SendHorizontal } from 'lucide-react';
 import clipboardEmoji from './assets/emoji/clipboard.svg';
 import bulbEmoji from './assets/emoji/bulb.svg';
@@ -376,6 +377,8 @@ const AppContent = () => {
     // True while the Pravachan/Granth filter modal (SearchFilters) is open — used to
     // hide the mobile FABs below so they don't collide with the modal's Apply button.
     const [filterModalOpen, setFilterModalOpen] = useState(false);
+    const [showExportModal, setShowExportModal] = useState(false);
+    const [exportCategory, setExportCategory] = useState(null);
     const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
     const [llmAnswer, setLlmAnswer] = useState(null);
     const [llmReferences, setLlmReferences] = useState([]);
@@ -872,6 +875,22 @@ const AppContent = () => {
             ...(endYear && { end_year: endYear })
         };
     }, [query, activeFilters, contentTypes, effectiveContentTypes, language, textSearch, exactMatch, excludeWords, searchType, startYear, endYear, booksPage]);
+
+    // Params for the "Export PDF" modal: the same query/filters as the active
+    // search (no per-category page/enabled config -- /api/export-pdf always
+    // searches its one requested category from page 1).
+    const buildExportParams = useCallback((category) => ({
+        query,
+        text_search: textSearch,
+        exact_match: exactMatch,
+        exclude_words: excludeWords.split(',').map(word => word.trim()).filter(word => word.length > 0),
+        categories: activeFilters.reduce((acc, f) => ({ ...acc, [f.key]: [...(acc[f.key] || []), f.value] }), {}),
+        language,
+        enable_reranking: searchType === 'relevance',
+        ...(startYear && { start_year: startYear }),
+        ...(endYear && { end_year: endYear }),
+        category,
+    }), [query, activeFilters, language, textSearch, exactMatch, excludeWords, searchType, startYear, endYear]);
 
     function buildLlmFilters() {
         const filters = {};
@@ -1983,7 +2002,14 @@ const AppContent = () => {
                                             <div className="card overflow-hidden">
                                                 <Tabs activeTab={activeTab} setActiveTab={setActiveTab} searchData={searchData}
                                                     similarDocumentsData={similarDocumentsData} onClearSimilar={handleClearSimilar}
-                                                    loadingCategories={loadingCategories} activeCategories={activeCategories} />
+                                                    loadingCategories={loadingCategories} activeCategories={activeCategories}
+                                                    onExportClick={(category) => { setExportCategory(category); setShowExportModal(true); }} />
+                                                {showExportModal && exportCategory && (
+                                                    <ExportPdfModal
+                                                        exportParams={buildExportParams(exportCategory)}
+                                                        onClose={() => setShowExportModal(false)}
+                                                    />
+                                                )}
                                                 {activeTab === 'pravachan' && loadingCategories.has('Pravachan') && <SkeletonResultsList />}
                                                 {activeTab === 'pravachan' && searchData?.pravachan_results?.results.length > 0 && (
                                                     <ResultsList results={searchData.pravachan_results.results} totalResults={searchData.pravachan_results.total_hits}

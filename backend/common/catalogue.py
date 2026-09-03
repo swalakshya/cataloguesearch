@@ -1,11 +1,15 @@
 """Builds the content catalogue index.
 
-One row per (category, language, Granth, Series) that a curator has assigned a
-`count` to in cataloguesearch-configs. Unlike the main/metadata indices, this is
-driven entirely by the config.json tree under BASE_PDF_PATH, independent of
-whether any PDFs have actually been indexed yet -- a series marked "compiled" or
-given a target count shows up here even before a single page of it has been
-OCR'd.
+One row per leaf work in cataloguesearch-configs, driven entirely by the
+config.json tree under BASE_PDF_PATH -- independent of whether any PDFs have
+actually been indexed yet.
+
+Pravachan rows require a curator-assigned `count` (a series marked "compiled"
+or given a target count shows up here even before a single page of it has
+been OCR'd). Granth and Books rows need no curation at all -- a `Name` in the
+folder's own config.json is enough, since every leaf Granth/Book folder sets
+one directly; their "count" is just how many such rows exist, not a per-row
+field.
 """
 import logging
 import os
@@ -42,26 +46,40 @@ def _normalize_date(value):
 
 
 def _row_for_directory(directory: str, base_folder: str) -> dict:
-    """Returns a catalogue row for `directory`, or None if it has no `count` set."""
+    """Returns a catalogue row for `directory`, or None if it isn't a leaf work.
+
+    Pravachan leaf folders are identified by a curated `count`. Granth/Books
+    leaf folders have no such curation -- they're identified by having a
+    `Name` set directly (every leaf Granth/Book folder's own config.json sets
+    one; intermediate folders like an Anuyog or Author folder never do), so a
+    row is emitted for every one of them, unconditionally.
+    """
     merged = get_merged_config_for_dir(directory, base_folder)
+    category = merged.get("category")
+    # A couple of leaf config.json files use lowercase "name" -- tolerate both.
+    name = merged.get("Name") or merged.get("name")
     count = merged.get("count")
-    if not count:
+
+    if category == "Pravachan":
+        if not count:
+            return None
+    elif not name:
         return None
 
     language = merged.get("language", "hi")
     lang_key = _LANG_KEYS_MAP.get(language, "hi")
 
     return {
-        "category": merged.get("category"),
+        "category": category,
         "language": lang_key,
         "anuyog": merged.get("Anuyog"),
-        # A couple of leaf config.json files use lowercase "name" -- tolerate both.
-        "granth": merged.get("Name") or merged.get("name"),
+        "granth": name,
         "author": merged.get("Author"),
+        "tikakaar": merged.get("Tikakaar") or merged.get("Teekakar") or merged.get("Bhasha Vachanika"),
         "series": merged.get("Series"),
         "series_start_date": _normalize_date(merged.get("series_start_date")),
         "series_end_date": _normalize_date(merged.get("series_end_date")),
-        "count": str(count),
+        "count": str(count) if count else None,
         "relative_path": os.path.relpath(directory, base_folder),
     }
 
@@ -76,9 +94,10 @@ def get_catalogue(config: Config, opensearch_client: OpenSearch = None) -> list:
             singleton when a caller already has one)
 
     Returns:
-        list[dict]: One row per (category, language, Granth, Series) that has a
-        `count` in cataloguesearch-configs. Empty list if the index doesn't exist
-        yet (rebuild_catalogue_index() hasn't run) or on error.
+        list[dict]: One row per leaf work in cataloguesearch-configs -- Pravachan
+        rows keyed by (Granth, Series) with a curated `count`, Granth/Books rows
+        one per work with no `count`. Empty list if the index doesn't exist yet
+        (rebuild_catalogue_index() hasn't run) or on error.
     """
     if opensearch_client is None:
         from backend.common.opensearch import get_opensearch_client
@@ -105,9 +124,9 @@ def get_catalogue(config: Config, opensearch_client: OpenSearch = None) -> list:
 def rebuild_catalogue_index(config: Config, opensearch_client: OpenSearch):
     """
     Rebuilds the content catalogue index from scratch by walking every folder
-    under BASE_PDF_PATH and picking up any whose merged config.json carries a
-    `count`. Delete + recreate, then bulk-write -- idempotent, and stale rows
-    (renamed/removed series folders) never linger.
+    under BASE_PDF_PATH and picking up every leaf work -- see _row_for_directory
+    for what counts as one per category. Delete + recreate, then bulk-write --
+    idempotent, and stale rows (renamed/removed folders) never linger.
 
     Call after a regular discover crawl and after a full metadata refresh (same
     triggers as refresh_pravachan_series_metadata) -- this is cheap since it's a
