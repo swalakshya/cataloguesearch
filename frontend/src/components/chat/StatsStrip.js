@@ -18,11 +18,19 @@ const TILES = (pravachanTotal, granthSearchable, literatureSearchable, labels) =
     { category: 'Curated', colorVar: '--color-danger', value: literatureSearchable.toLocaleString(), label: labels.Curated, anchor: 'contemporary-index' },
 ];
 
+// Icon box is w-11/h-11 (44px) when spacious, w-7/h-7 (28px) otherwise (must
+// match the Tailwind classes below in px) — the emoji image inside is sized
+// as a fraction of that box rather than a separately hand-picked number, so
+// the two can't drift out of ratio if a box size ever changes.
+const ICON_FILL_RATIO = 0.9999;
+
 // `labels` optionally overrides one or more of the default per-category tile
 // labels (e.g. Home.js uses fuller phrasing) — every other call site renders
 // with DEFAULT_LABELS, unaffected.
 export default function StatsStrip({ topAccent, spacious = false, labels }) {
     const resolvedLabels = { ...DEFAULT_LABELS, ...labels };
+    const iconBoxPx = spacious ? 44 : 28;
+    const iconSize = Math.round(iconBoxPx * ICON_FILL_RATIO);
     // useCatalogue() shares its underlying fetch/cache with every other
     // caller (e.g. SearchIndex.js) -- see hooks/useCatalogue.js.
     const { rows, loading } = useCatalogue();
@@ -48,7 +56,7 @@ export default function StatsStrip({ topAccent, spacious = false, labels }) {
                         className={`rounded-md flex items-center justify-center shrink-0 ${spacious ? 'w-11 h-11' : 'w-7 h-7'}`}
                         style={{ backgroundColor: `color-mix(in srgb, var(${colorVar}) 14%, var(--color-surface))` }}
                     >
-                        <CategoryEmojiIcon category={category} size={spacious ? 24 : 16} />
+                        <CategoryEmojiIcon category={category} size={iconSize} />
                     </div>
                     <div className="leading-tight">
                         {value && <div className={spacious ? 'text-xl font-bold text-ink' : 'text-sm font-bold text-ink'}>{value}</div>}
