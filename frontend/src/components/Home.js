@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, MessageSquare } from 'lucide-react';
+import { Search, MessagesSquare } from 'lucide-react';
 import { PageHeader } from './ui';
 import StatsStrip from './chat/StatsStrip';
 
@@ -9,7 +9,7 @@ const CARDS = [
     {
         id: 'chat',
         to: '/chat',
-        icon: MessageSquare,
+        icon: MessagesSquare,
         accentVar: '--color-mark',
         title: 'Swalakshya AI',
         description: 'Ask questions about Jain Philosophy and Adhyatm.\nClear answers grounded in scriptures.\nExact page and chapter references behind every answer.',
