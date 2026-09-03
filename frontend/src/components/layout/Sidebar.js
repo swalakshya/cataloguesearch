@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Moon, PanelLeftClose, PanelLeftOpen, Plus, Sun, User, X } from 'lucide-react';
-import { useTheme } from '../../theme/ThemeContext';
+import { PanelLeftClose, PanelLeftOpen, Plus, User, X } from 'lucide-react';
 import { useOverlayBehavior } from '../ui/Modal';
 import { NAV_ITEMS } from './navItems';
 import swalakshyaMark from '../../assets/swalakshya-mark.png';
@@ -62,7 +61,7 @@ function MobileNavLinks({ currentPage, setCurrentPage, onNavigate }) {
     );
 }
 
-function SidebarContent({ collapsed, onToggleCollapse, closeButton, onNewChat, mode, toggleMode, navLinks }) {
+function SidebarContent({ collapsed, onToggleCollapse, closeButton, onNewChat, navLinks }) {
     return (
         <div
             className="flex flex-col h-full"
@@ -102,7 +101,7 @@ function SidebarContent({ collapsed, onToggleCollapse, closeButton, onNewChat, m
                 // multi-thread session storage exists server-side.
                 <div className="flex-1 overflow-y-auto px-3">
                     <div className="text-xs font-semibold text-ink-muted uppercase tracking-wide px-1 mb-2">History</div>
-                    <div className="text-sm text-ink-muted px-1 py-1">No conversations yet</div>
+                    <div className="text-sm text-ink-muted px-1 py-1">Coming soon!</div>
                 </div>
             )}
             {collapsed && <div className="flex-1" />}
@@ -115,13 +114,6 @@ function SidebarContent({ collapsed, onToggleCollapse, closeButton, onNewChat, m
                     <User size={16} className="text-ink-muted" />
                 </div>
                 {!collapsed && <span className="text-sm text-ink flex-1 truncate">Guest</span>}
-                <button
-                    onClick={toggleMode}
-                    className="p-1.5 rounded-md text-ink-muted hover:text-ink hover:bg-bg shrink-0"
-                    title="Toggle light/dark"
-                >
-                    {mode === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-                </button>
             </div>
         </div>
     );
@@ -130,7 +122,6 @@ function SidebarContent({ collapsed, onToggleCollapse, closeButton, onNewChat, m
 // Persistent left sidebar on desktop; an off-canvas drawer on mobile
 // (backdrop + Escape-to-close, sharing the same overlay behavior as Modal).
 export default function Sidebar({ currentPage, setCurrentPage, onNewChat, mobileOpen, onCloseMobile }) {
-    const { mode, toggleMode } = useTheme();
     const [collapsed, setCollapsed] = useState(() => {
         try { return localStorage.getItem(COLLAPSE_KEY) === '1'; } catch { return false; }
     });
@@ -150,14 +141,16 @@ export default function Sidebar({ currentPage, setCurrentPage, onNewChat, mobile
             {/* Desktop persistent sidebar — sticky+h-screen so it stays pinned and
                 full-height as the page scrolls, without switching the whole app
                 to an internal-scroll-container layout (which would break the
-                existing window-scroll-based chat auto-scroll behavior). */}
-            <div className={`hidden lg:flex shrink-0 sticky top-0 h-screen transition-[width] duration-200 ${collapsed ? 'w-24' : 'w-64'}`}>
+                existing window-scroll-based chat auto-scroll behavior). Spans both
+                grid rows (row-span-2) so it overlaps TopBar's row for its own
+                column — a higher z-index than TopBar (z-40 vs z-30) means it
+                visually sits on top of the bar rather than being pushed below it,
+                so TopBar itself stays full-width regardless of sidebar state. */}
+            <div className={`hidden lg:flex shrink-0 sticky top-0 h-screen z-40 col-start-1 row-start-1 row-span-2 transition-[width] duration-200 ${collapsed ? 'w-24' : 'w-64'}`}>
                 <SidebarContent
                     collapsed={collapsed}
                     onToggleCollapse={toggleCollapsed}
                     onNewChat={onNewChat}
-                    mode={mode}
-                    toggleMode={toggleMode}
                 />
             </div>
 
@@ -173,8 +166,6 @@ export default function Sidebar({ currentPage, setCurrentPage, onNewChat, mobile
                         <SidebarContent
                             collapsed={false}
                             onNewChat={() => { onNewChat(); onCloseMobile(); }}
-                            mode={mode}
-                            toggleMode={toggleMode}
                             closeButton={(
                                 <button onClick={onCloseMobile} className="p-1.5 rounded-md text-ink-muted hover:text-ink hover:bg-bg">
                                     <X size={18} />

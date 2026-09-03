@@ -3,7 +3,7 @@ import { PageHeader, Card, Button } from './ui';
 
 const About = () => {
     return (
-        <div className="max-w-[1080px] mx-auto p-6">
+        <div className="max-w-[1080px] mx-auto px-6 pb-6">
             <PageHeader variant="hero" title="Swalakshya Chat" />
 
             <p className="mb-8 text-ink leading-relaxed">

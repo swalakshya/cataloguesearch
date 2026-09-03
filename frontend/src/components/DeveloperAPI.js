@@ -99,7 +99,7 @@ answer = llm.complete(prompt)`;
 
 const DeveloperAPI = () => {
     return (
-        <div className="max-w-[1080px] mx-auto p-6">
+        <div className="max-w-[1080px] mx-auto px-6 pb-6">
 
             <PageHeader
                 variant="hero"

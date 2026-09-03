@@ -1707,7 +1707,7 @@ const AppContent = () => {
     };
 
     return (
-        <div style={{ backgroundColor: 'var(--color-bg)', '--bg-card': 'var(--color-surface)', '--bg-surface': 'var(--color-bg)' }} className="text-ink min-h-screen font-sans flex items-start">
+        <div style={{ backgroundColor: 'var(--color-bg)', '--bg-card': 'var(--color-surface)', '--bg-surface': 'var(--color-bg)' }} className="text-ink min-h-screen font-sans grid grid-cols-[auto_1fr] grid-rows-[auto_1fr]">
             {modalData && (
                 <ExpandModal
                     data={modalData}
@@ -1750,6 +1750,12 @@ const AppContent = () => {
                     DEBUG
                 </div>
             )}
+            <TopBar
+                currentPage={currentPage}
+                setCurrentPage={setCurrentPage}
+                onOpenMobileSidebar={currentPage === 'chat' ? () => setSidebarMobileOpen(true) : undefined}
+            />
+
             {currentPage === 'chat' && (
                 <Sidebar
                     currentPage={currentPage}
@@ -1760,15 +1766,9 @@ const AppContent = () => {
                 />
             )}
 
-            <div className="flex-1 flex flex-col min-w-0">
-                <TopBar
-                    currentPage={currentPage}
-                    setCurrentPage={setCurrentPage}
-                    onOpenMobileSidebar={currentPage === 'chat' ? () => setSidebarMobileOpen(true) : undefined}
-                />
-
+            <div className="flex flex-col min-w-0 col-start-2 row-start-2">
                 <div className="p-4 md:p-5">
-                <div className="max-w-[1080px] mx-auto">
+                <div className={`max-w-[1080px] mx-auto ${currentPage !== 'eval' ? 'pt-14' : ''}`}>
 
                     {currentPage === 'chat' && !llmAvailable && (
                         <main>
@@ -1786,7 +1786,7 @@ const AppContent = () => {
                                 <>
                                     <PageHeader
                                         variant="hero"
-                                        title="Aagam Khoj (आगम खोज)"
+                                        title="Aagam Khoj"
                                         subtitle="Explore and search across the Jain literature comprising authentic Digambar Jain Scriptures, Pravachans of Pujya Gurudevshri Kanji Swami, and literature by contemporary Jain scholars."
                                     />
                                     <div className="mb-3">
@@ -2015,7 +2015,7 @@ const AppContent = () => {
                                 <>
                                     {/* Empty state — centered search bar */}
                                     {chatMessages.length === 0 && !llmLoading && (
-                                        <div className="flex flex-col items-center justify-center py-14">
+                                        <div className="flex flex-col items-center justify-center pb-14">
                                             <div className="w-full max-w-4xl space-y-2">
                                                 <PageHeader
                                                     variant="hero"

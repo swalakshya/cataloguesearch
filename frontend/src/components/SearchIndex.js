@@ -225,7 +225,7 @@ const SearchIndex = () => {
     [selectedBookAuthors]);
 
   return (
-    <div className="max-w-5xl mx-auto px-5 py-10">
+    <div className="max-w-5xl mx-auto px-5 pb-10">
       <PageHeader
         variant="hero"
         title="Swalakshya Index"
