@@ -28,6 +28,19 @@ const WhatsNew = () => {
 
     const updates = [
         {
+            date: "September 4, 2026",
+            newFeatures: [
+                "Visual UI Refresh! Now supports dark mode too.",
+                "Swalakshya Chat is now available!",
+                "Swalakshya Khoj now supports exporting results into a PDF file."
+            ],
+            newContent: [
+                "Granths: Samyag Gyan Deepika by Kshullak Dharmdas",
+                "Pravachans: Moksh Marg Prakashak word to word series",
+                "Pravachans: Panchastikaya 1963-64 series"
+            ]
+        },
+        {
             date: "August 30, 2026",
             newContent: [
                 "Granths: Rayansaar by Acharya Kund Kund",
