@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
+import { useRegisterOverlay } from '../../hooks/useOverlayRegistry';
 
 const SIZE_CLASS = {
     sm: 'max-w-md',
@@ -7,18 +8,24 @@ const SIZE_CLASS = {
     lg: 'max-w-4xl',
 };
 
-// Escape-to-close + body-scroll lock, shared by Modal and any other overlay
-// (e.g. the mobile sidebar drawer) so the behavior only lives in one place.
+// Escape-to-close + body-scroll lock + global overlay registration, shared by
+// Modal and any other overlay (mobile sidebar drawer, PdfCitationModal, the
+// legacy hand-rolled modals in Modals.js, etc.) so this behavior — including
+// "something is covering the screen" for useAnyOverlayOpen() — only lives here.
 export function useOverlayBehavior(open, onClose) {
+    useRegisterOverlay(open);
+
     useEffect(() => {
         if (!open) return;
         document.body.style.overflow = 'hidden';
+        return () => { document.body.style.overflow = ''; };
+    }, [open]);
+
+    useEffect(() => {
+        if (!open) return;
         const handleEsc = (e) => { if (e.key === 'Escape') onClose(); };
         window.addEventListener('keydown', handleEsc);
-        return () => {
-            document.body.style.overflow = '';
-            window.removeEventListener('keydown', handleEsc);
-        };
+        return () => window.removeEventListener('keydown', handleEsc);
     }, [open, onClose]);
 }
 

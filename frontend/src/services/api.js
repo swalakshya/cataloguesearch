@@ -9,6 +9,15 @@ let catalogueCache = { data: null, timestamp: 0 };
 let catalogueInFlight = null;
 
 export const api = {
+    // Not a fetch — just builds the URL PdfCitationModal hands to pdf.js.
+    // Citation file_urls point at hosts (vitragvani.com etc., or our own
+    // /url/{code} shortener that 302s onward to them) that don't send CORS
+    // headers, so pdf.js can't fetch them directly from the browser. This
+    // routes through the backend's pdf-proxy endpoint instead, which fetches
+    // server-side (no CORS involved) and re-serves the bytes with its own
+    // permissive headers. See backend/api/pdf_proxy.py.
+    buildPdfProxyUrl: (url) => `${API_BASE_URL}/pdf-proxy?url=${encodeURIComponent(url)}`,
+
     getAppConfig: async () => {
         try {
             const response = await fetch(`${API_BASE_URL}/config`);

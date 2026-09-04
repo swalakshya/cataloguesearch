@@ -1,11 +1,10 @@
-// Candidate brand palettes, each with a light and dark variant. Status colors
+// Brand palettes, each with a light and dark variant. Status colors
 // (success/warning/danger/info) are intentionally shared across every palette —
 // they're functional signals, not brand identity, so keeping them fixed makes
 // comparing palettes side-by-side cleaner.
 //
-// Pick one, set DEFAULT_PALETTE below, and ship that. The dev-only
-// PaletteSwitcher (never rendered in production) lets you preview all of them
-// live against the real app while it's being migrated onto these tokens.
+// User-selectable via the Settings panel (see SettingsModal.js); DEFAULT_PALETTE
+// below is only the first-run default before anyone has chosen for themselves.
 
 const STATUS_COLORS = {
     light: {

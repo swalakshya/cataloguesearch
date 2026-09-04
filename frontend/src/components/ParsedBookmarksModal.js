@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+import React from 'react';
+import { useOverlayBehavior } from './ui/Modal';
 
 /**
  * ParsedBookmarksModal - Modal for displaying parsed bookmarks split into extracted and ignored sections
@@ -16,22 +17,7 @@ const ParsedBookmarksModal = ({
     ignoredBookmarks = [],
     title = "Parsed Bookmarks"
 }) => {
-    // Handle Escape key to close modal
-    useEffect(() => {
-        const handleEsc = (event) => {
-            if (event.key === 'Escape') {
-                onClose();
-            }
-        };
-
-        if (isOpen) {
-            window.addEventListener('keydown', handleEsc);
-        }
-
-        return () => {
-            window.removeEventListener('keydown', handleEsc);
-        };
-    }, [isOpen, onClose]);
+    useOverlayBehavior(isOpen, onClose);
 
     // Don't render if modal is closed
     if (!isOpen) {

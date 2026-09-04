@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { flushSync } from 'react-dom';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { GoogleReCaptchaProvider } from 'react-google-recaptcha-v3';
 
@@ -12,7 +11,6 @@ import { SearchBar, MetadataFilters, SearchFilters, AdvancedSearch, SearchOption
 import { ResultsList, SuggestionsCard, Tabs, SimilarSourceInfoCard, SkeletonResultsList } from './components/SearchResults';
 import { ExpandModal, GranthVerseModal, GranthProseModal, WelcomeModal } from './components/Modals';
 import { FeedbackForm } from './components/Feedback';
-import { FeedbackButtons } from './components/AibotFeedback';
 import Home from './components/Home';
 import Footer from './components/layout/Footer';
 import About from './components/About';
@@ -21,22 +19,18 @@ import UsageGuide from './components/UsageGuide';
 import DeveloperAPI from './components/DeveloperAPI';
 import SearchIndex from './components/SearchIndex';
 import UIEval from './components/eval/UIEval';
-import ChatComposer from './components/chat/ChatComposer';
+import ChatPage from './components/chat/ChatPage';
+import { getStoredAnswerFormat, setStoredAnswerFormat, CHAT_SESSION_STORAGE_KEY } from './config/chatConfig';
 import StatsStrip from './components/chat/StatsStrip';
-import AiDisclaimer from './components/chat/AiDisclaimer';
-import { Spinner, ChevronUpIcon, ChevronDownIcon, ExpandIcon, PdfIcon } from './components/SharedComponents';
+import { Spinner, ChevronUpIcon, ChevronDownIcon, ExpandIcon } from './components/SharedComponents';
 import ExportPdfModal from './components/ExportPdfModal';
-import { ChevronDown, Sparkles, AlertTriangle, Mail, Home as HomeIcon, PenLine, Check, SendHorizontal } from 'lucide-react';
-import clipboardEmoji from './assets/emoji/clipboard.svg';
-import bulbEmoji from './assets/emoji/bulb.svg';
-import documentEmoji from './assets/emoji/document.svg';
-import { CATEGORY_EMOJI_SRC } from './components/chat/categoryEmoji';
+import { AlertTriangle, Mail, Home as HomeIcon, PenLine, SendHorizontal } from 'lucide-react';
 import { Modal, InputActionBar, PageHeader } from './components/ui';
 
 // Import API service
 import { api } from './services/api';
 import { getRandomSuggestedQueriesByLanguage } from './utils/suggestedQueries';
-import { copyToClipboard } from './utils/shareUtils';
+import { useAnyOverlayOpen } from './hooks/useOverlayRegistry';
 
 // --- TIPS MODAL COMPONENT ---
 const TipsModal = ({ onClose }) => {
@@ -112,130 +106,6 @@ const TipsModal = ({ onClose }) => {
 };
 
 
-// --- CITATION HELPERS (shared by the on-screen HTML renderer and the plain-text share/copy path) ---
-const parseCitationAttrs = (attrStr) => {
-    const attrs = {};
-    const re = /(\w+)="([^"]*)"/g;
-    let m;
-    while ((m = re.exec(attrStr)) !== null) {
-        attrs[m[1]] = m[2].replace(/&quot;/g, '"');
-    }
-    return attrs;
-};
-
-const buildCitationLabel = (attrs) => {
-    const parts = [];
-    if (attrs.granth) parts.push(attrs.granth);
-    if (attrs.category === 'Pravachan') {
-        if (attrs.pravachankar) parts.push(`by ${attrs.pravachankar}`);
-        if (attrs.series) parts.push(attrs.series);
-        if (attrs.series_number) parts.push(`Series No. ${attrs.series_number}`);
-        if (attrs.volume) parts.push(`Vol ${attrs.volume}`);
-        if (attrs.pravachan_number) parts.push(`No. ${attrs.pravachan_number}`);
-    } else {
-        if (attrs.gatha) parts.push(`Gatha ${attrs.gatha}`);
-        if (attrs.shlok) parts.push(`Shlok ${attrs.shlok}`);
-        if (attrs.kalash) parts.push(`Kalash ${attrs.kalash}`);
-        if (attrs.dohra) parts.push(`Doha ${attrs.dohra}`);
-        if (attrs.kavya) parts.push(`Kavya ${attrs.kavya}`);
-    }
-    if (attrs.page) parts.push(`पृष्ठ ${attrs.page}`);
-    if (attrs.date) parts.push(attrs.date);
-    return parts.filter(Boolean).join(', ');
-};
-
-// --- SHARE ANSWER BUTTONS ---
-// Splits "> quote (citation)" into "> quote\n> (citation)" so WhatsApp keeps the
-// citation inside the same quote block but on its own line (every line needs its own ">").
-const splitCitationLines = (text) => {
-    if (!text) return text;
-    return text.replace(/^>[ \t]*(?=\S)([^\n]+?)[ \t]*(\([^)]+\))[ \t]*$/gm, (match, quote, citation) => `> ${quote}\n> ${citation}`);
-};
-
-// Resolves @@CITATION_n@@ tokens (from citationBlocks, used when ENABLE_FULL_CHUNKS_IN_CITATIONS
-// is on) into WhatsApp-style ">" quote lines — every line of the quote text gets its own ">",
-// plus a trailing "> (label)" citation line.
-const resolveCitationTokensToText = (text, citationBlocks) => {
-    if (!text || !citationBlocks || !citationBlocks.length) return text;
-    return text.replace(/@@CITATION_(\d+)@@/g, (match, idx) => {
-        const block = citationBlocks[Number(idx)];
-        if (!block) return '';
-        const attrs = parseCitationAttrs(block.attrStr);
-        const label = buildCitationLabel(attrs);
-        const quoteLines = block.innerText.trim().split(/\r?\n/)
-            .filter(line => line.trim() !== '')
-            .map(line => `> ${line}`);
-        if (label) quoteLines.push(`> (${label})`);
-        return quoteLines.join('\n');
-    });
-};
-
-const SHARE_FOOTER = '--\n*Get your Adhyatmic questions answered on Swalakshya:* https://chat.swalakshya.me/';
-
-const ShareAnswerButtons = ({ question, answer, citationBlocks }) => {
-    const [copied, setCopied] = useState(false);
-    const resolvedAnswer = resolveCitationTokensToText(answer, citationBlocks);
-    const formattedAnswer = splitCitationLines(resolvedAnswer);
-    const shareText = `${question ? `*Question: ${question}*\n\n*Answer:*\n${formattedAnswer}` : formattedAnswer}\n\n${SHARE_FOOTER}`;
-
-    const handleCopy = async () => {
-        const success = await copyToClipboard(shareText);
-        if (success) {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        }
-    };
-
-    const handleWhatsAppShare = () => {
-        const url = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
-        window.open(url, '_blank', 'noopener,noreferrer');
-    };
-
-    return (
-        <div className="flex items-center gap-2">
-            <button
-                onClick={handleCopy}
-                className="btn btn-secondary flex items-center gap-1.5 text-xs py-1 px-2"
-                title="Copy answer"
-            >
-                {copied ? (
-                    <>
-                        <Check size={14} style={{ color: 'var(--color-success)' }} />
-                        <span style={{ color: 'var(--color-success)' }}>Copied to clipboard</span>
-                    </>
-                ) : (
-                    <>
-                        <img src={clipboardEmoji} alt="" className="w-3.5 h-3.5" />
-                        <span>Copy</span>
-                    </>
-                )}
-            </button>
-            <button
-                onClick={handleWhatsAppShare}
-                className="btn btn-secondary flex items-center gap-1.5 text-xs py-1 px-2"
-                title="Share on WhatsApp"
-            >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="#25D366">
-                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-                    <path d="M12.001 2C6.478 2 2 6.478 2 12c0 1.892.526 3.66 1.438 5.166L2 22l4.955-1.4A9.94 9.94 0 0012.001 22C17.523 22 22 17.522 22 12S17.523 2 12.001 2zm0 18.2a8.19 8.19 0 01-4.19-1.147l-.3-.178-3.11.878.83-3.03-.196-.31A8.176 8.176 0 013.8 12c0-4.522 3.679-8.2 8.201-8.2 4.521 0 8.199 3.678 8.199 8.2 0 4.522-3.678 8.2-8.199 8.2z"/>
-                </svg>
-                <span>WhatsApp</span>
-            </button>
-        </div>
-    );
-};
-
-// --- USER IDENTITY ---
-function getOrCreateUserId() {
-    const key = 'swalakshya_user_id';
-    let id = localStorage.getItem(key);
-    if (!id) {
-        id = crypto.randomUUID();
-        localStorage.setItem(key, id);
-    }
-    return id;
-}
-const USER_ID = getOrCreateUserId();
 
 // --- MAIN APP COMPONENT ---
 const AppContent = () => {
@@ -259,7 +129,6 @@ const AppContent = () => {
     // Update state when URL changes (browser navigation)
     useEffect(() => {
         const path = location.pathname;
-        setHomeMode(path === '/chat' ? 'chat' : 'search');
         if (path === '/about') {
             setCurrentPageState('about');
         } else if (path === '/feedback') {
@@ -302,13 +171,6 @@ const AppContent = () => {
         setModalData(null);
         setIsContextLoading(false);
         setShowTipsModal(false);
-        setLlmAnswer(null);
-        setLlmReferences([]);
-        setLlmCitations([]);
-        setLlmError(null);
-        setLlmLoading(false);
-        setChatContentTypes([...activeCategories]);
-        setHomeMode('search');
     };
 
     const currentPage = currentPageState;
@@ -351,6 +213,7 @@ const AppContent = () => {
     const [metadata, setMetadata] = useState({});
     const [searchData, setSearchData] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
+    const resultsPanelRef = useRef(null);
     const [loadingCategories, setLoadingCategories] = useState(new Set());
     const [suggestedQueries, setSuggestedQueries] = useState(() => getRandomSuggestedQueriesByLanguage(language, 5));
     const refreshSuggestedQueries = useCallback(() => {
@@ -374,212 +237,34 @@ const AppContent = () => {
     const [isGranthProseLoading, setIsGranthProseLoading] = useState(false);
     const [showWelcomePopup, setShowWelcomePopup] = useState(false);
     const [showTipsModal, setShowTipsModal] = useState(false);
-    // True while the Pravachan/Granth filter modal (SearchFilters) is open — used to
-    // hide the mobile FABs below so they don't collide with the modal's Apply button.
-    const [filterModalOpen, setFilterModalOpen] = useState(false);
     const [showExportModal, setShowExportModal] = useState(false);
     const [exportCategory, setExportCategory] = useState(null);
     const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
-    const [llmAnswer, setLlmAnswer] = useState(null);
-    const [llmReferences, setLlmReferences] = useState([]);
-    const [llmCitations, setLlmCitations] = useState([]);
-    const [llmError, setLlmError] = useState(null);
-    const [chatNotice, setChatNotice] = useState(null);
-    const [llmLoading, setLlmLoading] = useState(false);
-    const [chatSessionId, setChatSessionId] = useState(null);
-    const [chatMessages, setChatMessages] = useState([]);
-    const [chatInput, setChatInput] = useState('');
-    const [chatInputVisible, setChatInputVisible] = useState(false);
-    const [chatContentTypes, setChatContentTypes] = useState(['Pravachan', 'Granth']);
-    const [expandedAnswers, setExpandedAnswers] = useState({});
+    // True while any modal/filter-sheet/drawer in the app is open (see useOverlayRegistry) —
+    // used to hide the mobile Home/Feedback FABs below so they don't collide with it.
+    const anyOverlayOpen = useAnyOverlayOpen();
     const PAGE_SIZE = 20;
-    const llmProvider = (process.env.REACT_APP_LLM_PROVIDER || '').trim();
     const [llmAvailable, setLlmAvailable] = useState(false);
-    const [homeMode, setHomeMode] = useState(() => location.pathname === '/chat' ? 'chat' : 'search');
-    const [displayedTexts, setDisplayedTexts] = useState({});
-    const [chunkTextsCache, setChunkTextsCache] = useState({});
-    const typingIntervalsRef = useRef({});
-    const recoveryTimeoutRef = useRef(null);
-    const messagesEndRef = useRef(null);
-    const latestUserBubbleRef = useRef(null);
-    const activeChatRunRef = useRef(0);
-    // Tracks the localId of the turn currently being streamed live in handleChatSend.
-    // recoverPendingMessage checks this before opening a competing stream for the same turn.
-    const activeStreamLocalIdRef = useRef(null);
-    const [showScrollDown, setShowScrollDown] = useState(false);
-    const isChatMode = homeMode === 'chat';
-    const chatEnabled = isChatMode;
-    const hasPendingChatMessage = chatMessages.some(msg => msg.role === 'assistant' && msg.pending);
+    // Set by handleHomeChatSubmit (Home page's "ask AI" card) and consumed once by
+    // ChatPage on mount to auto-send the first question — see ChatPage's
+    // pendingChatQuestion effect.
+    const [pendingChatQuestion, setPendingChatQuestion] = useState(null);
+    const chatPageRef = useRef(null);
+    const [answerFormat, setAnswerFormat] = useState(() => getStoredAnswerFormat());
 
-    const beginChatRun = useCallback(() => {
-        activeChatRunRef.current += 1;
-        return activeChatRunRef.current;
-    }, []);
-
-    const isActiveChatRun = useCallback((runId) => activeChatRunRef.current === runId, []);
-
-    const invalidateChatRuns = useCallback(() => {
-        activeChatRunRef.current += 1;
-    }, []);
-
-    const clearPendingMessage = useCallback((sessionId) => {
-        if (!sessionId) return;
-        try {
-            localStorage.removeItem(`pending_msg_${sessionId}`);
-        } catch {}
-    }, []);
-
-    const resetTypingState = useCallback(() => {
-        Object.values(typingIntervalsRef.current).forEach(clearInterval);
-        typingIntervalsRef.current = {};
-        setDisplayedTexts({});
-        setExpandedAnswers({});
-    }, []);
-
-    const clearPersistedChatSession = useCallback(() => {
-        try {
-            localStorage.removeItem('llmChatSession');
-        } catch (error) {
-            console.warn('localStorage not available:', error);
-        }
-    }, []);
-
-    const clearRecoveryTimer = useCallback(() => {
-        if (recoveryTimeoutRef.current) {
-            clearTimeout(recoveryTimeoutRef.current);
-            recoveryTimeoutRef.current = null;
-        }
-    }, []);
-
-    const ensureRecoveredQuestion = useCallback((messages, question, localId) => {
-        if (!question) return messages;
-        // Already present — nothing to do.
-        const existing = messages.find(m => m.role === 'user' && m.localId === localId);
-        if (existing) return messages;
-        // Insert the user bubble immediately before the pending assistant for this turn
-        // so the order is always [user, assistant_pending], not [assistant_pending, user].
-        const userMsg = { role: 'user', content: question, localId };
-        const pendingIdx = localId ? messages.findIndex(m => m.localId === localId && m.pending) : -1;
-        if (pendingIdx !== -1) {
-            const next = [...messages];
-            next.splice(pendingIdx, 0, userMsg);
-            return next;
-        }
-        return [...messages, userMsg];
-    }, []);
-
-    function schedulePendingRecovery(sessionId, runId, delayMs = 1500) {
-        clearRecoveryTimer();
-        recoveryTimeoutRef.current = setTimeout(() => {
-            recoveryTimeoutRef.current = null;
-            if (isActiveChatRun(runId)) {
-                void recoverPendingMessage(sessionId, runId);
-            }
-        }, delayMs);
-    }
-
-    async function recoverPendingMessage(sessionId, runId = activeChatRunRef.current || beginChatRun()) {
-        if (!sessionId || !isActiveChatRun(runId)) return;
-
-        const pendingKey = `pending_msg_${sessionId}`;
-        let pending = null;
-        try { pending = JSON.parse(localStorage.getItem(pendingKey)); } catch {}
-        if (!pending?.messageId) return;
-
-        const localId = pending.localId ?? null;
-
-        // If the live stream in handleChatSend already owns this turn, don't compete.
-        if (localId && activeStreamLocalIdRef.current === localId) return;
-
-        setChatMessages(prev => {
-            const withQuestion = ensureRecoveredQuestion(prev, pending.question, localId);
-            const hasPending = withQuestion.some(m => m.role === 'assistant' && m.pending && (!localId || m.localId === localId));
-            if (hasPending) return withQuestion;
-            return [...withQuestion, { role: 'assistant', pending: true, stage: 'understanding', stageLabel: 'Understanding your question', localId }];
-        });
-
-        try {
-            const jobStatus = await api.getChatMessageResult(sessionId, pending.messageId);
-            if (!isActiveChatRun(runId)) return;
-
-            if (jobStatus.status === 'done') {
-                const { status: _s, message_id: _m, ...result } = jobStatus;
-                applyChatResponse(result, pending.question || null, localId);
-                clearPendingMessage(sessionId);
-                clearRecoveryTimer();
-                setChatNotice(null);
-                setLlmLoading(false);
-                return;
-            }
-
-            if (jobStatus.status !== 'processing') return;
-
-            setLlmLoading(true);
-            const saveCursor = (id) => {
-                try {
-                    const raw = localStorage.getItem(pendingKey);
-                    if (raw) {
-                        const payload = JSON.parse(raw);
-                        payload.lastEventId = id;
-                        localStorage.setItem(pendingKey, JSON.stringify(payload));
-                    }
-                } catch {}
-            };
-
-            try {
-                const data = await api.streamChatMessageResult(sessionId, pending.messageId, {
-                    lastEventId: pending.lastEventId ?? null,
-                    onEvent: (event) => {
-                        if (!isActiveChatRun(runId) || event?.type !== 'stage') return;
-                        setChatMessages(prev => {
-                            const updated = [...prev];
-                            const idx = localId
-                                ? updated.findIndex(m => m.localId === localId && m.pending)
-                                : updated.findIndex(m => m.role === 'assistant' && m.pending);
-                            if (idx !== -1) updated[idx] = { ...updated[idx], stage: event.stage, stageLabel: event.label };
-                            return updated;
-                        });
-                    },
-                    onEventId: saveCursor,
-                });
-                if (!isActiveChatRun(runId)) return;
-                if (data) {
-                    applyChatResponse(data, pending.question || null, localId);
-                    clearPendingMessage(sessionId);
-                    clearRecoveryTimer();
-                    setChatNotice(null);
-                }
-            } catch (err) {
-                if (!isActiveChatRun(runId)) return;
-                if (err?.status === 404) {
-                    clearPendingMessage(sessionId);
-                    clearRecoveryTimer();
-                    setChatMessages(prev => prev.filter(m => !(m.role === 'assistant' && m.pending)));
-                    setChatNotice('Response was lost while the app was in the background. Please send your question again.');
-                    setTimeout(() => setChatNotice(null), 6000);
-                } else {
-                    setLlmError(null);
-                    setChatNotice('Connection interrupted. We’ll reconnect.');
-                    schedulePendingRecovery(sessionId, runId);
-                }
-            } finally {
-                if (isActiveChatRun(runId)) setLlmLoading(false);
-            }
-        } catch (err) {
-            if (!isActiveChatRun(runId)) return;
-            if (err?.status === 404) {
-                clearPendingMessage(sessionId);
-                clearRecoveryTimer();
-                setChatMessages(prev => prev.filter(m => !(m.role === 'assistant' && m.pending)));
-                setChatNotice('Response was lost while the app was in the background. Please send your question again.');
-                setTimeout(() => setChatNotice(null), 6000);
-            } else {
-                setLlmError(null);
-                setChatNotice('Connection interrupted. We’ll reconnect.');
-                schedulePendingRecovery(sessionId, runId);
-            }
-        }
-    }
+    // Changing answer type ends the active chat session — its already-rendered
+    // messages assume one format (structured's inline blockquote citations
+    // aren't compatible with summary's (@@_N) badge parser, or vice versa), so
+    // there's no way to keep them around correctly once the setting changes.
+    // Clears the persisted session unconditionally (not just via ChatPage's own
+    // ref) since Settings can be opened from any page, including ones where
+    // ChatPage isn't mounted to clear it itself.
+    const handleSaveAnswerFormat = (newFormat) => {
+        setStoredAnswerFormat(newFormat);
+        setAnswerFormat(newFormat);
+        chatPageRef.current?.endChat();
+        try { localStorage.removeItem(CHAT_SESSION_STORAGE_KEY); } catch {}
+    };
 
     useEffect(() => {
         api.checkLlmHealth().then(setLlmAvailable);
@@ -601,55 +286,24 @@ const AppContent = () => {
         if (firstAvailable) setActiveTab(firstAvailable);
     }, [searchData, loadingCategories, activeTab]);
 
-    // Typing effect: reveal each new assistant message character by character
+    // Mobile only: a search leaves the user looking at wherever they were
+    // scrolled (often still the search bar) while the results panel renders
+    // further down, off-screen — so it looks like nothing happened until they
+    // manually scroll. Scrolling on isLoading going true (not on searchData
+    // arriving) means they see the loading state itself, not just the
+    // eventual results, which is the actual "something is happening" signal.
+    // Mirrors ChatPage's identical fix for the same class of problem there.
     useEffect(() => {
-        chatMessages.forEach((msg, idx) => {
-            const key = msg.localId ?? idx;
-            if (msg.role === 'assistant' && !msg.pending && msg.content &&
-                displayedTexts[key] === undefined && !typingIntervalsRef.current[key]) {
-                let charIdx = 0;
-                const fullText = cleanAnswerText(msg.content);
-                typingIntervalsRef.current[key] = setInterval(() => {
-                    charIdx += 4;
-                    if (charIdx >= fullText.length) {
-                        charIdx = fullText.length;
-                        clearInterval(typingIntervalsRef.current[key]);
-                        delete typingIntervalsRef.current[key];
-                    }
-                    setDisplayedTexts(prev => ({ ...prev, [key]: fullText.slice(0, charIdx) }));
-                }, 16);
-            }
-        });
-    }, [chatMessages]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // Scroll new user bubble just below the sticky nav when a question is submitted
-    useEffect(() => {
-        const msgs = chatMessages;
-        if (msgs.length < 2) return;
-        const last = msgs[msgs.length - 1];
-        const secondLast = msgs[msgs.length - 2];
-        if (last?.pending && secondLast?.role === 'user') {
-            const el = latestUserBubbleRef.current;
-            if (el) {
-                const NAV_HEIGHT = 64; // h-16
-                const PADDING = 12;
-                const top = el.getBoundingClientRect().top + window.scrollY - NAV_HEIGHT - PADDING;
-                window.scrollTo({ top, behavior: 'smooth' });
-            }
-        }
-    }, [chatMessages]);
-
-    // Show/hide scroll-down arrow via IntersectionObserver on messagesEndRef sentinel
-    useEffect(() => {
-        const el = messagesEndRef.current;
+        if (!isLoading) return;
+        if (window.innerWidth >= 768) return; // matches Tailwind's md breakpoint used elsewhere
+        const el = resultsPanelRef.current;
         if (!el) return;
-        const observer = new IntersectionObserver(
-            ([entry]) => setShowScrollDown(!entry.isIntersecting),
-            { threshold: 0 }
-        );
-        observer.observe(el);
-        return () => observer.disconnect();
-    }, [chatMessages.length, llmLoading]); // re-attach when chat activates/deactivates
+        const NAV_HEIGHT = 64; // h-16, same sticky TopBar this app uses everywhere else
+        const PADDING = 12;
+        const top = el.getBoundingClientRect().top + window.scrollY - NAV_HEIGHT - PADDING;
+        window.scrollTo({ top, behavior: 'smooth' });
+    }, [isLoading]);
+
 
     useEffect(() => {
         if (currentPage === 'home') {
@@ -673,7 +327,6 @@ const AppContent = () => {
             setAppName(cfg.app_name || 'swalakshya');
             setDebugMode(cfg.debug_mode);
             setActiveCategories(cfg.active_categories);
-            setChatContentTypes([...cfg.active_categories]);
             if (cfg.active_categories.includes('Books')) {
                 setContentTypes(prev => ({ ...prev, books: true }));
             }
@@ -688,74 +341,6 @@ const AppContent = () => {
         });
     }, []);
 
-    useEffect(() => {
-        if (!chatEnabled) return;
-        try {
-            const stored = localStorage.getItem('llmChatSession');
-            if (stored) {
-                const parsed = JSON.parse(stored);
-                if (parsed?.sessionId) {
-                    setChatSessionId(parsed.sessionId);
-                    setChatMessages(parsed.messages || []);
-                    setDisplayedTexts(
-                        (parsed.messages || []).reduce((acc, msg, idx) => {
-                            if (msg?.role === 'assistant' && msg?.content) {
-                                acc[msg.localId ?? idx] = cleanAnswerText(msg.content);
-                            }
-                            return acc;
-                        }, {})
-                    );
-                }
-            }
-        } catch (error) {
-            console.warn('localStorage not available:', error);
-        }
-    }, [chatEnabled]);
-
-    useEffect(() => {
-        if (!chatEnabled) return;
-        try {
-            if (chatSessionId) {
-                localStorage.setItem(
-                    'llmChatSession',
-                    JSON.stringify({ sessionId: chatSessionId, messages: chatMessages })
-                );
-            } else {
-                localStorage.removeItem('llmChatSession');
-            }
-        } catch (error) {
-            console.warn('localStorage not available:', error);
-        }
-    }, [chatEnabled, chatSessionId, chatMessages]);
-
-    // SF3: visibilitychange handler — recover an in-flight message when the tab returns
-    useEffect(() => {
-        if (!chatEnabled || !chatSessionId) return;
-
-        const onVisible = async () => {
-            if (document.visibilityState !== 'visible') return;
-            void recoverPendingMessage(chatSessionId);
-        };
-
-        document.addEventListener('visibilitychange', onVisible);
-        return () => document.removeEventListener('visibilitychange', onVisible);
-    }, [chatEnabled, chatSessionId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // SF3: on startup, check if a message was in-flight when the app was last closed
-    useEffect(() => {
-        if (!chatEnabled || !chatSessionId) return;
-        void recoverPendingMessage(chatSessionId);
-    }, [chatEnabled, chatSessionId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    const getChatSessionPayload = useCallback(() => {
-        const languageCode = language === 'gujarati' ? 'gu' : 'hi';
-        return {
-            language: languageCode,
-            user_id: USER_ID,
-            app: appName,
-            ...(llmProvider ? { provider: llmProvider } : {})
-        };
-    }, [language, llmProvider, appName]);
 
     // Update metadata when language or contentTypes selection changes
     useEffect(() => {
@@ -892,43 +477,6 @@ const AppContent = () => {
         category,
     }), [query, activeFilters, language, textSearch, exactMatch, excludeWords, searchType, startYear, endYear]);
 
-    function buildLlmFilters() {
-        const filters = {};
-        // In chat mode, use user's chat filter selection
-        const types = isChatMode
-            ? [...chatContentTypes]
-            : [
-                ...(contentTypes.pravachans ? ['Pravachan'] : []),
-                ...(contentTypes.granths ? ['Granth'] : []),
-                ...(contentTypes.books ? ['Books'] : []),
-              ];
-        if (types.length) filters.content_type = types;
-
-        if (startYear) filters.year_from = Number(startYear);
-        if (endYear) filters.year_to = Number(endYear);
-
-        activeFilters.forEach((filter) => {
-            const key = String(filter.key || '').toLowerCase();
-            const value = filter.value;
-            if (!value) return;
-            if (key.includes('granth')) {
-                filters.granth = value;
-            } else if (key.includes('anuyog')) {
-                filters.anuyog = value;
-            } else if (
-                key.includes('author') ||
-                key.includes('tikakaar') ||
-                key.includes('teekakar') ||
-                key.includes('bhasha vachanika') ||
-                key.includes('contributor')
-            ) {
-                filters.contributor = value;
-            }
-        });
-
-        return filters;
-    }
-
     const handleSearch = useCallback(async (page = 1) => {
         if (!query.trim()) {
             alert("Please enter a search query.");
@@ -936,10 +484,6 @@ const AppContent = () => {
         }
         setIsLoading(true);
         setSearchData(null);
-        setLlmAnswer(null);
-        setLlmReferences([]);
-        setLlmCitations([]);
-        setLlmError(null);
         setPravachanPage(page);
         setBooksPage(1);
         setSimilarDocumentsData(null);
@@ -955,208 +499,8 @@ const AppContent = () => {
         setSearchData(data);
         setLoadingCategories(new Set());
         setIsLoading(false);
-    }, [activeCategories, buildSearchPayload, chatSessionId, clearPersistedChatSession, query, resetTypingState]);
+    }, [activeCategories, buildSearchPayload, query]);
 
-    // Renders a completed LLM response into chatMessages (replaces the pending placeholder).
-    // question is stored on the msg for follow-up navigation; uses preTokenizeCitations from outer scope.
-    function applyChatResponse(data, question, localId = null) {
-        setChatMessages(prev => {
-            const { content, citationBlocks } = preTokenizeCitations(data.answer || '');
-            const updated = [...prev];
-            const idx = localId
-                ? updated.findIndex(item => item.localId === localId && item.pending)
-                : updated.findIndex(item => item.role === 'assistant' && item.pending);
-            const msg = {
-                role: 'assistant',
-                localId: localId ?? undefined,
-                content,
-                citationBlocks,
-                follow_up_questions: data.follow_up_questions || [],
-                references: data.references || [],
-                citations: data.citations || [],
-                tool_trace_id: data.tool_trace_id || null,
-                question: question || '',
-                rawAnswer: data.answer || '',
-            };
-            if (idx !== -1) { updated[idx] = msg; return updated; }
-            if (localId) return updated; // turn already resolved — idempotent no-op
-            return [...updated, msg];
-        });
-
-        // Fetch inline chunk quote text in background
-        const chunkIdMatches = [...(data.answer || '').matchAll(/^\s*>\s*\{\{([^}]+)\}\}\s*$/gm)];
-        if (chunkIdMatches.length > 0) {
-            const uniqueIds = [...new Set(chunkIdMatches.map(m => m[1]))];
-            const toFetch = uniqueIds.filter(id => !chunkTextsCache[id]);
-            if (toFetch.length > 0) {
-                const languageCode = language === 'gujarati' ? 'gu' : 'hi';
-                Promise.all(toFetch.map(id => api.getChunk(id, languageCode))).then(results => {
-                    const fetched = {};
-                    results.forEach((res, i) => { if (res?.text_content) fetched[toFetch[i]] = res; });
-                    if (Object.keys(fetched).length > 0) setChunkTextsCache(prev => ({ ...prev, ...fetched }));
-                });
-            }
-        }
-    }
-
-    async function handleChatSend(sessionId, message, { runId: providedRunId = null } = {}) {
-        if (!message.trim()) return;
-        const runId = providedRunId ?? beginChatRun();
-        let activeSessionId = sessionId;
-
-        setLlmLoading(true);
-        setLlmError(null);
-        setChatNotice(null);
-        // Stable local ID for this turn — ties the user bubble and assistant bubble together
-        // across re-renders, recovery, and array shifts. Never sent to the server.
-        const localId = crypto.randomUUID();
-        activeStreamLocalIdRef.current = localId; // claim ownership of this turn
-        setChatMessages(prev => [
-            ...prev,
-            { role: 'user', content: message, localId },
-            { role: 'assistant', pending: true, stage: 'understanding', stageLabel: 'Understanding your question', localId }
-        ]);
-        setChatInput('');
-        setChatInputVisible(false);
-
-        const onStageEvent = (event) => {
-            if (!isActiveChatRun(runId) || event?.type !== 'stage') return;
-            setChatMessages(prev => {
-                const updated = [...prev];
-                const idx = updated.findIndex(item => item.localId === localId && item.pending);
-                if (idx !== -1) {
-                    updated[idx] = {
-                        ...updated[idx],
-                        stage: event.stage || updated[idx].stage,
-                        stageLabel: event.label || updated[idx].stageLabel
-                    };
-                }
-                return updated;
-            });
-        };
-
-        // Build a submit+stream function for a given session, storing cursor in localStorage
-        const streamForSession = async (targetSessionId, clientMsgId) => {
-            const pendingKey = `pending_msg_${targetSessionId}`;
-            const saveCursor = (lastEventId) => {
-                try {
-                    localStorage.setItem(pendingKey, JSON.stringify({
-                        messageId: clientMsgId,
-                        lastEventId,
-                        question: message,
-                        localId,
-                    }));
-                } catch {}
-            };
-
-            // Optimistically record that a message is in-flight BEFORE submitting,
-            // so visibilitychange can recover even if the POST response is lost.
-            saveCursor(null);
-
-            const { message_id: messageId } = await api.submitChatMessage(targetSessionId, {
-                role: 'user',
-                content: message,
-                response_format: 'structured',
-                filters: buildLlmFilters(),
-                client_message_id: clientMsgId,
-            });
-
-            return api.streamChatMessageResult(targetSessionId, messageId, {
-                lastEventId: null,
-                onEvent: onStageEvent,
-                onEventId: saveCursor,
-            });
-        };
-
-        // Generate a stable client-side message ID for idempotency
-        const clientMsgId = crypto.randomUUID();
-
-        try {
-            let data;
-            try {
-                data = await streamForSession(sessionId, clientMsgId);
-            } catch (error) {
-                if (!isActiveChatRun(runId)) return;
-                if (error?.detail !== 'session_not_found') throw error;
-
-                // Session expired — clear stale pending key and start fresh
-                clearPendingMessage(sessionId);
-                clearPersistedChatSession();
-                flushSync(() => {
-                    resetTypingState();
-                    setChatSessionId(null);
-                    setChatMessages([
-                        { role: 'user', content: message, localId },
-                        { role: 'assistant', pending: true, stage: 'understanding', stageLabel: 'Understanding your question', localId }
-                    ]);
-                });
-                setChatNotice('Previous session expired. Starting a new session…');
-                setTimeout(() => setChatNotice(null), 4000);
-
-                const freshSession = await api.createChatSession(getChatSessionPayload());
-                if (!isActiveChatRun(runId)) return;
-                activeSessionId = freshSession.session_id;
-                setChatSessionId(freshSession.session_id);
-                data = await streamForSession(freshSession.session_id, clientMsgId);
-            }
-
-            if (!isActiveChatRun(runId)) return;
-            if (!data) throw new Error('No response received from server.');
-
-            applyChatResponse(data, message, localId);
-            setChatNotice(null);
-
-            // Clear the in-flight marker — response successfully delivered
-            clearPendingMessage(activeSessionId);
-        } catch (error) {
-            if (!isActiveChatRun(runId)) return;
-            if (error?.detail === 'session_not_found') {
-                clearPersistedChatSession();
-                clearPendingMessage(activeSessionId);
-                setChatSessionId(null);
-                setChatMessages([]);
-                setLlmError('The previous chat session expired. Please send your question again.');
-            } else {
-                // 4xx = definitive server rejection → clear pending
-                // 5xx/network = ambiguous → keep pending so visibilitychange can recover
-                if (error?.status >= 400 && error?.status < 500) {
-                    clearPendingMessage(activeSessionId);
-                    setLlmError('Could not continue chat. Please try again.');
-                    setChatMessages(prev => prev.filter(item => !(item.role === 'assistant' && item.pending)));
-                } else {
-                    setLlmError(null);
-                    setChatNotice('Connection interrupted. We’ll continue when the app reconnects.');
-                    schedulePendingRecovery(activeSessionId, runId, 100);
-                }
-            }
-        } finally {
-            if (activeStreamLocalIdRef.current === localId) activeStreamLocalIdRef.current = null;
-            if (isActiveChatRun(runId)) setLlmLoading(false);
-        }
-    }
-
-    async function handleChatStart(firstQuestion) {
-        const runId = beginChatRun();
-        setLlmLoading(true);
-        setLlmError(null);
-        setChatNotice(null);
-        setChatMessages([]);
-        setChatInput('');
-        setChatInputVisible(false);
-        resetTypingState();
-        clearPersistedChatSession();
-        try {
-            const session = await api.createChatSession(getChatSessionPayload());
-            if (!isActiveChatRun(runId)) return;
-            setChatSessionId(session.session_id);
-            await handleChatSend(session.session_id, firstQuestion, { runId });
-        } catch (error) {
-            if (!isActiveChatRun(runId)) return;
-            setLlmError('Could not start chat. Please try again.');
-        } finally {
-            if (isActiveChatRun(runId)) setLlmLoading(false);
-        }
-    }
 
     // Home page's Swalakshya Khoj card: setQuery + handleSearch race, since
     // handleSearch reads `query` via closure — this waits for the query state
@@ -1176,73 +520,13 @@ const AppContent = () => {
         setPendingHomeSearch(true);
     };
 
+    // Navigates to chat and hands the typed question to ChatPage, which auto-sends
+    // it once mounted (see pendingChatQuestion prop / ChatPage's mount effect) —
+    // ChatPage owns handleChatStart now, so this can't call it directly.
     const handleHomeChatSubmit = (text) => {
         setCurrentPage('chat');
-        handleChatStart(text);
+        setPendingChatQuestion(text);
     };
-
-    async function handleAnswer() {
-        if (!query.trim()) {
-            alert("Please enter a search query.");
-            return;
-        }
-        if (chatEnabled) {
-            await handleChatStart(query);
-            return;
-        }
-        setLlmLoading(true);
-        setLlmError(null);
-        setLlmAnswer(null);
-        setLlmReferences([]);
-
-        const languageCode = language === 'gujarati' ? 'gu' : 'hi';
-        try {
-            const sessionPayload = {
-                language: languageCode,
-                user_id: USER_ID,
-                app: appName,
-                ...(llmProvider ? { provider: llmProvider } : {})
-            };
-            const session = await api.createChatSession(sessionPayload);
-            const data = await api.sendChatMessage(session.session_id, {
-                role: 'user',
-                content: query,
-                response_format: 'structured',
-                filters: buildLlmFilters()
-            });
-            setLlmAnswer(data.answer || '');
-            setLlmReferences(data.references || []);
-            setLlmCitations(data.citations || []);
-            await api.closeChatSession(session.session_id).catch(() => null);
-        } catch (error) {
-            setLlmError('Could not generate answer. Please try again.');
-        } finally {
-            setLlmLoading(false);
-        }
-    }
-
-    const handleEndChat = useCallback(async () => {
-        invalidateChatRuns();
-        if (chatSessionId) {
-            await api.closeChatSession(chatSessionId).catch(() => null);
-        }
-        clearPendingMessage(chatSessionId);
-        setChatSessionId(null);
-        setChatMessages([]);
-        setChatInput('');
-        setChatInputVisible(false);
-        setLlmError(null);
-        setChatNotice(null);
-        setLlmLoading(false);
-        clearRecoveryTimer();
-        resetTypingState();
-        clearPersistedChatSession();
-    }, [chatSessionId, clearPendingMessage, clearPersistedChatSession, clearRecoveryTimer, invalidateChatRuns, resetTypingState]);
-
-    const handleNewChat = useCallback(async () => {
-        await handleEndChat();
-        setQuery('');
-    }, [handleEndChat]);
 
     const handlePravachanSearch = useCallback(async (page = 1) => {
         if (!query.trim()) {
@@ -1399,361 +683,7 @@ const AppContent = () => {
 
     const paginatedSimilarResults = getPaginatedResults(similarDocumentsData?.results, similarDocsPage);
 
-    const showSearchInterface = currentPage === 'aagam-khoj' || (currentPage === 'chat' && llmAvailable);
-
-    const cleanAnswerText = (answerText) => {
-        if (!answerText) return '';
-        return answerText.trim();
-    };
-
-    const shouldCollapseAnswer = (answerText) => {
-        const cleaned = cleanAnswerText(answerText);
-        const lineCount = cleaned.split('\n').filter(Boolean).length;
-        return cleaned.length > 650 || lineCount > 7;
-    };
-
-    const preTokenizeCitations = (answer) => {
-        const blocks = [];
-        const content = (answer || '').replace(/<citation([^>]*)>([\s\S]*?)<\/citation>/g, (match, attrStr, innerText) => {
-            blocks.push({ attrStr, innerText });
-            return `@@CITATION_${blocks.length - 1}@@`;
-        });
-        return { content, citationBlocks: blocks };
-    };
-
-    const formatAnswerHtml = (answerText, preloadedCitationBlocks) => {
-        if (!answerText) return '';
-        let sanitizedAnswer = cleanAnswerText(answerText);
-
-        // Mark detail-prompt phrases BEFORE any tokenization so the marker survives even if the
-        // phrase gets wrapped in *bold* or _italic_ by the backend.
-        // @@BREAK@@ contains no chars that any tokenization regex targets.
-        sanitizedAnswer = sanitizedAnswer.replace(
-            /(If you want I can answer this in detail|अगर आप चाहें तो मैं और विस्तार से उत्तर दे सकता)/g,
-            '@@BREAK@@$1'
-        );
-
-        const headingParts = [];
-        const boldParts = [];
-        const italicParts = [];
-        const citationParts = [];
-        const codeParts = [];
-        const quoteParts = [];
-        const parenParts = [];
-        const citationBlocks = [];
-        const actionLabelParts = [];
-
-        // Step 0: Use pre-tokenized citation blocks if available (avoids raw <citation> tags
-        // appearing mid-render during the typing animation). Otherwise extract inline.
-        if (preloadedCitationBlocks && preloadedCitationBlocks.length > 0) {
-            citationBlocks.push(...preloadedCitationBlocks);
-        } else {
-            sanitizedAnswer = sanitizedAnswer.replace(/<citation([^>]*)>([\s\S]*?)<\/citation>/g, (match, attrStr, innerText) => {
-                citationBlocks.push({ attrStr, innerText });
-                return `@@CITATION_${citationBlocks.length - 1}@@`;
-            });
-        }
-
-        // Step 1: Extract _italic_ FIRST — before any underscore-containing tokens are created,
-        // so the token strings like __CODE_0__ don't get falsely matched by _([^_\n]+?)_
-        sanitizedAnswer = sanitizedAnswer.replace(/_([^_\n]+?)_/g, (match, content) => {
-            italicParts.push(content);
-            return `__ITAL_${italicParts.length - 1}__`;
-        });
-
-        // Step 1.5: Recognize the closed set of known interactive action placeholders.
-        // Must run AFTER italic extraction (see note above) so this token's own underscores
-        // don't get mistaken for _italic_ markers. This is intentionally NOT a general
-        // link/markup mechanism: the action (e.g. "feedback_button") is a fixed, hardcoded
-        // identifier resolved to one specific wired-up click handler below — only the visible
-        // label text is free-form. LLM-generated or indexed-document text can never inject an
-        // arbitrary clickable destination or URL here, only decide what a known button says.
-        sanitizedAnswer = sanitizedAnswer.replace(/\[feedback_button:([^\]]+)\]/g, (match, label) => {
-            actionLabelParts.push(label);
-            return `__ACTION_FEEDBACK_${actionLabelParts.length - 1}__`;
-        });
-
-        // Step 2: Extract ## / ### headings
-        sanitizedAnswer = sanitizedAnswer.replace(/^#{2,3}\s*(.+)$/gm, (match, content) => {
-            headingParts.push(content);
-            return `__HEADING_BOLD_${headingParts.length - 1}__`;
-        });
-
-        // Step 3: Extract standalone *text* lines as bold headings (single asterisk, WhatsApp style)
-        sanitizedAnswer = sanitizedAnswer.replace(/^\s*\*([^*\n]+?)\*\s*$/gm, (match, content) => {
-            headingParts.push(content);
-            return `__HEADING_BOLD_${headingParts.length - 1}__`;
-        });
-
-        // Step 4: Strip triple backticks — render content as plain text (no code styling)
-        sanitizedAnswer = sanitizedAnswer.replace(/```([^`][\s\S]*?)```/g, (match, content) => content);
-
-        // Step 5: Extract single backtick inline code (not preceded/followed by another backtick)
-        sanitizedAnswer = sanitizedAnswer.replace(/(?<!`)`([^`\n]+)`(?!`)/g, (match, content) => {
-            codeParts.push(content);
-            return `__CODE_${codeParts.length - 1}__`;
-        });
-
-        // Step 6: Extract > quote lines (WhatsApp-style citations); trailing (ref) stays inside the quote box
-        // Leading whitespace before > is stripped so indented quote lines still match
-        sanitizedAnswer = sanitizedAnswer.replace(/^\s*>\s*(.+)$/gm, (match, content) => {
-            const refMatch = content.match(/^([\s\S]+?)\s*(\([^)]+\))\s*$/);
-            if (refMatch) {
-                quoteParts.push(refMatch[1]);
-                citationParts.push(refMatch[2]);
-                return `__QUOTCITE_${quoteParts.length - 1}_${citationParts.length - 1}__`;
-            }
-            quoteParts.push(content);
-            return `__QUOT_${quoteParts.length - 1}__`;
-        });
-
-        // Step 7: Extract inline *bold* (single asterisk, WhatsApp style)
-        let text = sanitizedAnswer.replace(/\*([^*\n]+?)\*/g, (match, content) => {
-            boldParts.push(content);
-            return `__BOLD_${boldParts.length - 1}__`;
-        });
-
-        // Step 8: Extract curly-quoted text as italic
-        text = text.replace(/”([^”]+)”/g, (match, content) => {
-            italicParts.push(content);
-            return `__ITAL_${italicParts.length - 1}__`;
-        });
-        text = text.replace(/”([^”]+)”/g, (match, content) => {
-            italicParts.push(content);
-            return `__ITAL_${italicParts.length - 1}__`;
-        });
-
-        // Step 9: Extract parenthesised text for smaller rendering.
-        // Runs after all other tokenizations so (ref) from citations is already gone (__QUOTCITE__ token).
-        // __PAREN__ is placed first in the replacement chain so any inner tokens still get resolved.
-        text = text.replace(/\(([^)\n]+)\)/g, (match, content) => {
-            parenParts.push(content);
-            return `__PAREN_${parenParts.length - 1}__`;
-        });
-
-        const escapeHtml = (value) =>
-            value
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;');
-
-        text = escapeHtml(text);
-
-        // Collapse runs of 3+ newlines down to one blank line (reduces excessive gaps from
-        // verbose LLM output) while preserving a single intentional blank-line paragraph break.
-        text = text.replace(/\n{3,}/g, '\n\n');
-
-        // Split into lines; insert spacing before headings and citation blocks
-        const lines = text.split('\n');
-        const segments = [];
-
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (segments.length > 0) {
-                const lastSegment = segments[segments.length - 1];
-                // Blank line before headings (skip if one is already there from the source text)
-                if (/^__HEADING_BOLD_\d+__$/.test(trimmed) && lastSegment !== '') {
-                    segments.push('');
-                }
-                // Small-gap line before citation blocks (grey quote lines)
-                if (/^__QUOT(?:CITE)?_\d+/.test(trimmed) && lastSegment !== '') {
-                    segments.push('<span style="display:block;height:0"></span>');
-                }
-            }
-            segments.push(line);
-        }
-
-        let html = segments.join('<br/>');
-
-        // A blank line in the source (paragraph break) becomes an empty segment between
-        // two <br/>s, i.e. a full blank TEXT LINE (~1 line-height, ~26px) — much taller
-        // than intended just to separate paragraphs. Replace that specific pattern with a
-        // smaller fixed-height spacer instead of a whole empty line of text.
-        html = html.replace(/<br\/><br\/>/g, '<span style="display:block;height:0.5rem"></span>');
-
-        // __PAREN__ first so any inner tokens (__BOLD__, __ITAL__, etc.) are resolved by subsequent steps
-        html = html.replace(/__PAREN_(\d+)__/g, (match, idx) => {
-            const content = parenParts[Number(idx)] || '';
-            return `<span style="font-size:0.82em">(${escapeHtml(content)})</span>`;
-        });
-
-        html = html.replace(/__HEADING_BOLD_(\d+)__/g, (match, idx) => {
-            const content = headingParts[Number(idx)] || '';
-            return `<strong>${escapeHtml(content)}</strong><hr class="llm-bold-separator"/>`;
-        });
-        html = html.replace(/__BOLD_(\d+)__/g, (match, idx) => {
-            const content = boldParts[Number(idx)] || '';
-            return `<strong>${escapeHtml(content)}</strong>`;
-        });
-        html = html.replace(/__ITAL_(\d+)__/g, (match, idx) => {
-            const content = italicParts[Number(idx)] || '';
-            return `<em>${escapeHtml(content)}</em>`;
-        });
-        html = html.replace(/__QUOTCITE_(\d+)_(\d+)__/g, (match, quoteIdx, citeIdx) => {
-            const content = quoteParts[Number(quoteIdx)] || '';
-            const citation = citationParts[Number(citeIdx)] || '';
-            return `<span class="llm-quote-block">${escapeHtml(content)}<span class="llm-quote-citation">${escapeHtml(citation)}</span></span>`;
-        });
-        html = html.replace(/__QUOT_(\d+)__/g, (match, idx) => {
-            const content = quoteParts[Number(idx)] || '';
-            return `<span class="llm-quote-block">${escapeHtml(content)}</span>`;
-        });
-
-        html = html.replace(/@@CITATION_(\d+)@@/g, (match, idx) => {
-            const block = citationBlocks[Number(idx)];
-            if (!block) return '';
-            const attrs = parseCitationAttrs(block.attrStr);
-            const escapedText = escapeHtml(block.innerText.trim()).replace(/\r?\n/g, '<br/>');
-            const label = buildCitationLabel(attrs);
-            const marker = buildQuoteMetaMarker({ category: attrs.category, file_url: attrs.file_url, pdf_page_number: attrs.pdf_page_number, page_number: attrs.page });
-            const inner = `${escapeHtml(label)}${marker}`;
-            const labelHtml = (label || marker) ? `<span class="llm-quote-citation">${inner}</span>` : '';
-            return `<span class="llm-quote-block">${escapedText}${labelHtml}</span>`;
-        });
-        html = html.replace(/__CITE_(\d+)__/g, (match, idx) => {
-            const content = citationParts[Number(idx)] || '';
-            const escaped = escapeHtml(content);
-            return `<div style="display:block;text-align:right;margin-top:0.1rem"><sub style="font-size:0.65em;color:var(--color-ink-muted);font-style:italic">${escaped}</sub></div>`;
-        });
-        html = html.replace(/__CODE_(\d+)__/g, (match, idx) => {
-            const content = codeParts[Number(idx)] || '';
-            return `<span class="llm-code">${escapeHtml(content)}</span>`;
-        });
-        html = html.replace(/__ACTION_FEEDBACK_(\d+)__/g, (match, idx) => {
-            const label = actionLabelParts[Number(idx)] || 'Feedback';
-            return `<button type="button" data-app-action="feedback" class="text-brand underline decoration-brand underline-offset-2 hover:text-brand-hover transition-colors">${escapeHtml(label)}</button>`;
-        });
-
-        // Change #1: citation divs are display:block so they create their own line break;
-        // remove the extra <br/> the segment join places immediately after </div> to avoid double-spacing.
-        html = html.replace(/<\/div><br\/>/g, '</div>');
-
-        // Resolve detail-prompt break markers inserted before tokenization
-        html = html.replace(/@@BREAK@@/g, '<br/>');
-
-        // Resolve QPDF markers (see buildQuoteMetaMarker) into "| <emoji> Category: X | <emoji> View PDF",
-        // now that escaping is done — the one place both citation paths (embedded
-        // <citation> tags, and {{chunk_id}} quotes) end up rendered.
-        html = html.replace(/\[\[QPDF:([^:\]]*):([^\]]*)\]\]/g, (match, category, encodedUrl) => {
-            const parts = [];
-            if (category) {
-                const meta = getCitationCategoryMeta(category);
-                const emojiSrc = CATEGORY_EMOJI_SRC[category];
-                const emojiHtml = emojiSrc ? `<img src="${emojiSrc}" alt="" class="llm-inline-emoji" />` : '';
-                parts.push(`<span class="llm-quote-meta-item">${emojiHtml}Category: ${escapeHtml(meta.label)}</span>`);
-            }
-            if (encodedUrl) {
-                const pdfUrl = decodeURIComponent(encodedUrl);
-                parts.push(`<a href="${escapeHtml(pdfUrl)}" target="_blank" rel="noopener noreferrer" class="llm-quote-meta-item llm-view-pdf-link"><img src="${documentEmoji}" alt="" class="llm-inline-emoji" />View PDF</a>`);
-            }
-            return parts.length ? ` | ${parts.join(' | ')}` : '';
-        });
-
-        return html;
-    };
-
-    // Delegated click handler for the closed set of action buttons formatAnswerHtml renders
-    // (e.g. data-app-action="feedback"). Needed because dangerouslySetInnerHTML content can't
-    // carry React event handlers directly.
-    const handleAnswerActionClick = (event) => {
-        const target = event.target.closest('[data-app-action]');
-        if (!target) return;
-        const action = target.getAttribute('data-app-action');
-        if (action === 'feedback') {
-            setCurrentPage('feedback');
-        }
-    };
-
-    const buildInlineQuoteLabel = (citation) => {
-        if (!citation) return '';
-        const parts = [citation.granth];
-        if (citation.category === 'Pravachan') {
-            if (citation.series) parts.push(citation.series);
-            if (citation.volume != null && citation.volume !== '') parts.push(`Vol ${citation.volume}`);
-        } else {
-            // Granth / Books: author + verse locators
-            if (citation.author) parts.push(citation.author);
-            const verseLocators = [
-                citation.gatha   && `Gatha ${citation.gatha}`,
-                citation.shlok   && `Shlok ${citation.shlok}`,
-                citation.kalash  && `Kalash ${citation.kalash}`,
-                // citations use "dohra", chunk_labels use "doha" — handle both
-                (citation.dohra || citation.doha) && `Doha ${citation.dohra || citation.doha}`,
-                citation.kavya   && `Kavya ${citation.kavya}`,
-                citation.sutra   && `Sutra ${citation.sutra}`,
-            ].filter(Boolean);
-            parts.push(...verseLocators);
-        }
-        if (citation.page_number != null && citation.page_number !== '') parts.push(`पृष्ठ ${citation.page_number}`);
-        return parts.filter(Boolean).join(', ');
-    };
-
-    // [[QPDF:category:url-encoded-pdf-url]] -- an inert marker carrying a quote's
-    // category + PDF link through the whole tokenize/escape pipeline, resolved into a
-    // real badge + "View PDF" link at the very end of formatAnswerHtml. Used by both
-    // citation paths (this chunk-quote path, and the <citation> tag path in
-    // formatAnswerHtml) so there's one single place that turns "category + url" into
-    // markup. Bracket-delimited rather than space-delimited -- a space-based version of
-    // this marker was silently losing its surrounding spaces somewhere in the pipeline
-    // (never root-caused), so this uses characters no realistic answer text or
-    // encodeURIComponent output can produce, no whitespace involved at all.
-    const buildQuoteMetaMarker = (source) => {
-        const pdfUrl = buildReferencePdfUrl(source?.file_url, source?.pdf_page_number, source?.page_number);
-        if (!source?.category && !pdfUrl) return '';
-        return `[[QPDF:${source?.category || ''}:${pdfUrl ? encodeURIComponent(pdfUrl) : ''}]]`;
-    };
-
-    const resolveChunkQuotes = (text, citations, chunkTexts) => {
-        if (!text || !chunkTexts) return text;
-        return text.replace(/^(\s*>\s*)\{\{([^}]+)\}\}\s*$/gm, (match, prefix, chunkId) => {
-            const chunkData = chunkTexts[chunkId];
-            if (!chunkData?.text_content) return match;
-            const source = (citations || []).find(c => c.chunk_id === chunkId) || chunkData;
-            const label = buildInlineQuoteLabel(source);
-            const marker = buildQuoteMetaMarker(source);
-            const inner = [label, marker].filter(Boolean).join('');
-            return `${prefix}${chunkData.text_content}${inner ? ` (${inner})` : ''}`;
-        });
-    };
-
-    const parseReference = (ref) => {
-        const withoutFileUrl = ref.replace(/file_url\s*:\s*/i, '').trim();
-        const urlMatch = withoutFileUrl.match(/https?:\/\/\S+/);
-        let text = withoutFileUrl
-            .replace(urlMatch?.[0] || '', '')
-            .trim()
-            .replace(/[-–—\s]+$/, '');
-        text = text.replace(/((?:Page|पृष्ठ)\s*\d+)\s*[^-–—\s]*$/i, '$1');
-        text = text.replace(/[),.।;:]+$/g, '').trim();
-        return {
-            text,
-            url: urlMatch ? urlMatch[0] : null
-        };
-    };
-
-    const buildReferencePdfUrl = (fileUrl, pdfPageNumber, fallbackPageNumber) => {
-        const url = String(fileUrl || '').trim();
-        const page = Number(pdfPageNumber ?? fallbackPageNumber);
-        if (!url) return null;
-        if (!Number.isFinite(page) || page <= 0) return url;
-        return url.endsWith(`/${page}`) ? url : `${url}/${page}`;
-    };
-
-    // Each content category gets a distinct token-driven badge variant (not a literal
-    // color), so this stays correct under any of the 6 candidate palettes / dark mode.
-    // Used to badge inline quote citations — see the QPDF marker in formatAnswerHtml.
-    const getCitationCategoryMeta = (category) => {
-        switch (category) {
-            case 'Pravachan':
-                return { label: 'Pravachan', variant: 'info' };
-            case 'Granth':
-                return { label: 'Granth', variant: 'brand' };
-            case 'Books':
-                return { label: 'Books', variant: 'success' };
-            default:
-                return { label: 'Reference', variant: 'neutral' };
-        }
-    };
+    const showSearchInterface = currentPage === 'aagam-khoj';
 
     return (
         <div style={{ backgroundColor: 'var(--color-bg)', '--bg-card': 'var(--color-surface)', '--bg-surface': 'var(--color-bg)' }} className="text-ink min-h-screen font-sans grid grid-cols-[auto_1fr] grid-rows-[auto_1fr]">
@@ -1809,9 +739,11 @@ const AppContent = () => {
                 chatMode={currentPage === 'chat'}
                 currentPage={currentPage}
                 setCurrentPage={setCurrentPage}
-                onNewChat={handleNewChat}
+                onNewChat={() => chatPageRef.current?.startNewChat()}
                 mobileOpen={sidebarMobileOpen}
                 onCloseMobile={() => setSidebarMobileOpen(false)}
+                answerFormat={answerFormat}
+                onSaveAnswerFormat={handleSaveAnswerFormat}
             />
 
             <div className="flex flex-col min-w-0 col-start-2 row-start-2">
@@ -1826,13 +758,30 @@ const AppContent = () => {
                         </main>
                     )}
 
+                    {currentPage === 'chat' && llmAvailable && (
+                        <main>
+                            <ChatPage
+                                ref={chatPageRef}
+                                answerFormat={answerFormat}
+                                language={language}
+                                appName={appName}
+                                activeCategories={activeCategories}
+                                debugMode={debugMode}
+                                activeFilters={activeFilters}
+                                startYear={startYear}
+                                endYear={endYear}
+                                query={query}
+                                setQuery={setQuery}
+                                pendingChatQuestion={pendingChatQuestion}
+                                onPendingChatQuestionConsumed={() => setPendingChatQuestion(null)}
+                                onNavigateFeedback={() => setCurrentPage('feedback')}
+                            />
+                        </main>
+                    )}
+
                     {showSearchInterface && (
                         <main>
-
-                            {/* ── SEARCH MODE ── */}
-                            {!isChatMode && (
-                                <>
-                                    <PageHeader
+                            <PageHeader
                                         variant="hero"
                                         title="Swalakshya Khoj"
                                         subtitle="Explore and search across the Jain literature comprising authentic Digambar Jain Scriptures, Pravachans of Pujya Gurudevshri Kanji Swami, and literature by contemporary Jain scholars."
@@ -1895,7 +844,6 @@ const AppContent = () => {
                                                         endYear={endYear}
                                                         setEndYear={setEndYear}
                                                         activeCategories={activeCategories}
-                                                        onFilterModalOpenChange={setFilterModalOpen}
                                                     />
                                                     <SearchOptions language={language} setLanguage={setLanguage} />
                                                     <AdvancedSearch
@@ -1911,62 +859,7 @@ const AppContent = () => {
                                         )}
                                     </div>
 
-                                    {homeMode && llmAvailable && (llmAnswer || llmError || llmLoading) && (
-                                        <div className="card p-4 shadow-sm mb-4">
-                                            <div className="flex items-center justify-between mb-3">
-                                                <h3 className="text-lg font-semibold text-ink">Answer</h3>
-                                                {llmLoading && (
-                                                    <div className="flex items-center text-sm text-ink-muted">
-                                                        <img src="/images/swalakshya.png" className="h-5 w-5 animate-pulse rounded-full mr-2" alt="" />
-                                                        Generating...
-                                                    </div>
-                                                )}
-                                            </div>
-                                            {llmError && <div className="text-sm" style={{ color: 'var(--color-danger)' }}>{llmError}</div>}
-                                            {(llmAnswer || llmReferences.length > 0) && (
-                                                <div className="llm-answer-scroll">
-                                                    {llmAnswer && (
-                                                        <div className="text-ink leading-relaxed text-base"
-                                                            onClick={handleAnswerActionClick}
-                                                            dangerouslySetInnerHTML={{ __html: formatAnswerHtml(llmAnswer) }} />
-                                                    )}
-                                                    {llmReferences.length > 0 && (
-                                                        <div className="mt-4 pt-3" style={{ borderTop: '1px solid var(--color-border)' }}>
-                                                            <h4 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-2">References</h4>
-                                                            <div className="space-y-2">
-                                                                {llmReferences.map((ref, idx) => {
-                                                                    const { text, url } = parseReference(ref);
-                                                                    const citation = llmCitations.find(c => c.reference === ref);
-                                                                    return (
-                                                                        <div key={`${ref}-${idx}`} className="flex items-center justify-between gap-3 text-sm text-ink">
-                                                                            <span className="flex-1">{text || ref}</span>
-                                                                            <div className="flex items-center gap-2 whitespace-nowrap">
-                                                                                {citation && (
-                                                                                    <button onClick={() => handleExpand(citation.chunk_id)}
-                                                                                        className="text-ink-muted hover:text-ink font-medium underline underline-offset-2">
-                                                                                        View text
-                                                                                    </button>
-                                                                                )}
-                                                                                {url && (
-                                                                                    <a href={url} target="_blank" rel="noopener noreferrer"
-                                                                                        className="btn btn-secondary inline-flex items-center gap-1 text-sm py-1 px-2"
-                                                                                        style={{ color: 'var(--color-danger)' }}>
-                                                                                        <PdfIcon />View PDF
-                                                                                    </a>
-                                                                                )}
-                                                                            </div>
-                                                                        </div>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {homeMode && (isLoading || searchData || similarDocumentsData) && (
+                                    {(isLoading || searchData || similarDocumentsData) && (
                                         <div className="mt-4">
                                             <SuggestionsCard
                                                 suggestions={searchData?.suggestions}
@@ -2000,7 +893,7 @@ const AppContent = () => {
                                                 <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
                                                 <span><strong>Note:</strong> Text from Pravachans and Granths is extracted via OCR and results are ranked by AI — both may contain errors. For <strong>accurate reference</strong>, please use the <strong>original PDFs</strong> linked alongside each result.</span>
                                             </div>
-                                            <div className="card overflow-hidden">
+                                            <div className="card overflow-hidden" ref={resultsPanelRef}>
                                                 <Tabs activeTab={activeTab} setActiveTab={setActiveTab} searchData={searchData}
                                                     similarDocumentsData={similarDocumentsData} onClearSimilar={handleClearSimilar}
                                                     loadingCategories={loadingCategories} activeCategories={activeCategories}
@@ -2050,7 +943,7 @@ const AppContent = () => {
                                         </div>
                                     )}
 
-                                    {homeMode && !isLoading && !searchData && !similarDocumentsData && (
+                                    {!isLoading && !searchData && !similarDocumentsData && (
                                         <div className="mt-5">
                                             <p className="text-xs text-ink-muted uppercase tracking-wider mb-2.5 font-medium">Try searching for</p>
                                             <div className="flex flex-wrap gap-2">
@@ -2063,221 +956,6 @@ const AppContent = () => {
                                             </div>
                                         </div>
                                     )}
-                                </>
-                            )}
-
-                            {/* ── CHAT MODE ── */}
-                            {isChatMode && llmAvailable && (
-                                <>
-                                    {/* Empty state — centered search bar */}
-                                    {chatMessages.length === 0 && !llmLoading && (
-                                        <div className="flex flex-col items-center justify-center pb-14">
-                                            <div className="w-full max-w-4xl space-y-2">
-                                                <PageHeader
-                                                    variant="hero"
-                                                    title="Swalakshya AI"
-                                                    subtitle="Get your questions answered through authentic Jain Scriptures and teachings of Pujya Gurudevshri Kanji Swami"
-                                                />
-                                                <ChatComposer
-                                                    query={query}
-                                                    setQuery={setQuery}
-                                                    onSend={() => query.trim() && handleChatStart(query)}
-                                                    language={language}
-                                                    activeCategories={activeCategories}
-                                                    debugMode={debugMode}
-                                                    chatContentTypes={chatContentTypes}
-                                                    setChatContentTypes={setChatContentTypes}
-                                                    showDisclaimer={false}
-                                                />
-                                                <div className="w-full pt-8">
-                                                    <div className="flex items-center gap-3 mb-3">
-                                                        <div className="flex-1 h-px" style={{ backgroundColor: 'var(--color-border)' }} />
-                                                        <p className="text-xs text-ink-muted uppercase tracking-wider font-medium whitespace-nowrap">Try asking</p>
-                                                        <div className="flex-1 h-px" style={{ backgroundColor: 'var(--color-border)' }} />
-                                                    </div>
-                                                    <div className="flex flex-wrap items-center gap-2 justify-center">
-                                                        {suggestedQueries.map(term => (
-                                                            <button key={term} onClick={() => handleChatStart(term)}
-                                                                className="chip-quiet inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded transition-colors">
-                                                                <Sparkles size={13} style={{ color: 'var(--color-brand)' }} />
-                                                                {term}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                                <div className="w-full pt-6">
-                                                    <StatsStrip />
-                                                </div>
-                                                <div className="w-full pt-1">
-                                                    <AiDisclaimer />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Active chat state */}
-                                    {(chatMessages.length > 0 || llmLoading) && (
-                                        <div className="flex flex-col max-w-4xl mx-auto w-full min-h-[calc(100vh-240px)]">
-                                            {/* Messages */}
-                                            <div className="flex-1 py-4 space-y-6">
-                                                {(() => {
-                                                    const lastUserMsg = [...chatMessages].reverse().find(m => m.role === 'user');
-                                                    return chatMessages.map((msg, idx) => {
-                                                    const key = msg.localId ?? idx;
-                                                    const isLastUser = msg.role === 'user' && msg === lastUserMsg;
-                                                    const isStreaming = msg.role === 'assistant' && (
-                                                        msg.pending || (
-                                                            displayedTexts[key] !== undefined &&
-                                                            displayedTexts[key] !== cleanAnswerText(msg.content)
-                                                        )
-                                                    );
-                                                    return (
-                                                    <div key={msg.localId ? `${msg.role}-${msg.localId}` : `${msg.role}-${idx}`}>
-                                                        {msg.role === 'user' ? (
-                                                            <div ref={isLastUser ? latestUserBubbleRef : null} className="flex justify-end">
-                                                                <div className="shadow-sm rounded-lg rounded-tr-none px-4 py-2.5 max-w-[65%] text-white text-base" style={{ backgroundColor: 'var(--color-brand)' }}>
-                                                                    {msg.content}
-                                                                </div>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="aibot-assistant-enter pt-2">
-                                                                <div className="flex items-start gap-3">
-                                                                <img
-                                                                    src="/images/swalakshya.png"
-                                                                    className={`h-6 w-6 rounded-full shrink-0 mt-0.5 ${isStreaming ? 'animate-pulse' : ''}`}
-                                                                    alt=""
-                                                                />
-                                                                <div className="flex-1">
-                                                                {msg.pending ? (
-                                                                    <div className="flex items-center text-sm text-ink-muted gap-2">
-                                                                        <span>{msg.stageLabel || 'Preparing answer'}</span>
-                                                                        <span className="flex items-center text-brand" aria-hidden="true">
-                                                                            <span className="inline-block animate-bounce">.</span>
-                                                                            <span className="inline-block animate-bounce" style={{ animationDelay: '0.15s' }}>.</span>
-                                                                            <span className="inline-block animate-bounce" style={{ animationDelay: '0.3s' }}>.</span>
-                                                                        </span>
-                                                                    </div>
-                                                                ) : (
-                                                                    <>
-                                                                        <div className="flex items-start justify-between gap-3 mb-3 max-w-[860px]">
-                                                                            <div>
-                                                                                <div className="text-sm font-bold uppercase tracking-[0.12em] text-ink">Answer</div>
-                                                                            </div>
-                                                                        </div>
-                                                                        <div className="max-w-[860px]">
-                                                                            <div className={`text-ink leading-relaxed text-base ${displayedTexts[key] === cleanAnswerText(msg.content) && shouldCollapseAnswer(msg.content) && expandedAnswers[key] === false ? 'max-h-72 overflow-hidden' : ''}`}
-                                                                                onClick={handleAnswerActionClick}
-                                                                                dangerouslySetInnerHTML={{ __html: formatAnswerHtml(
-                                                                                    resolveChunkQuotes(
-                                                                                        displayedTexts[key] !== undefined ? displayedTexts[key] : msg.content || '',
-                                                                                        msg.citations,
-                                                                                        chunkTextsCache
-                                                                                    ),
-                                                                                    msg.citationBlocks
-                                                                                )}} />
-                                                                            {displayedTexts[key] === cleanAnswerText(msg.content) && shouldCollapseAnswer(msg.content) && (
-                                                                                <button
-                                                                                    onClick={() => setExpandedAnswers(prev => ({ ...prev, [key]: prev[key] === false }))}
-                                                                                    className="mt-6 inline-flex items-center gap-1 text-sm font-medium text-brand hover:text-brand-hover transition-colors"
-                                                                                >
-                                                                                    {expandedAnswers[key] === false ? 'Show more' : 'Show less'}
-                                                                                </button>
-                                                                            )}
-                                                                        </div>
-                                                                        {displayedTexts[key] === cleanAnswerText(msg.content) && msg.follow_up_questions && msg.follow_up_questions.length > 0 && (
-                                                                            <div className="mt-6 w-full max-w-[860px]">
-                                                                                <p className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide mb-2.5 text-ink">
-                                                                                    <img src={bulbEmoji} alt="" className="w-4 h-4" />
-                                                                                    Suggested Follow Up Questions
-                                                                                </p>
-                                                                                <div className="flex flex-wrap gap-2">
-                                                                                    {msg.follow_up_questions.map((question, questionIdx) => (
-                                                                                        <button
-                                                                                            key={`${idx}-follow-up-${questionIdx}`}
-                                                                                            onClick={() => handleChatSend(chatSessionId, question)}
-                                                                                            disabled={llmLoading || !chatSessionId}
-                                                                                            className="suggestion-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                                                        >
-                                                                                            <Sparkles size={13} style={{ color: 'var(--color-brand)' }} />
-                                                                                            {question}
-                                                                                        </button>
-                                                                                    ))}
-                                                                                </div>
-                                                                            </div>
-                                                                        )}
-                                                                        {displayedTexts[key] === cleanAnswerText(msg.content) && msg.content && (
-                                                                            <div className="mt-3 w-full max-w-[860px] flex items-center flex-wrap gap-2">
-                                                                                <ShareAnswerButtons question={chatMessages[idx - 1]?.content} answer={cleanAnswerText(msg.content)} citationBlocks={msg.citationBlocks} />
-                                                                                {msg.question && (
-                                                                                    <FeedbackButtons
-                                                                                        requestId={msg.tool_trace_id}
-                                                                                        question={msg.question || ''}
-                                                                                        answer={msg.rawAnswer || cleanAnswerText(msg.content)}
-                                                                                        references={msg.references}
-                                                                                        citations={msg.citations}
-                                                                                        followUpQuestions={msg.follow_up_questions}
-                                                                                    />
-                                                                                )}
-                                                                            </div>
-                                                                        )}
-                                                                    </>
-                                                                )}
-                                                                </div>
-                                                                </div>{/* flex items-start gap-3 */}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                    );
-                                                });
-                                                })()}
-                                                {llmError && <div className="text-sm" style={{ color: 'var(--color-danger)' }}>{llmError}</div>}
-                                                <div ref={messagesEndRef} />
-                                                {/* Spacer while loading so the new user bubble can always reach the top of the viewport */}
-                                                {llmLoading && <div style={{ height: '70vh', flexShrink: 0 }} aria-hidden="true" />}
-                                            </div>
-
-                                            {/* Scroll-to-bottom arrow */}
-                                            {showScrollDown && (
-                                                <button
-                                                    onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
-                                                    className="btn btn-primary fixed bottom-28 left-1/2 -translate-x-1/2 z-40 h-9 w-9 rounded-full p-0 shadow-lg"
-                                                    aria-label="Scroll to bottom"
-                                                >
-                                                    <ChevronDown size={16} strokeWidth={2.5} />
-                                                </button>
-                                            )}
-
-                                            {/* Sticky bottom input */}
-                                            <div className="sticky bottom-0 mt-auto pt-3 pb-4 shrink-0" style={{ backgroundColor: 'var(--color-bg)' }}>
-                                                {chatNotice && (
-                                                    <div className="flex justify-center mb-2">
-                                                        <span
-                                                            className="badge badge-warning animate-fade-in"
-                                                            style={{ fontSize: '11px', padding: '0.25rem 0.75rem' }}
-                                                        >
-                                                            {chatNotice}
-                                                        </span>
-                                                    </div>
-                                                )}
-                                                <ChatComposer
-                                                    query={chatInput}
-                                                    setQuery={setChatInput}
-                                                    onSend={() => chatInput.trim() && !llmLoading && handleChatSend(chatSessionId, chatInput)}
-                                                    language={language}
-                                                    disabled={llmLoading || hasPendingChatMessage}
-                                                    loading={llmLoading}
-                                                    activeCategories={activeCategories}
-                                                    debugMode={debugMode}
-                                                    chatContentTypes={chatContentTypes}
-                                                    setChatContentTypes={setChatContentTypes}
-                                                    compact
-                                                    placeholder="Ask a follow-up question..."
-                                                />
-                                            </div>
-                                        </div>
-                                    )}
-                                </>
-                            )}
                         </main>
                     )}
 
@@ -2341,9 +1019,10 @@ const AppContent = () => {
                 {currentPage !== 'eval' && <Footer />}
             </div>
 
-            {/* Mobile Navigation Buttons - Only visible on mobile, hidden while a filter modal is open
-                so they don't collide with the modal's Apply button (both are fixed to the same corner). */}
-            {currentPage !== 'feedback' && !filterModalOpen && (
+            {/* Mobile Navigation Buttons - Only visible on mobile, hidden while any overlay
+                (filter sheet, modal, PDF viewer, drawer, ...) is open so they don't collide
+                with it — see useAnyOverlayOpen / useOverlayBehavior for the shared mechanism. */}
+            {currentPage !== 'feedback' && !anyOverlayOpen && (
                 <button
                     onClick={() => setCurrentPage('feedback')}
                     className="btn btn-primary md:hidden fixed bottom-6 right-6 p-3 rounded-full shadow-lg z-50"
@@ -2353,7 +1032,7 @@ const AppContent = () => {
                 </button>
             )}
 
-            {currentPage !== 'home' && !filterModalOpen && (
+            {currentPage !== 'home' && !anyOverlayOpen && (
                 <button
                     onClick={() => setCurrentPage('home')}
                     className="btn btn-secondary md:hidden fixed bottom-6 left-6 p-3 rounded-full shadow-lg z-50"

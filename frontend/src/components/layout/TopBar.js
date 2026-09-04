@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ChevronDown, Menu, Moon, Sun, User } from 'lucide-react';
-import { useTheme } from '../../theme/ThemeContext';
+import { ChevronDown, Menu, User } from 'lucide-react';
 import { NAV_ITEMS, NAV_DROPDOWN_LABEL, NAV_DROPDOWN_ITEMS, NAV_TAIL_ITEMS } from './navItems';
 
 const linkClass = 'px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap';
@@ -83,7 +82,6 @@ function NavigateDropdown({ isActive, onNavigate }) {
 
 export default function TopBar({ currentPage, setCurrentPage, onOpenMobileSidebar }) {
     const location = useLocation();
-    const { mode, toggleMode } = useTheme();
 
     const isActive = (item) => {
         if (item.id === 'home') return location.pathname === '/' && currentPage === item.id;
@@ -149,14 +147,6 @@ export default function TopBar({ currentPage, setCurrentPage, onOpenMobileSideba
                     </nav>
 
                     <div className="flex items-center gap-3 ml-auto shrink-0">
-                        <button
-                            onClick={toggleMode}
-                            className="w-8 h-8 rounded-full flex items-center justify-center text-ink-muted hover:text-ink"
-                            style={{ backgroundColor: 'var(--color-bg)' }}
-                            title="Toggle light/dark"
-                        >
-                            {mode === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-                        </button>
                         <div
                             className="w-8 h-8 rounded-full flex items-center justify-center"
                             style={{ backgroundColor: 'var(--color-bg)' }}

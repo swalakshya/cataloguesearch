@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { PanelLeftClose, PanelLeftOpen, Plus, User, X } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, Plus, Settings, User, X } from 'lucide-react';
 import { useOverlayBehavior } from '../ui/Modal';
 import { ALL_NAV_ITEMS } from './navItems';
+import SettingsModal from '../settings/SettingsModal';
 import swalakshyaMark from '../../assets/swalakshya-mark.png';
 
 const COLLAPSE_KEY = 'sidebar_collapsed';
@@ -61,7 +62,7 @@ function MobileNavLinks({ currentPage, setCurrentPage, onNavigate }) {
     );
 }
 
-function SidebarContent({ collapsed, onToggleCollapse, closeButton, onNewChat, navLinks }) {
+function SidebarContent({ collapsed, onToggleCollapse, closeButton, onNewChat, navLinks, onOpenSettings }) {
     return (
         <div
             className="flex flex-col h-full"
@@ -114,6 +115,14 @@ function SidebarContent({ collapsed, onToggleCollapse, closeButton, onNewChat, n
                     <User size={16} className="text-ink-muted" />
                 </div>
                 {!collapsed && <span className="text-sm text-ink flex-1 truncate">Guest</span>}
+                <button
+                    onClick={onOpenSettings}
+                    className="p-1.5 rounded-md text-ink-muted hover:text-ink hover:bg-bg shrink-0"
+                    title="Settings"
+                    aria-label="Settings"
+                >
+                    <Settings size={20} />
+                </button>
             </div>
         </div>
     );
@@ -124,10 +133,11 @@ function SidebarContent({ collapsed, onToggleCollapse, closeButton, onNewChat, n
 // chatMode (backdrop + Escape-to-close, sharing the same overlay behavior as
 // Modal) — this is the only way to reach the nav links below the `lg`
 // breakpoint, since TopBar's own link row is desktop-only.
-export default function Sidebar({ chatMode, currentPage, setCurrentPage, onNewChat, mobileOpen, onCloseMobile }) {
+export default function Sidebar({ chatMode, currentPage, setCurrentPage, onNewChat, mobileOpen, onCloseMobile, answerFormat, onSaveAnswerFormat }) {
     const [collapsed, setCollapsed] = useState(() => {
         try { return localStorage.getItem(COLLAPSE_KEY) === '1'; } catch { return false; }
     });
+    const [showSettings, setShowSettings] = useState(false);
 
     useOverlayBehavior(mobileOpen, onCloseMobile);
 
@@ -155,6 +165,7 @@ export default function Sidebar({ chatMode, currentPage, setCurrentPage, onNewCh
                         collapsed={collapsed}
                         onToggleCollapse={toggleCollapsed}
                         onNewChat={onNewChat}
+                        onOpenSettings={() => setShowSettings(true)}
                     />
                 </div>
             )}
@@ -171,6 +182,7 @@ export default function Sidebar({ chatMode, currentPage, setCurrentPage, onNewCh
                         <SidebarContent
                             collapsed={false}
                             onNewChat={() => { onNewChat(); onCloseMobile(); }}
+                            onOpenSettings={() => setShowSettings(true)}
                             closeButton={(
                                 <button onClick={onCloseMobile} className="p-1.5 rounded-md text-ink-muted hover:text-ink hover:bg-bg">
                                     <X size={18} />
@@ -187,6 +199,13 @@ export default function Sidebar({ chatMode, currentPage, setCurrentPage, onNewCh
                     </div>
                 </div>
             )}
+
+            <SettingsModal
+                open={showSettings}
+                onClose={() => setShowSettings(false)}
+                answerFormat={answerFormat}
+                onSaveAnswerFormat={onSaveAnswerFormat}
+            />
         </>
     );
 }

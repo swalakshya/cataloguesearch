@@ -4,7 +4,6 @@ import './index.css';
 import App from './App'; // This imports your main App.js component
 import reportWebVitals from './reportWebVitals';
 import { ThemeProvider } from './theme/ThemeContext';
-import PaletteSwitcher from './theme/PaletteSwitcher';
 
 // This finds the <div id="root"></div> in your public/index.html file
 const root = ReactDOM.createRoot(document.getElementById('root'));
@@ -14,7 +13,6 @@ root.render(
   <React.StrictMode>
     <ThemeProvider>
       <App />
-      {process.env.NODE_ENV === 'development' && <PaletteSwitcher />}
     </ThemeProvider>
   </React.StrictMode>
 );
