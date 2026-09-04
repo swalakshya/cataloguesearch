@@ -1871,11 +1871,12 @@ const AppContent = () => {
                                             </button>
                                             <button
                                                 onClick={() => setShowTipsModal(true)}
-                                                className="flex items-center text-brand font-semibold hover:text-brand-hover text-sm"
-                                                aria-label="Show search tips"
+                                                className="flex items-center text-brand font-semibold hover:text-brand-hover text-sm whitespace-nowrap"
+                                                aria-label="Tips for writing good queries"
                                             >
                                                 <ExpandIcon />
-                                                Tips for writing good queries
+                                                <span className="hidden sm:inline">Tips for writing good queries</span>
+                                                <span className="sm:hidden">Tips</span>
                                             </button>
                                         </div>
                                         {showFilters && (

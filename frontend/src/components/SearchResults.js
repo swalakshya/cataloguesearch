@@ -6,6 +6,10 @@ import { CATEGORY_EMOJI_SRC } from './chat/categoryEmoji';
 
 // --- SEARCH RESULTS COMPONENTS ---
 
+// Hides the "Similar" action button (product decision, 2026-09-04) without
+// deleting the find-similar feature it drives -- flip back to true to restore it.
+const SHOW_SIMILAR_BUTTON = false;
+
 const highlightSnippet = (content, extraClass = '') =>
     ({ __html: (content || '').replace(/<em>/g, `<mark class="search-highlight ${extraClass}">`).replace(/<\/em>/g, '</mark>') });
 
@@ -145,8 +149,10 @@ export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, re
 
     return (
         <div className={cardClasses}>
-            {/* Single header row: metadata left, actions right */}
-            <div className="flex items-center gap-2 pb-2 mb-2 border-b border-border">
+            {/* Metadata + actions: side by side from `sm` up; stacked (actions full-width below
+                metadata) below it -- plain flex-wrap doesn't work here since metadata's flex-1
+                would just shrink to share the line instead of dropping to its own row. */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 pb-2 mb-2 border-b border-border">
                 {/* Metadata */}
                 <div className="flex flex-wrap gap-x-2 gap-y-0.5 items-baseline flex-1 min-w-0">
                     {result.metadata?.Name && <span className="text-ink font-semibold text-[0.8rem]">{result.metadata.Name}</span>}
@@ -213,7 +219,7 @@ export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, re
                     <button onClick={handleExpandClick} className="result-action">
                         <ExpandIcon />Expand
                     </button>
-                    {resultType !== 'granth' && (
+                    {SHOW_SIMILAR_BUTTON && resultType !== 'granth' && (
                         <button onClick={() => onFindSimilar(result)} className="result-action">
                             <SimilarIcon />Similar
                         </button>
@@ -245,18 +251,35 @@ const TabSpinner = () => (
     </svg>
 );
 
+// 1000 -> "1k", 12500 -> "12.5k" -- counts under 1000 are shown in full. Only
+// ever applied to the tab-bar count, which just needs to read as "a lot", not
+// be exact (the exact number is on the results themselves).
+const formatCount = (count) => {
+    const n = Number(count);
+    if (!Number.isFinite(n) || n < 1000) return String(count);
+    const thousands = n / 1000;
+    return `${thousands % 1 === 0 ? thousands : thousands.toFixed(1)}k`;
+};
+
 const CategoryTabButton = ({ active, isLoading, onClick, emojiSrc, label, count }) => (
     <button
         onClick={onClick}
-        className="flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors"
+        className="flex items-center gap-1 px-2 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors"
         style={{
             borderColor: active ? 'var(--color-brand)' : 'transparent',
             color: isLoading ? 'var(--color-ink-muted)' : active ? 'var(--color-brand)' : 'var(--color-ink)',
         }}
     >
         {isLoading ? <TabSpinner /> : <img src={emojiSrc} alt="" className="w-4 h-4" />}
-        {label}
-        <Badge variant={active ? 'brand' : 'neutral'}>{isLoading ? '…' : count}</Badge>
+        {/* Inactive tabs drop their text label on narrow screens -- emoji + count
+            is enough to identify them, and it keeps the row from wrapping as
+            often. The active tab always keeps its label, on every width. */}
+        <span className={active ? '' : 'hidden sm:inline'}>{label}</span>
+        {/* Plain text, not a pill -- the badge treatment was the single biggest
+            space cost in this row across three tabs. */}
+        <span className={`text-xs font-semibold ${active ? 'text-brand' : 'text-ink-muted'}`}>
+            {isLoading ? '…' : formatCount(count)}
+        </span>
     </button>
 );
 
@@ -293,7 +316,7 @@ export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData
     const showExport = activeTabState && !activeTabState.loading && activeTabState.count > 0;
 
     return (
-        <div className="flex items-center border-b border-border bg-surface px-3 rounded-t">
+        <div className="flex flex-wrap items-center border-b border-border bg-surface px-3 rounded-t">
             {showPravachan && (
                 <CategoryTabButton
                     active={activeTab === 'pravachan'}
@@ -327,7 +350,7 @@ export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData
             {similarDocumentsData && (
                 <button
                     onClick={() => setActiveTab('similar')}
-                    className="flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors"
+                    className="flex items-center gap-1 px-2 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors"
                     style={{
                         borderColor: activeTab === 'similar' ? 'var(--color-brand)' : 'transparent',
                         color: activeTab === 'similar' ? 'var(--color-brand)' : 'var(--color-ink)',
@@ -344,8 +367,8 @@ export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData
                 </button>
             )}
             {showExport && (
-                <button onClick={() => onExportClick(EXPORT_CATEGORY_BY_TAB[activeTab])} className="result-action ml-auto">
-                    <DownloadIcon />Export PDF
+                <button onClick={() => onExportClick(EXPORT_CATEGORY_BY_TAB[activeTab])} className="result-action ml-auto" title="Export as PDF">
+                    <DownloadIcon />PDF
                 </button>
             )}
         </div>

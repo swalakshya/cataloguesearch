@@ -1350,7 +1350,7 @@ export const SearchFilters = ({
         <div className="space-y-2 min-w-0">
             <p className="text-xs text-ink font-semibold uppercase tracking-wide">Refine search</p>
 
-            <div className="flex gap-1.5">
+            <div className="flex flex-wrap gap-1 sm:gap-1.5">
                 {activeCategories.includes('Pravachan') && (
                     <PravachanFilter
                         allMetadata={allMetadata}
