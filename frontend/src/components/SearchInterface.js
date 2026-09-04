@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, ChevronLeft, X, Check, Info } from 'lucide-r
 import TransliterationInput from './TransliterationInput';
 import { Badge, Button, Input } from './ui';
 import { CATEGORY_EMOJI_SRC } from './chat/categoryEmoji';
+import { useRegisterOverlay } from '../hooks/useOverlayRegistry';
 
 // --- UTILITY FUNCTIONS ---
 const parseYear = (dateString) => {
@@ -1329,19 +1330,17 @@ export const SearchFilters = ({
     // that has no filter when only the other is narrowed) — used here just to show
     // the disabled state; setContentTypes itself isn't called from this component.
     contentTypes, setContentTypes,
-    onFilterModalOpenChange,
 }) => {
     const hasYearFilter = startYear || endYear;
     const hasAnyFilter  = activeFilters.length > 0 || hasYearFilter;
 
     // Pravachan, Granth and Books each own their modal's open state independently —
-    // combine them so the parent only needs a single "is any filter modal open" signal.
+    // combine them into the shared overlay registry so the mobile Home/Feedback
+    // FABs (and anything else that cares) see one "is any overlay open" signal.
     const [pravachanOpen, setPravachanOpen] = useState(false);
     const [granthOpen, setGranthOpen]       = useState(false);
     const [booksOpen, setBooksOpen]         = useState(false);
-    useEffect(() => {
-        onFilterModalOpenChange?.(pravachanOpen || granthOpen || booksOpen);
-    }, [pravachanOpen, granthOpen, booksOpen]); // eslint-disable-line
+    useRegisterOverlay(pravachanOpen || granthOpen || booksOpen);
 
     return (
         // min-w-0 lets this shrink to its 1fr grid track instead of growing past it and

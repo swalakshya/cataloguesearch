@@ -20,6 +20,7 @@ from backend.search.index_searcher import IndexSearcher
 from backend.utils import json_dumps, JSONResponse, log_memory_usage
 from utils.logger import setup_logging, VERBOSE_LEVEL_NUM, METRICS_LEVEL_NUM, set_query_id, get_query_id
 from backend.api.pdf_export import render_export_pdf
+from backend.api.pdf_proxy import router as pdf_proxy_router
 from backend.api.feedback_api import router as feedback_router
 from backend.api.agent.router import router as agent_router
 from backend.api.agent.app import agent_app
@@ -256,6 +257,7 @@ app.add_middleware(
 
 # --- Include Routers ---
 app.include_router(feedback_router, prefix="/api")
+app.include_router(pdf_proxy_router, prefix="/api")
 app.include_router(agent_router, prefix="/api/agent")
 app.include_router(url_router)
 app.include_router(admin_router, prefix="/api")

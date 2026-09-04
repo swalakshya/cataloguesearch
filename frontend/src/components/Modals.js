@@ -1,24 +1,11 @@
-import React, { useEffect } from 'react';
+import React from 'react';
+import { useOverlayBehavior } from './ui/Modal';
 
 // --- MODAL COMPONENTS ---
+// Each of these is only ever mounted by its parent while "open" (there's no
+// separate open prop), so `useOverlayBehavior(true, onClose)` is correct here.
 export const GranthVerseModal = ({ verse, granthName, metadata, onClose, isLoading }) => {
-    useEffect(() => {
-        document.body.style.overflow = 'hidden';
-        return () => { document.body.style.overflow = 'unset'; };
-    }, []);
-
-    useEffect(() => {
-        const handleEsc = (event) => {
-            if (event.key === 'Escape') {
-                onClose();
-            }
-        };
-        window.addEventListener('keydown', handleEsc);
-
-        return () => {
-            window.removeEventListener('keydown', handleEsc);
-        };
-    }, [onClose]);
+    useOverlayBehavior(true, onClose);
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4" onClick={onClose}>
@@ -144,23 +131,7 @@ export const GranthVerseModal = ({ verse, granthName, metadata, onClose, isLoadi
 };
 
 export const GranthProseModal = ({ prose, granthName, metadata, onClose, isLoading }) => {
-    useEffect(() => {
-        document.body.style.overflow = 'hidden';
-        return () => { document.body.style.overflow = 'unset'; };
-    }, []);
-
-    useEffect(() => {
-        const handleEsc = (event) => {
-            if (event.key === 'Escape') {
-                onClose();
-            }
-        };
-        window.addEventListener('keydown', handleEsc);
-
-        return () => {
-            window.removeEventListener('keydown', handleEsc);
-        };
-    }, [onClose]);
+    useOverlayBehavior(true, onClose);
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4" onClick={onClose}>
@@ -257,24 +228,8 @@ export const GranthProseModal = ({ prose, granthName, metadata, onClose, isLoadi
 };
 
 export const ExpandModal = ({ data, onClose, isLoading }) => {
-    useEffect(() => {
-        document.body.style.overflow = 'hidden';
-        return () => { document.body.style.overflow = 'unset'; };
-    }, []);
+    useOverlayBehavior(true, onClose);
 
-    useEffect(() => {
-        const handleEsc = (event) => {
-            if (event.key === 'Escape') {
-                onClose();
-            }
-        };
-        window.addEventListener('keydown', handleEsc);
-
-        return () => {
-            window.removeEventListener('keydown', handleEsc);
-        };
-    }, [onClose]);
-    
     const Paragraph = ({ para, isCurrent }) => {
         if (!para) {
             return (
@@ -325,24 +280,8 @@ export const ExpandModal = ({ data, onClose, isLoading }) => {
 };
 
 export const WelcomeModal = ({ onClose, onGoToUsageGuide }) => {
-    useEffect(() => {
-        document.body.style.overflow = 'hidden';
-        return () => { document.body.style.overflow = 'unset'; };
-    }, []);
+    useOverlayBehavior(true, onClose);
 
-    useEffect(() => {
-        const handleEsc = (event) => {
-            if (event.key === 'Escape') {
-                onClose();
-            }
-        };
-        window.addEventListener('keydown', handleEsc);
-
-        return () => {
-            window.removeEventListener('keydown', handleEsc);
-        };
-    }, [onClose]);
-    
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4" onClick={onClose}>
             <div className="bg-white rounded-lg shadow-xl w-full max-w-md flex flex-col" onClick={e => e.stopPropagation()}>

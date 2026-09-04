@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useOverlayBehavior } from './ui/Modal';
 
 /**
  * BookmarkItem - Renders individual bookmark items with nested structure
@@ -84,25 +85,11 @@ const BookmarksModal = ({
     onBookmarkClick, 
     title = "Select Bookmark" 
 }) => {
-    // Handle Escape key to close modal
-    useEffect(() => {
-        const handleEsc = (event) => {
-            if (event.key === 'Escape') {
-                onClose();
-            }
-        };
-
-        if (isOpen) {
-            window.addEventListener('keydown', handleEsc);
-        }
-
-        return () => {
-            window.removeEventListener('keydown', handleEsc);
-        };
-    }, [isOpen, onClose]);
+    const effectivelyOpen = isOpen && bookmarks.length > 0;
+    useOverlayBehavior(effectivelyOpen, onClose);
 
     // Don't render if modal is closed or no bookmarks
-    if (!isOpen || bookmarks.length === 0) {
+    if (!effectivelyOpen) {
         return null;
     }
 

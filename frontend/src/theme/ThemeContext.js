@@ -3,7 +3,6 @@ import { DEFAULT_PALETTE, PALETTES } from './palettes';
 
 const MODE_KEY = 'ui_mode';
 const PALETTE_KEY = 'ui_palette';
-const isDev = process.env.NODE_ENV === 'development';
 
 function getInitialMode() {
     try {
@@ -14,21 +13,20 @@ function getInitialMode() {
 }
 
 function getInitialPalette() {
-    // The palette override only ever applies in development — production always
-    // uses DEFAULT_PALETTE, since there's no switcher UI to have set it otherwise.
-    if (isDev) {
-        try {
-            const stored = localStorage.getItem(PALETTE_KEY);
-            if (stored && PALETTES[stored]) return stored;
-        } catch {}
-    }
+    // Was dev-only (no switcher UI existed in production to have set this
+    // otherwise) — now exposed as a real Settings choice, so any saved value
+    // applies regardless of environment.
+    try {
+        const stored = localStorage.getItem(PALETTE_KEY);
+        if (stored && PALETTES[stored]) return stored;
+    } catch {}
     return DEFAULT_PALETTE;
 }
 
 const ThemeContext = createContext(null);
 
 export function ThemeProvider({ children }) {
-    const [mode, setMode] = useState(getInitialMode);
+    const [mode, setModeState] = useState(getInitialMode);
     const [palette, setPaletteState] = useState(getInitialPalette);
 
     useEffect(() => {
@@ -38,21 +36,21 @@ export function ThemeProvider({ children }) {
         root.classList.toggle('dark', mode === 'dark');
     }, [mode, palette]);
 
-    const toggleMode = useCallback(() => {
-        setMode(prev => {
-            const next = prev === 'dark' ? 'light' : 'dark';
-            try { localStorage.setItem(MODE_KEY, next); } catch {}
-            return next;
-        });
+    // Direct setter (light|dark), not a flip — Settings' segmented pill picks a
+    // side explicitly rather than toggling whatever the current value is.
+    const setMode = useCallback((next) => {
+        if (next !== 'light' && next !== 'dark') return;
+        setModeState(next);
+        try { localStorage.setItem(MODE_KEY, next); } catch {}
     }, []);
 
     const setPalette = useCallback((key) => {
-        if (!isDev || !PALETTES[key]) return;
+        if (!PALETTES[key]) return;
         setPaletteState(key);
         try { localStorage.setItem(PALETTE_KEY, key); } catch {}
     }, []);
 
-    const value = useMemo(() => ({ mode, toggleMode, palette, setPalette }), [mode, toggleMode, palette, setPalette]);
+    const value = useMemo(() => ({ mode, setMode, palette, setPalette }), [mode, setMode, palette, setPalette]);
 
     return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

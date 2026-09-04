@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { addPageNumbersToBookmarks } from '../utils/pdfUtils';
 
 /**
@@ -12,6 +12,12 @@ const usePDFViewer = ({ setError }) => {
     const [previewUrl, setPreviewUrl] = useState(null);
     const [croppedPreviewUrl, setCroppedPreviewUrl] = useState(null);
     const [bookmarks, setBookmarks] = useState([]);
+    // url -> already-parsed pdf.js document, scoped to this hook instance's
+    // lifetime. loadPDFFromUrl checks this before hitting the network again —
+    // re-opening a citation you already viewed this session (or a different
+    // citation pointing at the same source document) then skips straight to
+    // rendering instead of re-fetching/re-parsing.
+    const urlDocCacheRef = useRef(new Map());
 
     // Load PDF.js once per page
     useEffect(() => {
@@ -96,6 +102,53 @@ const usePDFViewer = ({ setError }) => {
         }
     };
 
+    // Citation-viewer counterpart to loadPDF(file) — loads directly from a
+    // remote URL (a citation's file_url) instead of a local File object, and
+    // jumps straight to startPage instead of always landing on page 1. Relies
+    // on the PDF host allowing cross-origin fetch/range-requests; if it
+    // doesn't, pdf.js's getDocument() rejects and the catch below surfaces
+    // that as the same user-visible error loadPDF already handles.
+    //
+    // onProgress, if given, receives pdf.js's own {loaded, total} network
+    // progress as bytes come in — total is only known if the server sent
+    // Content-Length (see backend/api/pdf_proxy.py), otherwise it's null and
+    // the caller should fall back to an indeterminate loading state.
+    const loadPDFFromUrl = async (url, startPage = 1, onProgress) => {
+        if (!window.pdfjsLib) {
+            setError('PDF.js library not loaded. Please refresh the page.');
+            return null;
+        }
+        setCroppedPreviewUrl(null);
+        try {
+            let pdf = urlDocCacheRef.current.get(url);
+            if (!pdf) {
+                const loadingTask = window.pdfjsLib.getDocument(url);
+                if (onProgress) {
+                    loadingTask.onProgress = ({ loaded, total }) => {
+                        onProgress({ loaded, total: total || null });
+                    };
+                }
+                pdf = await loadingTask.promise;
+                urlDocCacheRef.current.set(url, pdf);
+            }
+            setPdfDoc(pdf);
+            setTotalPages(pdf.numPages);
+            const page = Number.isFinite(startPage) && startPage >= 1 && startPage <= pdf.numPages ? startPage : 1;
+            setCurrentPage(page);
+            try {
+                const outline = await pdf.getOutline();
+                setBookmarks(outline?.length > 0 ? await addPageNumbersToBookmarks(outline, pdf) : []);
+            } catch {
+                setBookmarks([]);
+            }
+            await renderPDFPage(pdf, page);
+            return pdf;
+        } catch (err) {
+            setError(`Error loading PDF: ${err.message}`);
+            return null;
+        }
+    };
+
     const loadImagePreview = (file) => {
         setPreviewUrl(URL.createObjectURL(file));
         setCroppedPreviewUrl(null);
@@ -148,8 +201,8 @@ const usePDFViewer = ({ setError }) => {
 
     return {
         pdfDoc, currentPage, totalPages, previewUrl, croppedPreviewUrl, bookmarks,
-        setCroppedPreviewUrl,
-        loadPDF, loadImagePreview, renderPDFPage, applyCropToDataUrl,
+        setCroppedPreviewUrl, setPreviewUrl,
+        loadPDF, loadPDFFromUrl, loadImagePreview, renderPDFPage, applyCropToDataUrl,
         handlePageNavigation, jumpToPage, navigateToBookmark,
     };
 };

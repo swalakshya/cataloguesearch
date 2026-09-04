@@ -107,13 +107,12 @@ body {
   margin: 0.5rem 0;
 }
 
+/* Despite the name, this is no longer a code/monospace treatment — the model
+   uses backticks for "important words and granth mentions" (proper nouns),
+   not literal code, and a monospace pill rendered Devanagari terms badly.
+   Plain bold, same weight as <strong>. */
 .llm-code {
-  background-color: var(--color-bg);
-  border-radius: 3px;
-  padding: 0.1em 0.35em;
-  font-family: monospace;
-  font-size: 0.9em;
-  color: var(--color-ink);
+  font-weight: 700;
 }
 
 .llm-quote-block {
@@ -141,6 +140,52 @@ body {
   font-size: 0.72em;
   color: var(--color-ink-muted);
   font-style: italic;
+}
+
+/* Summary-mode (@@_N) citation markers — a footnote, not a UI element
+   competing for attention: true subscript position, muted text, and a light
+   background so it reads as a distinct little tag rather than disappearing
+   entirely (which is what plain text-with-no-background did). Same
+   color-mix formula as .llm-quote-block above so both citation treatments
+   stay visually related; needs no separate dark-mode rule since --color-brand
+   and --color-surface already carry different values per theme. */
+.ref-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.1em;
+  padding: 0 0.3em;
+  font-size: 0.7em;
+  line-height: 1.5;
+  vertical-align: sub;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  background-color: color-mix(in srgb, var(--color-brand) 8%, var(--color-surface));
+  border: none;
+  border-radius: 0.5em;
+  cursor: pointer;
+}
+
+.ref-badge:hover {
+  background-color: color-mix(in srgb, var(--color-brand) 16%, var(--color-surface));
+  color: var(--color-ink);
+}
+
+.ref-badge-disabled {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.1em;
+  padding: 0 0.3em;
+  font-size: 0.7em;
+  line-height: 1.5;
+  vertical-align: sub;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  background: none;
+  border: none;
+  border-radius: 0.5em;
+  cursor: default;
 }
 
 .llm-inline-emoji {
