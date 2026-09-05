@@ -30,7 +30,7 @@ from backend.crawler.index_generator import IndexGenerator
 from backend.crawler.index_state import IndexState
 from backend.search.index_searcher import IndexSearcher
 from tests.backend.base import *   # brings in module-scoped autouse `initialise` fixture
-from tests.backend.common import write_config_file, consume_sse
+from tests.backend.common import write_config_file, consume_sse, TEST_METRICS_LOGS_DIR
 
 # ── paths ─────────────────────────────────────────────────────────────────────
 _DATA_DIR  = os.path.join(os.path.dirname(__file__), "../data/granth")
@@ -601,7 +601,7 @@ def _run_api_server(host, port):
     _load_dotenv(dotenv_path=f"{project_root}/.env", verbose=True)
 
     test_base_dir = _os.getenv("TEST_BASE_DIR")
-    _os.environ["LOGS_DIR"] = "logs"
+    _os.environ["LOGS_DIR"] = TEST_METRICS_LOGS_DIR
     _os.environ["CONFIG_PATH"] = f"{test_base_dir}/data/configs/test_config.yaml"
     _Config.reset()
 

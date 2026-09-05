@@ -144,10 +144,15 @@ def test_api_metadata_endpoint(api_server):
 
             log_handle.info(f"{content_type}/{lang_code} metadata: {json_dumps(lang_metadata)}")
 
-        # Verify actual values match expected values from granth setup (combine all languages)
+        # Verify actual values match expected values from granth setup (combine all languages).
+        # pravachan_series_cascade is a list of dicts (nested Granth/Series/Volume
+        # structure), not a flat list of strings like Name/Anuyog/Author -- it isn't
+        # meant to be validated the same way, so it's excluded from this combining step.
         combined_values = {}
         for lang_code, lang_metadata in fields_by_language.items():
             for key, values in lang_metadata.items():
+                if key == "pravachan_series_cascade":
+                    continue
                 if key not in combined_values:
                     combined_values[key] = set()
                 combined_values[key].update(values)

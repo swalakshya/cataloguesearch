@@ -21,6 +21,14 @@ from backend.utils import json_dump, json_dumps
 
 log_handle = logging.getLogger(__name__)
 
+# Shared, session-fresh directory for the API server's own metrics.db, isolated
+# from the repo's real logs/metrics.db (which accumulates across every past
+# test run and dev session, breaking any test that asserts on its exact
+# contents). Computed once at import time so every API-server-starting
+# function across test modules (this file's and test_granth_e2e.py's) agrees
+# on the same location.
+TEST_METRICS_LOGS_DIR = tempfile.mkdtemp(prefix="cataloguesearch_test_metrics_")
+
 
 # ---------------------------------------------------------------------------
 # API server infrastructure (shared across test modules)
@@ -39,7 +47,7 @@ def run_api_server_in_thread(host, port, stop_event):
     if not test_base_dir:
         raise ValueError("TEST_BASE_DIR not set in .env file")
 
-    os.environ["LOGS_DIR"] = "logs"
+    os.environ["LOGS_DIR"] = TEST_METRICS_LOGS_DIR
     os.environ["CONFIG_PATH"] = f"{test_base_dir}/data/configs/test_config.yaml"
 
     import sys
@@ -199,6 +207,7 @@ def setup(copy_ocr_files=False, add_scan_config=False, add_bookmarks=True):
     songadh_gujarati = os.path.join(data_pdf_path, "songadh_gujarati.pdf")
     thanjavur_hindi = os.path.join(data_pdf_path, "thanjavur_hindi.pdf")
     thanjavur_gujarati = os.path.join(data_pdf_path, "thanjavur_gujarati.pdf")
+    vachanamrut_hindi = os.path.join(data_pdf_path, "vachanamrut_hindi.pdf")
 
     # Define file paths in new directory structure
     bangalore_hindi_path = f"{hindi_base}/cities/metro/bangalore_hindi.pdf"
@@ -214,6 +223,18 @@ def setup(copy_ocr_files=False, add_scan_config=False, add_bookmarks=True):
     thanjavur_hindi_path = f"{hindi_base}/history/thanjavur_hindi.pdf"
     thanjavur_gujarati_path = f"{gujarati_base}/history/thanjavur_gujarati.pdf"
 
+    # Nested Series-under-Granth work: "vachanamrut/" is a series-grouping
+    # parent (no PDFs, no count -- excluded from the catalogue, mirrors real
+    # production's "Bahinshree Na Vachanamrut"), while "vachanamrut/1980_series/"
+    # is the actual leaf work with its own count -- mirrors real production's
+    # "Niyamsaar/1975_Series/". Deliberately a *sibling* of "spiritual/", not
+    # nested inside it -- nesting inside spiritual/ would make it inherit
+    # Songadh's "count": "50" from spiritual/config.json, since config merging
+    # only overrides keys a descendant explicitly sets, it can't "unset" an
+    # inherited one.
+    os.makedirs(f"{hindi_base}/vachanamrut/1980_series", exist_ok=True)
+    vachanamrut_hindi_path = f"{hindi_base}/vachanamrut/1980_series/vachanamrut_hindi.pdf"
+
     doc_ids = {
         "bangalore_hindi": [bangalore_hindi_path, get_doc_id(pdf_dir, bangalore_hindi_path)],
         "bangalore_gujarati": [bangalore_gujarati_path, get_doc_id(pdf_dir, bangalore_gujarati_path)],
@@ -226,7 +247,8 @@ def setup(copy_ocr_files=False, add_scan_config=False, add_bookmarks=True):
         "songadh_hindi": [songadh_hindi_path, get_doc_id(pdf_dir, songadh_hindi_path)],
         "songadh_gujarati": [songadh_gujarati_path, get_doc_id(pdf_dir, songadh_gujarati_path)],
         "thanjavur_hindi": [thanjavur_hindi_path, get_doc_id(pdf_dir, thanjavur_hindi_path)],
-        "thanjavur_gujarati": [thanjavur_gujarati_path, get_doc_id(pdf_dir, thanjavur_gujarati_path)]
+        "thanjavur_gujarati": [thanjavur_gujarati_path, get_doc_id(pdf_dir, thanjavur_gujarati_path)],
+        "vachanamrut_hindi": [vachanamrut_hindi_path, get_doc_id(pdf_dir, vachanamrut_hindi_path)],
     }
 
     # Copy files to new directory structure
@@ -242,6 +264,7 @@ def setup(copy_ocr_files=False, add_scan_config=False, add_bookmarks=True):
     shutil.copy(songadh_gujarati, songadh_gujarati_path)
     shutil.copy(thanjavur_hindi, thanjavur_hindi_path)
     shutil.copy(thanjavur_gujarati, thanjavur_gujarati_path)
+    shutil.copy(vachanamrut_hindi, vachanamrut_hindi_path)
 
     # Create config files for language base directories
     hindi_config = {"language": "hi", "category": "Pravachan"}
@@ -254,12 +277,16 @@ def setup(copy_ocr_files=False, add_scan_config=False, add_bookmarks=True):
     cities_config = {"Anuyog": "city"}
     spiritual_config = {
         "Anuyog": "spiritual",
+        "Pravachankar": "Test Pravachankar",
         "Name": "Songadh",
         "series_start_date": "1975-01-01",
-        "series_end_date": "1977-12-31"
+        "series_end_date": "1977-12-31",
+        "count": "50"
     }
     history_config = {"Anuyog": "history"}
-    metro_config = {"type": "metro"}
+    # "compiled" work: a leaf folder with no series/dates, curated via the
+    # "compiled" count sentinel (mirrors real production's "Mool ma Bhool").
+    metro_config = {"type": "metro", "Name": "Bangalore", "count": "compiled"}
     non_metro_config = {"type": "non_metro"}
 
     # Write config files for all category and type directories
@@ -270,10 +297,31 @@ def setup(copy_ocr_files=False, add_scan_config=False, add_bookmarks=True):
         write_config_file(f"{lang_base}/spiritual/config.json", spiritual_config)
         write_config_file(f"{lang_base}/history/config.json", history_config)
 
+    # Mixed-language ("gu+hi") document: overrides the gujarati root's
+    # language for just this one file, mirroring real production's Bahinshree
+    # content (config.json's "language": "gu+hi").
+    write_config_file(f"{gujarati_base}/cities/non_metro/indore_gujarati_config.json",
+                      {"language": "gu+hi"})
+
+    # Series-grouping parent with no PDFs/count of its own (excluded from the
+    # catalogue) plus its one leaf series (included) -- see path comment above.
+    write_config_file(f"{hindi_base}/vachanamrut/config.json",
+                      {"Name": "Vachanamrut"})
+    write_config_file(f"{hindi_base}/vachanamrut/1980_series/config.json", {
+        "Series": "1980 Series",
+        "series_start_date": "1980-01-01",
+        "series_end_date": "1980-12-31",
+        "count": "10"
+    })
+
     # Per-file Name configs for history documents
     write_config_file(f"{hindi_base}/history/hampi_hindi_config.json", {"Name": "Hampi"})
     write_config_file(f"{gujarati_base}/history/hampi_gujarati_config.json", {"Name": "Hampi"})
-    write_config_file(f"{hindi_base}/history/thanjavur_hindi_config.json", {"Name": "Thanjavur"})
+    write_config_file(f"{hindi_base}/history/thanjavur_hindi_config.json", {
+        "Name": "Thanjavur",
+        "series_start_date": "1978-01-01",
+        "series_end_date": "1983-12-31"
+    })
 
     # Add file-specific config for thanjavur_gujarati with series dates and Name
     thanjavur_gujarati_file_config = {
@@ -350,6 +398,13 @@ def setup(copy_ocr_files=False, add_scan_config=False, add_bookmarks=True):
                     # hampi_hindi is used to test volume field propagation
                     if filename_without_ext == "hampi_hindi":
                         entry["volume"] = 3
+                    # Thanjavur (hindi and gujarati) needs a "volume" so its
+                    # bookmark-derived pravachan numbers actually surface in the
+                    # Pravachan_series_cascade aggregation (by_volume buckets
+                    # "missing" volume as -1 and are skipped) -- required for
+                    # testing cross-language cascade isolation.
+                    elif filename_without_ext in ("thanjavur_hindi", "thanjavur_gujarati"):
+                        entry["volume"] = 1
                     scan_config[filename_without_ext] = entry
                     log_handle.info(f"Added {filename_without_ext} to scan_config: pages 1-{total_pages}")
 
@@ -381,6 +436,17 @@ def setup(copy_ocr_files=False, add_scan_config=False, add_bookmarks=True):
         add_bookmarks_to_pdf(
             doc_ids["thanjavur_gujarati"][0],
             [(2, "Pravachan Num 15 on Date 06-05-1980"), (3, "Pravachan Num 18 on Date 04-06-1983")]
+        )
+
+        # Cross-language collision: hindi and gujarati Thanjavur share the
+        # same Name and series dates (see thanjavur_*_config below) but must
+        # keep distinct pravachan numbers -- mirrors real production's
+        # Niyamsaar "1975 Series" existing independently in both languages.
+        # A cascade that merges languages would leak "3"/"6" into the other
+        # language's bucket, or vice versa with "15"/"18".
+        add_bookmarks_to_pdf(
+            doc_ids["thanjavur_hindi"][0],
+            [(1, "Pravachan Num 3 on Date 10-02-1980"), (2, "Pravachan Num 6 on Date 15-03-1981")]
         )
 
     return doc_ids
