@@ -17,10 +17,13 @@ const TILES = (pravachanTotal, granthCount, booksCount, labels) => [
     { category: 'Curated', colorVar: '--color-danger', value: booksCount != null ? booksCount.toLocaleString() : undefined, label: labels.Curated, anchor: 'contemporary-index' },
 ];
 
-// Icon box is w-11/h-11 (44px) when spacious, w-7/h-7 (28px) otherwise (must
-// match the Tailwind classes below in px) — the emoji image inside is sized
-// as a fraction of that box rather than a separately hand-picked number, so
-// the two can't drift out of ratio if a box size ever changes.
+// Icon box is a fixed w-11/h-11 (44px) when spacious, w-7/h-7 (28px)
+// otherwise (must match the Tailwind classes below in px) — the box's own
+// size never depends on the icon, only the reverse: the emoji is sized as a
+// fraction of it. (A prior attempt let the box stretch to the row's content
+// height via `items-stretch` + `aspect-square`, but with nothing else in the
+// row constraining that height, it ballooned instead of matching the text.)
+const ICON_BOX_PX = { spacious: 44, compact: 28 };
 const ICON_FILL_RATIO = 0.9999;
 
 // `labels` optionally overrides one or more of the default per-category tile
@@ -28,7 +31,7 @@ const ICON_FILL_RATIO = 0.9999;
 // with DEFAULT_LABELS, unaffected.
 export default function StatsStrip({ topAccent, spacious = false, labels }) {
     const resolvedLabels = { ...DEFAULT_LABELS, ...labels };
-    const iconBoxPx = spacious ? 44 : 28;
+    const iconBoxPx = spacious ? ICON_BOX_PX.spacious : ICON_BOX_PX.compact;
     const iconSize = Math.round(iconBoxPx * ICON_FILL_RATIO);
     // useCatalogue() shares its underlying fetch/cache with every other
     // caller (e.g. SearchIndex.js) -- see hooks/useCatalogue.js.

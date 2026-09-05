@@ -32,6 +32,16 @@ export default function ChatComposer({
 }) {
     const canSend = query.trim().length > 0 && !disabled;
 
+    const filters = (
+        <ChatFilters
+            activeCategories={activeCategories}
+            debugMode={debugMode}
+            chatContentTypes={chatContentTypes}
+            setChatContentTypes={setChatContentTypes}
+            compact={compact}
+        />
+    );
+
     return (
         <div className="w-full">
             <InputActionBar
@@ -45,6 +55,13 @@ export default function ChatComposer({
                         {loading ? <Spinner /> : <SendHorizontal size={18} strokeWidth={2.5} />}
                     </button>
                 }
+                // Compact (active-chat sticky footer) folds the filters into
+                // the same card as a divided footer, so it doesn't read as a
+                // third, unrelated floating row between the search bar and
+                // the disclaimer. The spacious empty-state hero keeps them as
+                // their own larger standalone row below the card instead —
+                // folding those bigger tiles in here would look cramped.
+                footer={compact ? filters : undefined}
             >
                 <SearchBar
                     query={query}
@@ -56,15 +73,7 @@ export default function ChatComposer({
                     placeholder={placeholder}
                 />
             </InputActionBar>
-            <div className={compact ? 'mt-2' : 'mt-3'}>
-                <ChatFilters
-                    activeCategories={activeCategories}
-                    debugMode={debugMode}
-                    chatContentTypes={chatContentTypes}
-                    setChatContentTypes={setChatContentTypes}
-                    compact={compact}
-                />
-            </div>
+            {!compact && <div className="mt-3">{filters}</div>}
             {showDisclaimer && <AiDisclaimer className="mt-2" />}
         </div>
     );

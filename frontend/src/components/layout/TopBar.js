@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ChevronDown, Menu, User } from 'lucide-react';
+import { ChevronDown, Menu, Settings, User } from 'lucide-react';
 import { NAV_ITEMS, NAV_DROPDOWN_LABEL, NAV_DROPDOWN_ITEMS, NAV_TAIL_ITEMS } from './navItems';
 
 const linkClass = 'px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap';
@@ -80,7 +80,7 @@ function NavigateDropdown({ isActive, onNavigate }) {
     );
 }
 
-export default function TopBar({ currentPage, setCurrentPage, onOpenMobileSidebar }) {
+export default function TopBar({ currentPage, setCurrentPage, onOpenMobileSidebar, onOpenSettings }) {
     const location = useLocation();
 
     const isActive = (item) => {
@@ -147,6 +147,19 @@ export default function TopBar({ currentPage, setCurrentPage, onOpenMobileSideba
                     </nav>
 
                     <div className="flex items-center gap-3 ml-auto shrink-0">
+                        {/* Desktop-only: Sidebar's own gear (chat rail + mobile drawer)
+                            already covers mobile and the chat page, but there's otherwise
+                            no way to reach Settings on desktop outside chat. */}
+                        {onOpenSettings && (
+                            <button
+                                onClick={onOpenSettings}
+                                className="hidden lg:flex p-1.5 rounded-md text-ink-muted hover:text-ink hover:bg-bg"
+                                title="Settings"
+                                aria-label="Settings"
+                            >
+                                <Settings size={18} />
+                            </button>
+                        )}
                         <div
                             className="w-8 h-8 rounded-full flex items-center justify-center"
                             style={{ backgroundColor: 'var(--color-bg)' }}

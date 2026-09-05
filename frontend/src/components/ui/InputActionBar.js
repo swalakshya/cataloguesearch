@@ -4,7 +4,12 @@ import React from 'react';
 // filling the width and an action button (send icon, Search label, ...)
 // docked inline at the right edge — one component so the chat composer and
 // the classic search bar render the exact same shell instead of drifting.
-export default function InputActionBar({ children, action, className = '' }) {
+//
+// `footer` is optional (only the chat composer's filter row uses it): folded
+// into the same card below a divider, instead of floating as its own
+// separate element under the search bar — so filters read as part of the
+// search action they affect, not an unrelated third row.
+export default function InputActionBar({ children, action, footer, className = '' }) {
     return (
         <div
             className={`rounded-xl shadow-md transition-colors ${className}`}
@@ -14,6 +19,11 @@ export default function InputActionBar({ children, action, className = '' }) {
                 <div className="flex-grow min-w-0">{children}</div>
                 {action}
             </div>
+            {footer && (
+                <div className="px-3 py-2" style={{ borderTop: '1px solid var(--color-border)' }}>
+                    {footer}
+                </div>
+            )}
         </div>
     );
 }

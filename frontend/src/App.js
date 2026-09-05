@@ -21,16 +21,19 @@ import SearchIndex from './components/SearchIndex';
 import UIEval from './components/eval/UIEval';
 import ChatPage from './components/chat/ChatPage';
 import { getStoredAnswerFormat, setStoredAnswerFormat, CHAT_SESSION_STORAGE_KEY } from './config/chatConfig';
+import { setStoredChatDefaultCategories, getStoredKhojDefaultCategories, setStoredKhojDefaultCategories } from './config/filterDefaults';
 import StatsStrip from './components/chat/StatsStrip';
 import { Spinner, ChevronUpIcon, ChevronDownIcon, ExpandIcon } from './components/SharedComponents';
 import ExportPdfModal from './components/ExportPdfModal';
 import { AlertTriangle, Mail, Home as HomeIcon, PenLine, SendHorizontal } from 'lucide-react';
 import { Modal, InputActionBar, PageHeader } from './components/ui';
+import SettingsModal from './components/settings/SettingsModal';
 
 // Import API service
 import { api } from './services/api';
 import { getRandomSuggestedQueriesByLanguage } from './utils/suggestedQueries';
 import { useAnyOverlayOpen } from './hooks/useOverlayRegistry';
+import { useHideOnScroll } from './hooks/useHideOnScroll';
 
 // --- TIPS MODAL COMPONENT ---
 const TipsModal = ({ onClose }) => {
@@ -243,6 +246,13 @@ const AppContent = () => {
     // True while any modal/filter-sheet/drawer in the app is open (see useOverlayRegistry) —
     // used to hide the mobile Home/Feedback FABs below so they don't collide with it.
     const anyOverlayOpen = useAnyOverlayOpen();
+    // True while the page is actively scrolling — same FABs also hide during
+    // that, on every page, so they don't sit on top of content mid-scroll.
+    const scrollHidden = useHideOnScroll();
+    // Settings is reachable from both TopBar (desktop, every page) and
+    // Sidebar (its own gear button, desktop-chat-rail + mobile drawer) — one
+    // shared modal instance here so either entry point opens the same thing.
+    const [showSettings, setShowSettings] = useState(false);
     const PAGE_SIZE = 20;
     const [llmAvailable, setLlmAvailable] = useState(false);
     // Set by handleHomeChatSubmit (Home page's "ask AI" card) and consumed once by
@@ -264,6 +274,17 @@ const AppContent = () => {
         setAnswerFormat(newFormat);
         chatPageRef.current?.endChat();
         try { localStorage.removeItem(CHAT_SESSION_STORAGE_KEY); } catch {}
+    };
+
+    // Unlike Answer Format, these two are just the seed for the *next* new
+    // session/page load — they never touch whatever's currently active, so
+    // there's nothing else to do here besides persisting the choice.
+    const handleSaveChatDefaultCategories = (categories) => {
+        setStoredChatDefaultCategories(categories);
+    };
+
+    const handleSaveKhojDefaultCategories = (categories) => {
+        setStoredKhojDefaultCategories(categories);
     };
 
     useEffect(() => {
@@ -327,9 +348,15 @@ const AppContent = () => {
             setAppName(cfg.app_name || 'swalakshya');
             setDebugMode(cfg.debug_mode);
             setActiveCategories(cfg.active_categories);
-            if (cfg.active_categories.includes('Books')) {
-                setContentTypes(prev => ({ ...prev, books: true }));
-            }
+            // Aagam Khoj's own Settings default (clamped to whatever's admin-enabled),
+            // applied once here on load — subsequent searches can deviate freely
+            // without touching the saved default, only the next reload re-seeds it.
+            const khojDefault = getStoredKhojDefaultCategories(cfg.active_categories);
+            setContentTypes({
+                pravachans: khojDefault.includes('Pravachan'),
+                granths: khojDefault.includes('Granth'),
+                books: khojDefault.includes('Books'),
+            });
         });
     }, []);
 
@@ -733,6 +760,7 @@ const AppContent = () => {
                 currentPage={currentPage}
                 setCurrentPage={setCurrentPage}
                 onOpenMobileSidebar={() => setSidebarMobileOpen(true)}
+                onOpenSettings={() => setShowSettings(true)}
             />
 
             <Sidebar
@@ -742,8 +770,17 @@ const AppContent = () => {
                 onNewChat={() => chatPageRef.current?.startNewChat()}
                 mobileOpen={sidebarMobileOpen}
                 onCloseMobile={() => setSidebarMobileOpen(false)}
+                onOpenSettings={() => setShowSettings(true)}
+            />
+
+            <SettingsModal
+                open={showSettings}
+                onClose={() => setShowSettings(false)}
                 answerFormat={answerFormat}
                 onSaveAnswerFormat={handleSaveAnswerFormat}
+                activeCategories={activeCategories}
+                onSaveChatDefaultCategories={handleSaveChatDefaultCategories}
+                onSaveKhojDefaultCategories={handleSaveKhojDefaultCategories}
             />
 
             <div className="flex flex-col min-w-0 col-start-2 row-start-2">
@@ -1020,22 +1057,27 @@ const AppContent = () => {
             </div>
 
             {/* Mobile Navigation Buttons - Only visible on mobile, hidden while any overlay
-                (filter sheet, modal, PDF viewer, drawer, ...) is open so they don't collide
-                with it — see useAnyOverlayOpen / useOverlayBehavior for the shared mechanism. */}
-            {currentPage !== 'feedback' && !anyOverlayOpen && (
+                (filter sheet, modal, PDF viewer, drawer, ...) is open, or while the page is
+                actively scrolling, so they don't collide with content or a docked footer —
+                see useAnyOverlayOpen / useOverlayBehavior and useHideOnScroll for the shared
+                mechanisms. On the chat page they're also raised above the sticky composer
+                +disclaimer footer docked to the bottom of the screen there — chat sessions
+                persist across visits (see ChatPage's localStorage restore), so that footer
+                is the normal state of the page, not a rare one. */}
+            {currentPage !== 'feedback' && !anyOverlayOpen && !scrollHidden && (
                 <button
                     onClick={() => setCurrentPage('feedback')}
-                    className="btn btn-primary md:hidden fixed bottom-6 right-6 p-3 rounded-full shadow-lg z-50"
+                    className={`btn btn-primary md:hidden fixed ${currentPage === 'chat' ? 'bottom-20' : 'bottom-6'} right-6 p-3 rounded-full shadow-lg z-50`}
                     aria-label="Feedback"
                 >
                     <Mail size={20} />
                 </button>
             )}
 
-            {currentPage !== 'home' && !anyOverlayOpen && (
+            {currentPage !== 'home' && !anyOverlayOpen && !scrollHidden && (
                 <button
                     onClick={() => setCurrentPage('home')}
-                    className="btn btn-secondary md:hidden fixed bottom-6 left-6 p-3 rounded-full shadow-lg z-50"
+                    className={`btn btn-secondary md:hidden fixed ${currentPage === 'chat' ? 'bottom-20' : 'bottom-6'} left-6 p-3 rounded-full shadow-lg z-50`}
                     aria-label="Home"
                 >
                     <HomeIcon size={20} />

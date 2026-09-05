@@ -4,17 +4,16 @@ import { ShieldCheck, ExternalLink } from 'lucide-react';
 
 export default function AiDisclaimer({ className = '' }) {
     return (
-        <div className={`card flex items-center justify-between gap-3 px-4 py-3 text-xs ${className}`}>
-            <div className="flex items-start gap-2.5" style={{ color: 'var(--color-ink-muted)' }}>
-                <ShieldCheck size={16} className="mt-0.5 flex-shrink-0" style={{ color: 'var(--color-brand)' }} />
-                <span>Swalakshya Chat uses AI to generate answers.<br />Always refer to original scriptures and references.</span>
-            </div>
+        <div className={`card px-3 py-1.5 text-[11px] leading-snug ${className}`} style={{ color: 'var(--color-ink-muted)' }}>
+            <ShieldCheck size={14} className="inline-block mr-1.5 mb-0.5 flex-shrink-0" style={{ color: 'var(--color-brand)' }} />
+            AI generated answers can make mistakes. Always clarify with original scriptures and references!{' '}
             <Link
                 to="/about"
-                className="inline-flex items-center gap-1 font-medium whitespace-nowrap shrink-0"
+                aria-label="Learn more"
+                className="inline-flex align-middle"
                 style={{ color: 'var(--color-brand)' }}
             >
-                Learn more <ExternalLink size={12} />
+                <ExternalLink size={11} />
             </Link>
         </div>
     );

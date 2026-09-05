@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { X } from 'lucide-react';
 import { useRegisterOverlay } from '../../hooks/useOverlayRegistry';
 
@@ -8,10 +8,16 @@ const SIZE_CLASS = {
     lg: 'max-w-4xl',
 };
 
-// Escape-to-close + body-scroll lock + global overlay registration, shared by
-// Modal and any other overlay (mobile sidebar drawer, PdfCitationModal, the
-// legacy hand-rolled modals in Modals.js, etc.) so this behavior — including
-// "something is covering the screen" for useAnyOverlayOpen() — only lives here.
+// Order in which currently-open overlays pushed a history entry (see below).
+// Module-level so a mobile back-press only closes the topmost overlay when
+// several are stacked, even though popstate fires for every listener at once.
+const overlayStack = [];
+
+// Escape-to-close + body-scroll lock + mobile-back-closes-overlay + global
+// overlay registration, shared by Modal and any other overlay (mobile sidebar
+// drawer, PdfCitationModal, the legacy hand-rolled modals in Modals.js, etc.)
+// so this behavior — including "something is covering the screen" for
+// useAnyOverlayOpen() — only lives here.
 export function useOverlayBehavior(open, onClose) {
     useRegisterOverlay(open);
 
@@ -27,6 +33,48 @@ export function useOverlayBehavior(open, onClose) {
         window.addEventListener('keydown', handleEsc);
         return () => window.removeEventListener('keydown', handleEsc);
     }, [open, onClose]);
+
+    // Keep the latest onClose without re-running the history effect below on
+    // every render — callers rarely memoize onClose, and re-running it would
+    // push a duplicate history entry each time.
+    const onCloseRef = useRef(onClose);
+    useEffect(() => { onCloseRef.current = onClose; });
+
+    const id = useId();
+
+    useEffect(() => {
+        if (!open) return;
+        let poppedByUser = false;
+        overlayStack.push(id);
+        window.history.pushState({ overlayId: id }, '');
+
+        const handlePopState = () => {
+            // Several overlays can be open at once (e.g. a citation modal on
+            // top of the sidebar drawer); only the topmost should react to a
+            // single back-press, since popstate fires for every listener.
+            if (overlayStack[overlayStack.length - 1] !== id) return;
+            poppedByUser = true;
+            overlayStack.pop();
+            onCloseRef.current();
+        };
+        window.addEventListener('popstate', handlePopState);
+
+        return () => {
+            window.removeEventListener('popstate', handlePopState);
+            if (poppedByUser) return;
+            const idx = overlayStack.lastIndexOf(id);
+            if (idx !== -1) overlayStack.splice(idx, 1);
+            // Closed some other way (X, overlay click, Escape) — consume our
+            // own dummy entry so a later real back-press isn't swallowed by
+            // it. Only if it's still the current entry: a real navigation may
+            // have pushed its own entry on top since (e.g. a route change
+            // that unmounts this overlay), in which case back() here would
+            // wrongly undo that navigation instead.
+            if (window.history.state && window.history.state.overlayId === id) {
+                window.history.back();
+            }
+        };
+    }, [open, id]);
 }
 
 // Shared modal shell: overlay, escape-to-close, body-scroll lock, header+close

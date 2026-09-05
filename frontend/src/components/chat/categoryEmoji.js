@@ -17,15 +17,18 @@ export const CATEGORY_EMOJI_SRC = {
     Curated: books,
 };
 
-export function CategoryEmojiIcon({ category, size = 18, className = '' }) {
+// `size` (px) is the usual fixed-size path, used by every existing caller.
+// Omit it and size via `className` instead (e.g. Tailwind `w-[70%] h-[70%]`)
+// when the icon needs to track a runtime-computed box instead of a constant —
+// passing both isn't meaningful, so `size` wins if present.
+export function CategoryEmojiIcon({ category, size, className = '' }) {
     const src = CATEGORY_EMOJI_SRC[category];
     if (!src) return null;
     return (
         <img
             src={src}
             alt=""
-            width={size}
-            height={size}
+            {...(size ? { width: size, height: size } : {})}
             className={className}
             style={{ display: 'inline-block', flexShrink: 0 }}
         />

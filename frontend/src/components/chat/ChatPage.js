@@ -13,6 +13,7 @@ import { ShareAnswerButtons } from './ShareAnswerButtons';
 import { FeedbackButtons } from '../AibotFeedback';
 import { cleanAnswerText, preTokenizeCitations } from './answerFormatting';
 import { CHAT_SESSION_STORAGE_KEY } from '../../config/chatConfig';
+import { getStoredChatDefaultCategories } from '../../config/filterDefaults';
 import { USER_ID } from '../../utils/userId';
 import bulbEmoji from '../../assets/emoji/bulb.svg';
 
@@ -55,7 +56,7 @@ const ChatPage = forwardRef(function ChatPage(
     const [chatSessionId, setChatSessionId] = useState(null);
     const [chatMessages, setChatMessages] = useState([]);
     const [chatInput, setChatInput] = useState('');
-    const [chatContentTypes, setChatContentTypes] = useState(() => [...(activeCategories || ['Pravachan', 'Granth'])]);
+    const [chatContentTypes, setChatContentTypes] = useState(() => getStoredChatDefaultCategories(activeCategories || ['Pravachan', 'Granth']));
     const [expandedAnswers, setExpandedAnswers] = useState({});
     const [displayedTexts, setDisplayedTexts] = useState({});
     const [chunkTextsCache, setChunkTextsCache] = useState({});
@@ -615,7 +616,11 @@ const ChatPage = forwardRef(function ChatPage(
         clearRecoveryTimer();
         resetTypingState();
         clearPersistedChatSession();
-    }, [chatSessionId, clearPendingMessage, clearPersistedChatSession, clearRecoveryTimer, invalidateChatRuns, resetTypingState]);
+        // Ending a chat (New Chat, or an Answer Format change forcing a reset)
+        // starts a new session — re-pull the Settings default fresh rather than
+        // keeping whatever filter was active in the just-ended conversation.
+        setChatContentTypes(getStoredChatDefaultCategories(activeCategories || ['Pravachan', 'Granth']));
+    }, [activeCategories, chatSessionId, clearPendingMessage, clearPersistedChatSession, clearRecoveryTimer, invalidateChatRuns, resetTypingState]);
 
     const handleNewChat = useCallback(async () => {
         await handleEndChat();
