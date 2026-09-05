@@ -1,5 +1,5 @@
 import React from 'react';
-import { useOverlayBehavior } from './ui/Modal';
+import { Modal } from './ui';
 
 /**
  * ParsedBookmarksModal - Modal for displaying parsed bookmarks split into extracted and ignored sections
@@ -17,13 +17,6 @@ const ParsedBookmarksModal = ({
     ignoredBookmarks = [],
     title = "Parsed Bookmarks"
 }) => {
-    useOverlayBehavior(isOpen, onClose);
-
-    // Don't render if modal is closed
-    if (!isOpen) {
-        return null;
-    }
-
     const ExtractedTableRow = ({ bookmark }) => {
         const indent = bookmark.level * 8;
 
@@ -76,36 +69,17 @@ const ParsedBookmarksModal = ({
 
     const totalBookmarks = extractedBookmarks.length + ignoredBookmarks.length;
 
-    return (
-        <div
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-            onClick={onClose}
-        >
-            <div
-                className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[85vh] overflow-hidden flex flex-col"
-                onClick={e => e.stopPropagation()}
-            >
-                {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50">
-                    <div>
-                        <h3 className="text-lg font-semibold text-slate-800">{title}</h3>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                            Total: {totalBookmarks} bookmarks ({extractedBookmarks.length} extracted, {ignoredBookmarks.length} ignored)
-                        </p>
-                    </div>
-                    <button
-                        onClick={onClose}
-                        className="text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-200 transition-colors"
-                        title="Close"
-                    >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                </div>
+    const modalTitle = (
+        <span className="flex flex-col items-start">
+            <span>{title}</span>
+            <span className="text-xs font-normal text-ink-muted mt-0.5">
+                Total: {totalBookmarks} bookmarks ({extractedBookmarks.length} extracted, {ignoredBookmarks.length} ignored)
+            </span>
+        </span>
+    );
 
-                {/* Content */}
-                <div className="p-4 overflow-y-auto flex-1">
+    return (
+        <Modal open={isOpen} onClose={onClose} title={modalTitle} size="lg">
                     {totalBookmarks === 0 ? (
                         <div className="text-center py-12 text-slate-500">
                             <svg className="mx-auto h-12 w-12 text-slate-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -222,9 +196,7 @@ const ParsedBookmarksModal = ({
                             </div>
                         </div>
                     )}
-                </div>
-            </div>
-        </div>
+        </Modal>
     );
 };
 

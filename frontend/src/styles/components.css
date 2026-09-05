@@ -275,8 +275,8 @@ input::placeholder, textarea::placeholder { color: var(--color-ink-muted); }
 }
 
 /* Bottom-sheet-on-mobile / centered-on-desktop filter dialog, shared by the
-   Pravachan/Granth/Books filter popups so their shell doesn't drift apart. */
-.filter-overlay { position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 40; }
+   Pravachan/Granth/Books filter popups so their shell doesn't drift apart.
+   The backdrop itself is now OverlayBackdrop (components/ui/Overlay.js). */
 .filter-sheet {
     background-color: var(--color-surface);
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);

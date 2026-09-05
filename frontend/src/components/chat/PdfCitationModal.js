@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { X, ChevronLeft, ChevronRight, Minus, Plus, Link2, Download, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Minus, Plus, Link2, Download, Check } from 'lucide-react';
 import { useOverlayBehavior } from '../ui/Modal';
+import { OverlayBackdrop, CloseButton } from '../ui/Overlay';
 import usePDFViewer from '../../hooks/usePDFViewer';
 import { api } from '../../services/api';
 import { Spinner } from '../SharedComponents';
@@ -145,23 +146,19 @@ export default function PdfCitationModal({ citation, onClose }) {
     };
 
     return (
-        <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4"
-            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
-            onClick={onClose}
+        <OverlayBackdrop
+            onClose={onClose}
+            className="p-0 md:p-4"
+            contentClassName="w-full h-full md:w-[90vw] md:h-[90vh] md:max-w-[1200px] flex flex-col rounded-none md:rounded-xl border-0 md:border"
+            contentStyle={{
+                backgroundColor: 'var(--color-surface)',
+                borderColor: 'var(--color-border)',
+                resize: 'both',
+                overflow: 'hidden',
+                minWidth: '20rem',
+                minHeight: '16rem',
+            }}
         >
-            <div
-                className="w-full h-full md:w-[90vw] md:h-[90vh] md:max-w-[1200px] flex flex-col rounded-none md:rounded-xl border-0 md:border"
-                style={{
-                    backgroundColor: 'var(--color-surface)',
-                    borderColor: 'var(--color-border)',
-                    resize: 'both',
-                    overflow: 'hidden',
-                    minWidth: '20rem',
-                    minHeight: '16rem',
-                }}
-                onClick={(e) => e.stopPropagation()}
-            >
                 <div className="flex items-center gap-1 px-4 py-3 border-b shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                     <span className="flex-1 min-w-0 truncate text-sm font-medium text-ink mr-2" title={title}>{title}</span>
                     <button
@@ -184,9 +181,7 @@ export default function PdfCitationModal({ citation, onClose }) {
                     >
                         {downloading ? <Spinner /> : <Download size={16} />}
                     </button>
-                    <button onClick={onClose} className="text-ink-muted hover:text-ink shrink-0 h-7 w-7 rounded flex items-center justify-center" aria-label="Close">
-                        <X size={20} />
-                    </button>
+                    <CloseButton onClick={onClose} className="h-7 w-7 rounded" />
                 </div>
 
                 <div className="flex-1 relative flex items-center justify-center overflow-auto p-4" style={{ backgroundColor: 'var(--color-bg)' }}>
@@ -272,7 +267,6 @@ export default function PdfCitationModal({ citation, onClose }) {
                         </div>
                     </div>
                 )}
-            </div>
-        </div>
+        </OverlayBackdrop>
     );
 }

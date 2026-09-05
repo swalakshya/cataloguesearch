@@ -20,6 +20,7 @@ import DeveloperAPI from './components/DeveloperAPI';
 import SearchIndex from './components/SearchIndex';
 import UIEval from './components/eval/UIEval';
 import ChatPage from './components/chat/ChatPage';
+import PdfCitationModal from './components/chat/PdfCitationModal';
 import { getStoredAnswerFormat, setStoredAnswerFormat, CHAT_SESSION_STORAGE_KEY } from './config/chatConfig';
 import { setStoredChatDefaultCategories, getStoredKhojDefaultCategories, setStoredKhojDefaultCategories } from './config/filterDefaults';
 import StatsStrip from './components/chat/StatsStrip';
@@ -242,6 +243,8 @@ const AppContent = () => {
     const [showTipsModal, setShowTipsModal] = useState(false);
     const [showExportModal, setShowExportModal] = useState(false);
     const [exportCategory, setExportCategory] = useState(null);
+    // Aagam Khoj's "View PDF" — same shared viewer modal Chat uses for citations.
+    const [activeCitation, setActiveCitation] = useState(null);
     const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
     // True while any modal/filter-sheet/drawer in the app is open (see useOverlayRegistry) —
     // used to hide the mobile Home/Feedback FABs below so they don't collide with it.
@@ -714,6 +717,8 @@ const AppContent = () => {
 
     return (
         <div style={{ backgroundColor: 'var(--color-bg)', '--bg-card': 'var(--color-surface)', '--bg-surface': 'var(--color-bg)' }} className="text-ink min-h-screen font-sans grid grid-cols-[auto_1fr] grid-rows-[auto_1fr]">
+            <PdfCitationModal citation={activeCitation} onClose={() => setActiveCitation(null)} />
+
             {modalData && (
                 <ExpandModal
                     data={modalData}
@@ -946,6 +951,7 @@ const AppContent = () => {
                                                     <ResultsList results={searchData.pravachan_results.results} totalResults={searchData.pravachan_results.total_hits}
                                                         pageSize={PAGE_SIZE} currentPage={pravachanPage} onPageChange={handlePageChange}
                                                         resultType="pravachan" onFindSimilar={handleFindSimilar} onExpand={handleExpand}
+                                                        onOpenReference={setActiveCitation}
                                                         searchType={searchType} query={query} currentFilters={activeFilters} language={language} compact={compact} />
                                                 )}
                                                 {activeTab === 'granth' && loadingCategories.has('Granth') && <SkeletonResultsList />}
@@ -953,7 +959,7 @@ const AppContent = () => {
                                                     <ResultsList results={searchData.granth_results.results} totalResults={searchData.granth_results.total_hits}
                                                         pageSize={PAGE_SIZE} currentPage={granthPage} onPageChange={handlePageChange}
                                                         resultType="granth" onFindSimilar={handleFindSimilar} onExpand={handleExpand}
-                                                        onExpandGranth={handleExpandGranth} searchType={searchType} query={query}
+                                                        onExpandGranth={handleExpandGranth} onOpenReference={setActiveCitation} searchType={searchType} query={query}
                                                         currentFilters={activeFilters} language={language} compact={compact} />
                                                 )}
                                                 {activeTab === 'books' && loadingCategories.has('Books') && <SkeletonResultsList />}
@@ -961,6 +967,7 @@ const AppContent = () => {
                                                     <ResultsList results={searchData.books_results.results} totalResults={searchData.books_results.total_hits}
                                                         pageSize={PAGE_SIZE} currentPage={booksPage} onPageChange={handlePageChange}
                                                         resultType="books" onFindSimilar={handleFindSimilar} onExpand={handleExpand}
+                                                        onOpenReference={setActiveCitation}
                                                         searchType={searchType} query={query} currentFilters={activeFilters} language={language} compact={compact} />
                                                 )}
                                                 {activeTab === 'similar' && (
@@ -970,6 +977,7 @@ const AppContent = () => {
                                                             <ResultsList results={paginatedSimilarResults} totalResults={similarDocumentsData.total_results}
                                                                 pageSize={PAGE_SIZE} currentPage={similarDocsPage} onPageChange={handlePageChange}
                                                                 resultType="similar" onFindSimilar={handleFindSimilar} onExpand={handleExpand}
+                                                                onOpenReference={setActiveCitation}
                                                                 searchType={searchType} query={query} currentFilters={activeFilters} compact={compact} language={language} />
                                                         ) : (
                                                             <div className="text-center py-8 text-sm text-ink-muted">No similar documents found.</div>

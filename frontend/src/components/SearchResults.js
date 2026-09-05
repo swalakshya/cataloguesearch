@@ -119,7 +119,7 @@ export const GranthResultCard = ({ result, isFirst }) => {
 
 const MetaItem = ({ children }) => <span className="text-ink-muted text-xs">{children}</span>;
 
-export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, resultType, isFirst, query, currentFilters, language, searchType, compact }) => {
+export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, onOpenReference, resultType, isFirst, query, currentFilters, language, searchType, compact }) => {
     const [showShareModal, setShowShareModal] = useState(false);
 
     const cardClasses = `card ${compact ? 'p-2' : 'p-3'} hover:shadow-sm transition-shadow`;
@@ -204,14 +204,20 @@ export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, re
                 {/* Actions */}
                 <div className="flex items-center gap-0.5 flex-shrink-0">
                     {result.file_url && (
-                        <a
-                            href={`${result.file_url}#page=${result.pdf_page_number ?? result.page_number}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                        <button
+                            onClick={() => onOpenReference?.({
+                                file_url: result.file_url,
+                                pdf_page_number: result.pdf_page_number,
+                                page_number: result.page_number,
+                                granth: result.metadata?.Name || result.metadata?.title || result.filename,
+                                author: result.metadata?.Author,
+                                volume: result.metadata?.volume,
+                                category: resultType === 'pravachan' ? 'Pravachan' : undefined,
+                            })}
                             className="result-action result-action-danger"
                         >
                             <PdfIcon />PDF
-                        </a>
+                        </button>
                     )}
                     <button onClick={() => setShowShareModal(true)} className="result-action">
                         <ShareIcon />Share
@@ -435,7 +441,7 @@ export const SimilarSourceInfoCard = ({ sourceDoc }) => {
     );
 };
 
-export const ResultsList = ({ results, totalResults, pageSize, currentPage, onPageChange, resultType, onFindSimilar, onExpand, onExpandGranth, searchType, query, currentFilters, language, compact }) => {
+export const ResultsList = ({ results, totalResults, pageSize, currentPage, onPageChange, resultType, onFindSimilar, onExpand, onExpandGranth, onOpenReference, searchType, query, currentFilters, language, compact }) => {
     const totalPages = Math.ceil(totalResults / pageSize);
 
     return (
@@ -448,6 +454,7 @@ export const ResultsList = ({ results, totalResults, pageSize, currentPage, onPa
                         onFindSimilar={onFindSimilar}
                         onExpand={onExpand}
                         onExpandGranth={onExpandGranth}
+                        onOpenReference={onOpenReference}
                         resultType={resultType}
                         isFirst={currentPage === 1 && index === 0}
                         query={query}

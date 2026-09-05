@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ChevronDown, ChevronRight, ChevronLeft, X, Check, Info } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronLeft, Check, Info } from 'lucide-react';
 import TransliterationInput from './TransliterationInput';
 import { Badge, Button, Input } from './ui';
 import { CATEGORY_EMOJI_SRC } from './chat/categoryEmoji';
-import { useRegisterOverlay } from '../hooks/useOverlayRegistry';
+import { useOverlayBehavior } from './ui/Modal';
+import { OverlayBackdrop, CloseButton } from './ui/Overlay';
 
 // --- UTILITY FUNCTIONS ---
 const parseYear = (dateString) => {
@@ -604,7 +605,7 @@ const FilterFooter = ({ onClear, clearLabel = 'Clear', onApply, applyLabel = 'Ap
 const PravachanFilter = ({
     allMetadata, activeFilters, onAddFilter, onRemoveFilter,
     language, startYear, setStartYear, endYear, setEndYear,
-    onOpenChange, disabled,
+    disabled,
 }) => {
     const [isOpen, setIsOpen]         = useState(false);
     const [pendingGranths, setPendingGranths] = useState([]);
@@ -643,10 +644,14 @@ const PravachanFilter = ({
         return map;
     }, [cascade]);
 
-    // Let the parent know this modal is open, so it can e.g. hide FABs that would collide with it.
-    useEffect(() => {
-        onOpenChange?.(isOpen);
-    }, [isOpen]); // eslint-disable-line
+    // Escape/outside-click/back-button-closes/scroll-lock/FAB-hiding registration,
+    // shared with every other overlay in the app — closing the narrow popup first
+    // (if open), then the whole filter, same priority the old hand-rolled Escape
+    // handler used.
+    useOverlayBehavior(isOpen, () => {
+        if (narrowingKey) setNarrowingKey(null);
+        else setIsOpen(false);
+    });
 
     // Sync pending state from activeFilters when opening. Our own selections live
     // entirely under "_pravachan_groups" — a whole-Granth pick is a group with no
@@ -684,18 +689,6 @@ const PravachanFilter = ({
         setNarrowingKey(null);
         setNarrowStep('volumes');
     }, [isOpen]); // eslint-disable-line
-
-    // Close on Escape — closes the narrow popup first if it's open, else the whole modal.
-    useEffect(() => {
-        if (!isOpen) return;
-        const onKey = (e) => {
-            if (e.key !== 'Escape') return;
-            if (narrowingKey) setNarrowingKey(null);
-            else setIsOpen(false);
-        };
-        window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
-    }, [isOpen, narrowingKey]);
 
     const toggleExpand = (granth) =>
         setExpandedGranths(prev => prev.includes(granth) ? prev.filter(x => x !== granth) : [...prev, granth]);
@@ -842,10 +835,11 @@ const PravachanFilter = ({
             </button>
 
             {isOpen && (
-                <>
-                    <div className="filter-overlay" onClick={() => setIsOpen(false)} />
-                    <div className="fixed inset-x-0 bottom-0 md:inset-0 md:flex md:items-center md:justify-center z-50">
-                        <div className="filter-sheet rounded-t-lg md:rounded-lg md:max-w-lg md:max-h-[85vh]" onClick={e => e.stopPropagation()}>
+                    <OverlayBackdrop
+                        onClose={() => setIsOpen(false)}
+                        className="items-end md:items-center"
+                        contentClassName="filter-sheet rounded-t-lg md:rounded-lg md:max-w-lg md:max-h-[85vh]"
+                    >
 
                             {/* Header */}
                             <div className="p-4 border-b border-border flex items-center justify-between sticky top-0 bg-surface rounded-t-lg">
@@ -872,9 +866,7 @@ const PravachanFilter = ({
                                         )}
                                     </div>
                                 </div>
-                                <button onClick={() => setIsOpen(false)} className="text-ink-muted hover:text-ink flex-shrink-0 ml-2">
-                                    <X className="w-5 h-5" />
-                                </button>
+                                <CloseButton onClick={() => setIsOpen(false)} className="ml-2" />
                             </div>
 
                             {/* Body */}
@@ -1034,9 +1026,7 @@ const PravachanFilter = ({
                             ) : (
                                 <FilterFooter onClear={handleClear} onApply={handleApply} />
                             )}
-                        </div>
-                    </div>
-                </>
+                    </OverlayBackdrop>
             )}
         </>
     );
@@ -1044,15 +1034,14 @@ const PravachanFilter = ({
 
 // ─── GranthFilter ────────────────────────────────────────────────────────────
 
-const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, language, onOpenChange, disabled }) => {
+const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, language, disabled }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [pending, setPending]   = useState([]);
     const [search, setSearch]     = useState('');
 
-    // Let the parent know this modal is open, so it can e.g. hide FABs that would collide with it.
-    useEffect(() => {
-        onOpenChange?.(isOpen);
-    }, [isOpen]); // eslint-disable-line
+    // Escape/outside-click/back-button-closes/scroll-lock/FAB-hiding registration,
+    // shared with every other overlay in the app.
+    useOverlayBehavior(isOpen, () => setIsOpen(false));
 
     const allNames = useMemo(() => {
         return [...(allMetadata?.Granth?.[language]?.Name || [])].sort();
@@ -1070,13 +1059,6 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
         setPending(activeFilters.filter(f => f.key === 'Name' && allNames.includes(f.value)).map(f => f.value));
         setSearch('');
     }, [isOpen]); // eslint-disable-line
-
-    useEffect(() => {
-        if (!isOpen) return;
-        const onKey = (e) => { if (e.key === 'Escape') setIsOpen(false); };
-        window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
-    }, [isOpen]);
 
     const toggle = (name) =>
         setPending(prev => prev.includes(name) ? prev.filter(x => x !== name) : [...prev, name]);
@@ -1109,17 +1091,16 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
             </button>
 
             {isOpen && (
-                <>
-                    <div className="filter-overlay" onClick={() => setIsOpen(false)} />
-                    <div className="fixed inset-x-0 bottom-0 md:inset-0 md:flex md:items-center md:justify-center z-50">
-                        <div className="filter-sheet rounded-t-lg md:rounded-lg md:max-w-lg md:max-h-[85vh]" onClick={e => e.stopPropagation()}>
+                    <OverlayBackdrop
+                        onClose={() => setIsOpen(false)}
+                        className="items-end md:items-center"
+                        contentClassName="filter-sheet rounded-t-lg md:rounded-lg md:max-w-lg md:max-h-[85vh]"
+                    >
 
                             {/* Header */}
                             <div className="p-4 border-b border-border flex items-center justify-between sticky top-0 bg-surface rounded-t-lg">
                                 <h3 className="text-base font-bold text-ink">Filter by Granth</h3>
-                                <button onClick={() => setIsOpen(false)} className="text-ink-muted hover:text-ink">
-                                    <X className="w-5 h-5" />
-                                </button>
+                                <CloseButton onClick={() => setIsOpen(false)} />
                             </div>
 
                             {/* Search */}
@@ -1164,22 +1145,20 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
                                 onApply={handleApply}
                                 applyLabel={`Apply${pending.length > 0 ? ` (${pending.length})` : ''}`}
                             />
-                        </div>
-                    </div>
-                </>
+                    </OverlayBackdrop>
             )}
         </>
     );
 };
 
-const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, language, onOpenChange, disabled }) => {
+const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, language, disabled }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [pending, setPending]   = useState([]);
     const [search, setSearch]     = useState('');
 
-    useEffect(() => {
-        onOpenChange?.(isOpen);
-    }, [isOpen]); // eslint-disable-line
+    // Escape/outside-click/back-button-closes/scroll-lock/FAB-hiding registration,
+    // shared with every other overlay in the app.
+    useOverlayBehavior(isOpen, () => setIsOpen(false));
 
     const allNames = useMemo(() => {
         return [...(allMetadata?.Books?.[language]?.Name || [])].sort();
@@ -1196,13 +1175,6 @@ const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, 
         setPending(activeFilters.filter(f => f.key === 'Name' && allNames.includes(f.value)).map(f => f.value));
         setSearch('');
     }, [isOpen]); // eslint-disable-line
-
-    useEffect(() => {
-        if (!isOpen) return;
-        const onKey = (e) => { if (e.key === 'Escape') setIsOpen(false); };
-        window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
-    }, [isOpen]);
 
     const toggle = (name) =>
         setPending(prev => prev.includes(name) ? prev.filter(x => x !== name) : [...prev, name]);
@@ -1235,17 +1207,16 @@ const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, 
             </button>
 
             {isOpen && (
-                <>
-                    <div className="filter-overlay" onClick={() => setIsOpen(false)} />
-                    <div className="fixed inset-x-0 bottom-0 md:inset-0 md:flex md:items-center md:justify-center z-50">
-                        <div className="filter-sheet rounded-t-lg md:rounded-lg md:max-w-lg md:max-h-[85vh]" onClick={e => e.stopPropagation()}>
+                    <OverlayBackdrop
+                        onClose={() => setIsOpen(false)}
+                        className="items-end md:items-center"
+                        contentClassName="filter-sheet rounded-t-lg md:rounded-lg md:max-w-lg md:max-h-[85vh]"
+                    >
 
                             {/* Header */}
                             <div className="p-4 border-b border-border flex items-center justify-between sticky top-0 bg-surface rounded-t-lg">
                                 <h3 className="text-base font-bold text-ink">Filter by Books</h3>
-                                <button onClick={() => setIsOpen(false)} className="text-ink-muted hover:text-ink">
-                                    <X className="w-5 h-5" />
-                                </button>
+                                <CloseButton onClick={() => setIsOpen(false)} />
                             </div>
 
                             {/* Search */}
@@ -1290,9 +1261,7 @@ const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, 
                                 onApply={handleApply}
                                 applyLabel={`Apply${pending.length > 0 ? ` (${pending.length})` : ''}`}
                             />
-                        </div>
-                    </div>
-                </>
+                    </OverlayBackdrop>
             )}
         </>
     );
@@ -1334,13 +1303,10 @@ export const SearchFilters = ({
     const hasYearFilter = startYear || endYear;
     const hasAnyFilter  = activeFilters.length > 0 || hasYearFilter;
 
-    // Pravachan, Granth and Books each own their modal's open state independently —
-    // combine them into the shared overlay registry so the mobile Home/Feedback
-    // FABs (and anything else that cares) see one "is any overlay open" signal.
-    const [pravachanOpen, setPravachanOpen] = useState(false);
-    const [granthOpen, setGranthOpen]       = useState(false);
-    const [booksOpen, setBooksOpen]         = useState(false);
-    useRegisterOverlay(pravachanOpen || granthOpen || booksOpen);
+    // Pravachan, Granth and Books each register themselves with the shared overlay
+    // registry directly now (via useOverlayBehavior), so the mobile Home/Feedback
+    // FABs still see one "is any overlay open" signal without this component
+    // needing to combine their open states itself.
 
     return (
         // min-w-0 lets this shrink to its 1fr grid track instead of growing past it and
@@ -1361,7 +1327,6 @@ export const SearchFilters = ({
                         setStartYear={setStartYear}
                         endYear={endYear}
                         setEndYear={setEndYear}
-                        onOpenChange={setPravachanOpen}
                         disabled={contentTypes && !contentTypes.pravachans}
                     />
                 )}
@@ -1372,7 +1337,6 @@ export const SearchFilters = ({
                         onAddFilter={onAddFilter}
                         onRemoveFilter={onRemoveFilter}
                         language={language}
-                        onOpenChange={setGranthOpen}
                         disabled={contentTypes && !contentTypes.granths}
                     />
                 )}
@@ -1383,7 +1347,6 @@ export const SearchFilters = ({
                         onAddFilter={onAddFilter}
                         onRemoveFilter={onRemoveFilter}
                         language={language}
-                        onOpenChange={setBooksOpen}
                         disabled={contentTypes && !contentTypes.books}
                     />
                 )}
