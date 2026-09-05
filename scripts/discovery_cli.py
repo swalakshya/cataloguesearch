@@ -19,6 +19,7 @@ from threading import Event
 
 from backend.common.opensearch import get_opensearch_client, get_metadata, delete_documents_by_filename
 from backend.common.opensearch import create_indices_if_not_exists, refresh_pravachan_series_metadata
+from backend.common.opensearch import rebuild_full_metadata_index
 from backend.common import opensearch
 from backend.common.catalogue import rebuild_catalogue_index
 from backend.config import Config
@@ -147,9 +148,14 @@ class DiscoveryDaemon:
             # Run discovery
             self.discovery.crawl()
 
-            # Rebuild the content catalogue index (config.json-driven, cheap)
+            # Refresh the Pravachan series cascade and rebuild the content
+            # catalogue index -- same triggers, per rebuild_catalogue_index()'s
+            # docstring, so they run together after every crawl.
+            client = get_opensearch_client(self.config)
+            logging.info("Refreshing Pravachan series cascade metadata...")
+            refresh_pravachan_series_metadata(self.config, client)
             logging.info("Rebuilding content catalogue index...")
-            rebuild_catalogue_index(self.config, get_opensearch_client(self.config))
+            rebuild_catalogue_index(self.config, client)
 
             # Update metadata cache after discovery
             logging.info("Updating metadata cache...")
@@ -232,7 +238,11 @@ def run_discovery_once(config: Config, crawl=False, index=False, dry_run=False,
         # Run discovery
         discovery.crawl(crawl, index, dry_run, reindex_metadata_only, root_folder=folder)
 
-        # Rebuild the content catalogue index (config.json-driven, cheap)
+        # Refresh the Pravachan series cascade and rebuild the content
+        # catalogue index -- same triggers, per rebuild_catalogue_index()'s
+        # docstring, so they run together after every crawl.
+        logging.info("Refreshing Pravachan series cascade metadata...")
+        refresh_pravachan_series_metadata(config, client)
         logging.info("Rebuilding content catalogue index...")
         rebuild_catalogue_index(config, client)
 
@@ -385,6 +395,7 @@ def main():
 
     if args.refresh_metadata:
         client = get_opensearch_client(config)
+        rebuild_full_metadata_index(config, client)
         refresh_pravachan_series_metadata(config, client)
         rebuild_catalogue_index(config, client)
         sys.exit(0)

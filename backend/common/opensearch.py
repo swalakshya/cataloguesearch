@@ -6,27 +6,20 @@ and operations including index management, metadata retrieval, and document oper
 import logging
 import os
 import traceback
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import yaml
 from opensearchpy import OpenSearch, helpers
 from backend.config import Config
 from backend.common.embedding_models import get_embedding_model_factory
+from backend.common.language import normalize_language, RAW_TO_LANG_KEY
 from backend.utils import json_dumps
 
 # Module-level variables for singleton pattern
 # These variables hold cached client instance and settings
 _CLIENT = None
 _OPENSEARCH_SETTINGS = None
-
-# Language key mapping for metadata indexing
-_LANG_KEYS_MAP = {
-    "hi": "hi",
-    "gu": "gu",
-    "gu+hi": "gu",
-    "hi+gu": "hi",
-    "gujarati": "gu",
-    "hindi": "hi"
-}
 
 log_handle = logging.getLogger(__name__)
 
@@ -370,35 +363,60 @@ def delete_documents_by_document_id(config: Config, document_id: str):
 
 def refresh_pravachan_series_metadata(config: Config, opensearch_client: OpenSearch):
     """
-    Rebuilds the Pravachan series cascade doc in the metadata index via a single
-    4-level aggregation (Granth → Series → Volume → PravachanNumber) against the main index.
+    Rebuilds the Pravachan series cascade docs in the metadata index via a
+    4-level aggregation (Granth → Series → Volume → PravachanNumber) against
+    the main index, run once per normalized language bucket (hi/gu) so the
+    Pravachan filter can be scoped by language like every other filter.
 
-    Idempotent — overwrites the previous cascade doc. Call after any Pravachan
+    Idempotent — overwrites the previous cascade docs. Call after any Pravachan
     index_document(), after cleanup, or standalone via --refresh-metadata.
     """
     main_index = config.OPENSEARCH_INDEX_NAME
     metadata_index = config.OPENSEARCH_METADATA_INDEX_NAME
 
-    agg_body = {
-        "size": 0,
-        "query": {"term": {"metadata.category.keyword": "Pravachan"}},
-        "aggs": {
-            "by_granth": {
-                "terms": {"field": "metadata.Name.keyword", "size": 100},
-                "aggs": {
-                    "by_series": {
-                        "terms": {"field": "metadata.Series.keyword", "size": 200, "missing": "__NO_SERIES__"},
-                        "aggs": {
-                            "series_start": {"min": {"field": "metadata.series_start_date"}},
-                            "series_end":   {"max": {"field": "metadata.series_end_date"}},
-                            "by_volume": {
-                                "terms": {"field": "metadata.volume", "size": 100, "missing": -1},
-                                "aggs": {
-                                    "by_pravachan_number": {
-                                        "terms": {
-                                            "field": "chunk_labels.pravachan_number",
-                                            "size": 2000,
-                                            "missing": "__none__"
+    # Invert RAW_TO_LANG_KEY: which raw metadata.language values collapse into
+    # each normalized bucket, e.g. "gu" <- ["gu", "gu+hi", "gujarati"]. Same
+    # normalization update_metadata_index() uses for Name/Author/Anuyog, so a
+    # Pravachan document lands in the same language bucket here as there.
+    raw_values_by_lang_key = {}
+    for raw, lang_key in RAW_TO_LANG_KEY.items():
+        raw_values_by_lang_key.setdefault(lang_key, []).append(raw)
+
+    # Drop the old single, language-mixed doc from before this per-language
+    # split -- its composite key ("pravachan_series_cascade_hi") would
+    # otherwise collide with the new hi-bucket doc below and make
+    # get_metadata()'s result order-dependent.
+    opensearch_client.delete(index=metadata_index, id="Pravachan_series_cascade", ignore=[404])
+
+    for lang_key, raw_values in raw_values_by_lang_key.items():
+        agg_body = {
+            "size": 0,
+            "query": {
+                "bool": {
+                    "filter": [
+                        {"term": {"metadata.category.keyword": "Pravachan"}},
+                        {"terms": {"metadata.language.keyword": raw_values}},
+                    ]
+                }
+            },
+            "aggs": {
+                "by_granth": {
+                    "terms": {"field": "metadata.Name.keyword", "size": 100},
+                    "aggs": {
+                        "by_series": {
+                            "terms": {"field": "metadata.Series.keyword", "size": 200, "missing": "__NO_SERIES__"},
+                            "aggs": {
+                                "series_start": {"min": {"field": "metadata.series_start_date"}},
+                                "series_end":   {"max": {"field": "metadata.series_end_date"}},
+                                "by_volume": {
+                                    "terms": {"field": "metadata.volume", "size": 100, "missing": -1},
+                                    "aggs": {
+                                        "by_pravachan_number": {
+                                            "terms": {
+                                                "field": "chunk_labels.pravachan_number",
+                                                "size": 2000,
+                                                "missing": "__none__"
+                                            }
                                         }
                                     }
                                 }
@@ -408,64 +426,233 @@ def refresh_pravachan_series_metadata(config: Config, opensearch_client: OpenSea
                 }
             }
         }
+
+        try:
+            response = opensearch_client.search(index=main_index, body=agg_body)
+            granth_buckets = response.get("aggregations", {}).get("by_granth", {}).get("buckets", [])
+
+            series_list = []
+            for g_bucket in granth_buckets:
+                granth_name = g_bucket["key"]
+                series_buckets = g_bucket.get("by_series", {}).get("buckets", [])
+
+                for s_bucket in series_buckets:
+                    # Pravachans with no "Series" field (standalone books, not a numbered
+                    # discourse series) land in this sentinel bucket -- surfaced as name=None
+                    # so the frontend can render them as a flat, non-drilldown Granth entry.
+                    series_name = s_bucket["key"]
+                    if series_name == "__NO_SERIES__":
+                        series_name = None
+                    start_date = s_bucket.get("series_start", {}).get("value_as_string")
+                    end_date   = s_bucket.get("series_end",   {}).get("value_as_string")
+
+                    volumes = []
+                    for v_bucket in s_bucket.get("by_volume", {}).get("buckets", []):
+                        vol = v_bucket["key"]
+                        if vol == -1:
+                            continue
+                        pn_buckets = v_bucket.get("by_pravachan_number", {}).get("buckets", [])
+                        pravachan_numbers = sorted(
+                            [b["key"] for b in pn_buckets if b["key"] != "__none__"],
+                            key=lambda x: (0, int(x)) if str(x).isdigit() else (1, str(x))
+                        )
+                        volumes.append({"volume": int(vol), "pravachan_numbers": pravachan_numbers})
+
+                    volumes.sort(key=lambda v: v["volume"])
+                    series_list.append({
+                        "name": series_name,
+                        "granth": granth_name,
+                        "start_date": start_date,
+                        "end_date": end_date,
+                        "volumes": volumes,
+                    })
+
+            doc = {
+                "key": "pravachan_series_cascade",
+                "content_type": "Pravachan",
+                "series": series_list,
+                "language": lang_key,
+            }
+            opensearch_client.index(
+                index=metadata_index,
+                id=f"Pravachan_series_cascade_{lang_key}",
+                body=doc,
+            )
+            log_handle.info(
+                f"Refreshed Pravachan series cascade metadata ({lang_key}): {len(series_list)} series written."
+            )
+        except Exception as e:
+            log_handle.error(f"Error refreshing Pravachan series metadata ({lang_key}): {e}", exc_info=True)
+
+
+_METADATA_VALUE_KEYS = ["Anuyog", "Author", "Name"]
+
+
+def _scroll_metadata_slice(config: Config, main_index: str, slice_id: int, num_slices: int, batch_size: int):
+    """
+    Scrolls one slice of the main index and accumulates Name/Author/Anuyog
+    values and Granth_date_ranges locally, keyed by the same normalized
+    lang_key every other writer of the metadata index uses.
+
+    Returns:
+        values_map: dict[(content_type, key, lang_key)] -> set of str
+        date_ranges_map: dict[(content_type, lang_key)] -> dict[granth] -> set of (start, end)
+        doc_count: int
+    """
+    client = get_opensearch_client(config)
+
+    values_map = defaultdict(set)
+    date_ranges_map = defaultdict(lambda: defaultdict(set))
+    doc_count = 0
+
+    query_body = {
+        "size": batch_size,
+        "query": {"match_all": {}},
+        "_source": ["metadata", "language"],
     }
+    if num_slices > 1:
+        query_body["slice"] = {"id": slice_id, "max": num_slices}
+
+    response = client.search(index=main_index, body=query_body, scroll='5m')
+    scroll_id = response.get('_scroll_id')
+    hits = response['hits']['hits']
+
+    while hits:
+        for hit in hits:
+            source = hit.get('_source', {})
+            metadata = source.get('metadata', {})
+            language = source.get('language', 'hi')
+            lang_key = normalize_language(language)
+            content_type = metadata.get('category', 'Pravachan')
+
+            for key in _METADATA_VALUE_KEYS:
+                value = metadata.get(key)
+                if not value:
+                    continue
+                new_values = [str(v) for v in value] if isinstance(value, list) else [str(value)]
+                values_map[(content_type, key, lang_key)].update(new_values)
+
+            granth_values = metadata.get("Name")
+            series_start = metadata.get("series_start_date")
+            series_end = metadata.get("series_end_date")
+            if granth_values and series_start and series_end:
+                granth_list = granth_values if isinstance(granth_values, list) else [granth_values]
+                granth_list = [str(g) for g in granth_list]
+                for granth in granth_list:
+                    date_ranges_map[(content_type, lang_key)][granth].add(
+                        (str(series_start), str(series_end))
+                    )
+
+            doc_count += 1
+
+        try:
+            response = client.scroll(scroll_id=scroll_id, scroll='5m')
+            hits = response['hits']['hits']
+        except Exception as e:
+            log_handle.warning(f"Slice {slice_id}: scroll error: {e}")
+            break
 
     try:
-        response = opensearch_client.search(index=main_index, body=agg_body)
-        granth_buckets = response.get("aggregations", {}).get("by_granth", {}).get("buckets", [])
+        client.clear_scroll(scroll_id=scroll_id)
+    except Exception:
+        pass
 
-        series_list = []
-        for g_bucket in granth_buckets:
-            granth_name = g_bucket["key"]
-            series_buckets = g_bucket.get("by_series", {}).get("buckets", [])
+    log_handle.info(f"Slice {slice_id}: processed {doc_count} docs")
+    return values_map, date_ranges_map, doc_count
 
-            for s_bucket in series_buckets:
-                # Pravachans with no "Series" field (standalone books, not a numbered
-                # discourse series) land in this sentinel bucket -- surfaced as name=None
-                # so the frontend can render them as a flat, non-drilldown Granth entry.
-                series_name = s_bucket["key"]
-                if series_name == "__NO_SERIES__":
-                    series_name = None
-                start_date = s_bucket.get("series_start", {}).get("value_as_string")
-                end_date   = s_bucket.get("series_end",   {}).get("value_as_string")
 
-                volumes = []
-                for v_bucket in s_bucket.get("by_volume", {}).get("buckets", []):
-                    vol = v_bucket["key"]
-                    if vol == -1:
-                        continue
-                    pn_buckets = v_bucket.get("by_pravachan_number", {}).get("buckets", [])
-                    pravachan_numbers = sorted(
-                        [b["key"] for b in pn_buckets if b["key"] != "__none__"],
-                        key=lambda x: (0, int(x)) if str(x).isdigit() else (1, str(x))
-                    )
-                    volumes.append({"volume": int(vol), "pravachan_numbers": pravachan_numbers})
+def rebuild_full_metadata_index(
+        config: Config, opensearch_client: OpenSearch, num_slices: int = 4, batch_size: int = 5000):
+    """
+    Rebuilds the Name/Author/Anuyog/Granth_date_ranges entries in the metadata
+    index for every content type (Pravachan, Granth, Books) from scratch, via
+    a (optionally sliced/parallel) scroll over the main content index.
 
-                volumes.sort(key=lambda v: v["volume"])
-                series_list.append({
-                    "name": series_name,
-                    "granth": granth_name,
-                    "start_date": start_date,
-                    "end_date": end_date,
-                    "volumes": volumes,
-                })
+    Unlike update_metadata_index()'s per-document append-only upsert, this
+    deletes and recreates the metadata index so renamed/removed values don't
+    linger -- e.g. a Granth rename leaves both the old and new name in the
+    dropdown forever under the append-only path, but not after this runs.
 
-        doc = {
-            "key": "pravachan_series_cascade",
-            "content_type": "Pravachan",
-            "series": series_list,
-            "language": "hi",
+    Does NOT touch the Pravachan series cascade docs -- call
+    refresh_pravachan_series_metadata() separately (as --refresh-metadata
+    already does) to restore those after this deletes the index.
+    """
+    main_index = config.OPENSEARCH_INDEX_NAME
+    metadata_index = config.OPENSEARCH_METADATA_INDEX_NAME
+    num_slices = max(num_slices, 1)
+
+    slice_results = []
+    with ThreadPoolExecutor(max_workers=num_slices) as executor:
+        futures = {
+            executor.submit(_scroll_metadata_slice, config, main_index, i, num_slices, batch_size): i
+            for i in range(num_slices)
         }
-        opensearch_client.index(
-            index=metadata_index,
-            id="Pravachan_series_cascade",
-            body=doc,
-        )
+        failed_slices = []
+        for future in as_completed(futures):
+            slice_id = futures[future]
+            try:
+                slice_results.append(future.result())
+            except Exception as e:
+                log_handle.error(f"Slice {slice_id} failed: {e}")
+                failed_slices.append(slice_id)
+
+    if failed_slices:
+        log_handle.error(
+            f"Aborting full metadata rebuild: slices {failed_slices} failed. Metadata index NOT modified.")
+        return
+
+    merged_values = defaultdict(set)
+    merged_date_ranges = defaultdict(lambda: defaultdict(set))
+    total_docs = 0
+    for values_map, date_ranges_map, doc_count in slice_results:
+        total_docs += doc_count
+        for k, v in values_map.items():
+            merged_values[k].update(v)
+        for k, granth_dict in date_ranges_map.items():
+            for granth, date_set in granth_dict.items():
+                merged_date_ranges[k][granth].update(date_set)
+
+    try:
+        if opensearch_client.indices.exists(metadata_index):
+            opensearch_client.indices.delete(index=metadata_index)
+        create_indices_if_not_exists(config, opensearch_client)
+
+        actions = []
+        for (content_type, key, lang_key), values in merged_values.items():
+            actions.append({
+                "_op_type": "index",
+                "_index": metadata_index,
+                "_id": f"{content_type}_{key}_{lang_key}",
+                "_source": {
+                    "key": key,
+                    "values": sorted(values),
+                    "language": lang_key,
+                    "content_type": content_type,
+                },
+            })
+        for (content_type, lang_key), granth_dict in merged_date_ranges.items():
+            date_ranges = {
+                granth: [{"start_date": s, "end_date": e} for s, e in sorted(dates)]
+                for granth, dates in granth_dict.items()
+            }
+            actions.append({
+                "_op_type": "index",
+                "_index": metadata_index,
+                "_id": f"{content_type}_Granth_date_ranges_{lang_key}",
+                "_source": {
+                    "key": "Granth_date_ranges",
+                    "date_ranges": date_ranges,
+                    "language": lang_key,
+                    "content_type": content_type,
+                },
+            })
+
+        if actions:
+            helpers.bulk(opensearch_client, actions, stats_only=True, raise_on_error=True)
         log_handle.info(
-            f"Refreshed Pravachan series cascade metadata: {len(series_list)} series written."
-        )
+            f"Rebuilt full metadata index: {total_docs} docs scanned, {len(actions)} metadata docs written.")
     except Exception as e:
-        log_handle.error(f"Error refreshing Pravachan series metadata: {e}", exc_info=True)
+        log_handle.error(f"Error rebuilding full metadata index: {e}", exc_info=True)
 
 
 def update_metadata_index(config: Config, opensearch_client: OpenSearch, metadata: dict):
@@ -486,7 +673,7 @@ def update_metadata_index(config: Config, opensearch_client: OpenSearch, metadat
 
     # Extract language, default to "hi" for backward compatibility
     language = metadata.get("language", "hi")
-    lang_key = _LANG_KEYS_MAP[language]
+    lang_key = normalize_language(language)
 
     # Extract content_type from category field
     content_type = metadata.get("category", "Pravachan")

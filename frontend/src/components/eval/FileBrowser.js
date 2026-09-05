@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Spinner } from '../SharedComponents';
 
 const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectoryHandles, currentTab, startPath }) => {
@@ -11,70 +11,19 @@ const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectory
     const currentTabRef = useRef(currentTab);
     useEffect(() => { currentTabRef.current = currentTab; }, [currentTab]);
 
-    useEffect(() => {
-        if (isOpen && basePaths) {
-            if (baseDirectoryHandles && baseDirectoryHandles.pdf && !basePdfHandle) {
-                // Use the provided base directory handle
-                setBasePdfHandle(baseDirectoryHandles.pdf);
-
-                // Navigate to startPath if provided, otherwise start at root
-                const initialPath = startPath || '';
-                setCurrentPath(initialPath);
-
-                // Build path history for the startPath
-                if (initialPath) {
-                    const pathParts = initialPath.split('/').filter(p => p);
-                    const history = [''];
-                    let buildPath = '';
-                    for (const part of pathParts) {
-                        buildPath = buildPath ? `${buildPath}/${part}` : part;
-                        history.push(buildPath);
-                    }
-                    setPathHistory(history);
-                } else {
-                    setPathHistory(['']);
-                }
-
-                navigateToPath(baseDirectoryHandles.pdf, initialPath);
-            } else if (!basePdfHandle) {
-                initializeBasePdfFolder();
-            }
-        }
-    }, [isOpen, basePaths, baseDirectoryHandles, startPath]);
-
-    // Helper function to navigate to a specific path
-    const navigateToPath = async (baseHandle, targetPath) => {
-        try {
-            let dirHandle = baseHandle;
-            if (targetPath) {
-                const pathParts = targetPath.split('/').filter(p => p);
-                for (const part of pathParts) {
-                    dirHandle = await dirHandle.getDirectoryHandle(part);
-                }
-            }
-            await loadDirectory(dirHandle, targetPath);
-        } catch (err) {
-            console.error('Error navigating to path:', targetPath, err);
-            // Fall back to root if navigation fails
-            await loadDirectory(baseHandle, '');
-        }
-    };
-
-    const initializeBasePdfFolder = async () => {
-        // Don't automatically open the directory picker
-        // Instead, show the file browser interface with instructions
-        setCurrentPath('');
-        setPathHistory(['']);
-        setIsLoading(false);
-    };
-
-    const loadDirectory = async (dirHandle, path) => {
+    // loadDirectory/navigateToPath/initializeBasePdfFolder only close over refs
+    // and setState functions (both stable across renders) -- wrapping them in
+    // useCallback here makes them genuinely referentially stable, so listing
+    // them as effect dependencies below doesn't cause the effect to re-run on
+    // every render. Defined above the effect that uses them since useCallback's
+    // deps (unlike a plain function reference) need it that way.
+    const loadDirectory = useCallback(async (dirHandle, path) => {
         setIsLoading(true);
         setError(null);
-        
+
         try {
             const items = [];
-            
+
             for await (const [name, handle] of dirHandle.entries()) {
                 // Skip hidden files/directories (starting with '.')
                 if (name.startsWith('.')) {
@@ -109,7 +58,7 @@ const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectory
                     }
                 }
             }
-            
+
             // Sort: directories first, then files, both alphabetically
             items.sort((a, b) => {
                 if (a.type !== b.type) {
@@ -117,7 +66,7 @@ const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectory
                 }
                 return a.name.localeCompare(b.name);
             });
-            
+
             console.log(`Loaded ${items.filter(i => i.type === 'directory').length} directories and ${items.filter(i => i.type === 'file').length} PDF files from path "${path}"`);
             setDirectories(items);
             setCurrentPath(path);
@@ -127,7 +76,64 @@ const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectory
         } finally {
             setIsLoading(false);
         }
-    };
+    }, []);
+
+    // Helper function to navigate to a specific path
+    const navigateToPath = useCallback(async (baseHandle, targetPath) => {
+        try {
+            let dirHandle = baseHandle;
+            if (targetPath) {
+                const pathParts = targetPath.split('/').filter(p => p);
+                for (const part of pathParts) {
+                    dirHandle = await dirHandle.getDirectoryHandle(part);
+                }
+            }
+            await loadDirectory(dirHandle, targetPath);
+        } catch (err) {
+            console.error('Error navigating to path:', targetPath, err);
+            // Fall back to root if navigation fails
+            await loadDirectory(baseHandle, '');
+        }
+    }, [loadDirectory]);
+
+    const initializeBasePdfFolder = useCallback(async () => {
+        // Don't automatically open the directory picker
+        // Instead, show the file browser interface with instructions
+        setCurrentPath('');
+        setPathHistory(['']);
+        setIsLoading(false);
+    }, []);
+
+    useEffect(() => {
+        if (isOpen && basePaths) {
+            if (baseDirectoryHandles && baseDirectoryHandles.pdf && !basePdfHandle) {
+                // Use the provided base directory handle
+                setBasePdfHandle(baseDirectoryHandles.pdf);
+
+                // Navigate to startPath if provided, otherwise start at root
+                const initialPath = startPath || '';
+                setCurrentPath(initialPath);
+
+                // Build path history for the startPath
+                if (initialPath) {
+                    const pathParts = initialPath.split('/').filter(p => p);
+                    const history = [''];
+                    let buildPath = '';
+                    for (const part of pathParts) {
+                        buildPath = buildPath ? `${buildPath}/${part}` : part;
+                        history.push(buildPath);
+                    }
+                    setPathHistory(history);
+                } else {
+                    setPathHistory(['']);
+                }
+
+                navigateToPath(baseDirectoryHandles.pdf, initialPath);
+            } else if (!basePdfHandle) {
+                initializeBasePdfFolder();
+            }
+        }
+    }, [isOpen, basePaths, baseDirectoryHandles, startPath, basePdfHandle, navigateToPath, initializeBasePdfFolder]);
 
     const handleItemClick = async (item) => {
         if (item.type === 'directory') {

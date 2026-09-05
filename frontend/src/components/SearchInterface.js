@@ -616,7 +616,7 @@ const PravachanFilter = ({
     const [narrowingKey, setNarrowingKey] = useState(null); // seriesKey currently open in the popup, or null
     const [narrowStep, setNarrowStep] = useState('volumes'); // 'volumes' | 'numbers', within the popup
 
-    const cascade = allMetadata?.Pravachan?.hindi?.pravachan_series_cascade || [];
+    const cascade = allMetadata?.Pravachan?.[language]?.pravachan_series_cascade || [];
 
     // Series names are only unique *within* a Granth (e.g. two different Granths can each
     // have a "1979 Series") — every selection must be keyed by Granth+name, never name alone.

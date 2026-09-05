@@ -4,12 +4,20 @@ One row per leaf work in cataloguesearch-configs, driven entirely by the
 config.json tree under BASE_PDF_PATH -- independent of whether any PDFs have
 actually been indexed yet.
 
-Pravachan rows require a curator-assigned `count` (a series marked "compiled"
-or given a target count shows up here even before a single page of it has
-been OCR'd). Granth and Books rows need no curation at all -- a `Name` in the
-folder's own config.json is enough, since every leaf Granth/Book folder sets
-one directly; their "count" is just how many such rows exist, not a per-row
-field.
+A Pravachan folder gets a row if it has a curator-assigned `count` (a series
+marked "compiled" or given a target count shows up here even before a single
+page of it has been OCR'd), or if it's an actual leaf directory (no
+subdirectories -- it holds PDFs directly) with a `Name`. The leaf-directory
+fallback exists because some Pravachan works aren't organized into dated
+series at all (e.g. Tattva Charcha), so there's nothing to curate a `count`
+for; the `count` column just renders "-" for these in the UI. Folders like
+"Bahinshree Na Vachanamrut" that group dated series subfolders (which do carry
+`count`) are excluded by this fallback since they aren't leaves themselves --
+only their series subfolders are.
+
+Granth and Books rows need no curation at all -- a `Name` in the folder's own
+config.json is enough, since every leaf Granth/Book folder sets one directly;
+their "count" is just how many such rows exist, not a per-row field.
 """
 import logging
 import os
@@ -20,18 +28,9 @@ from opensearchpy import OpenSearch, helpers
 from backend.config import Config
 from backend.common.utils import get_merged_config_for_dir, list_directories
 from backend.common.opensearch import create_indices_if_not_exists
+from backend.common.language import normalize_language
 
 log_handle = logging.getLogger(__name__)
-
-# Same language normalization used for the main/metadata indices.
-_LANG_KEYS_MAP = {
-    "hi": "hi",
-    "gu": "gu",
-    "gu+hi": "gu",
-    "hi+gu": "hi",
-    "gujarati": "gu",
-    "hindi": "hi",
-}
 
 
 def _normalize_date(value):
@@ -45,14 +44,28 @@ def _normalize_date(value):
         return None
 
 
+def _is_leaf_directory(directory: str) -> bool:
+    """True if `directory` holds no subdirectories -- i.e. it's an actual leaf
+    work (PDFs sit directly inside it), not an intermediate folder grouping
+    series/Anuyog/Author subfolders."""
+    try:
+        return not any(
+            entry.is_dir() for entry in os.scandir(directory) if not entry.name.startswith('.')
+        )
+    except OSError:
+        return False
+
+
 def _row_for_directory(directory: str, base_folder: str) -> dict:
     """Returns a catalogue row for `directory`, or None if it isn't a leaf work.
 
-    Pravachan leaf folders are identified by a curated `count`. Granth/Books
-    leaf folders have no such curation -- they're identified by having a
-    `Name` set directly (every leaf Granth/Book folder's own config.json sets
-    one; intermediate folders like an Anuyog or Author folder never do), so a
-    row is emitted for every one of them, unconditionally.
+    Pravachan folders are identified by a curated `count`, or by being a leaf
+    directory with a `Name` (for works that aren't organized into dated series
+    at all, so there's no `count` to curate). Granth/Books leaf folders have no
+    such curation -- they're identified by having a `Name` set directly (every
+    leaf Granth/Book folder's own config.json sets one; intermediate folders
+    like an Anuyog or Author folder never do), so a row is emitted for every
+    one of them, unconditionally.
     """
     merged = get_merged_config_for_dir(directory, base_folder)
     category = merged.get("category")
@@ -61,13 +74,12 @@ def _row_for_directory(directory: str, base_folder: str) -> dict:
     count = merged.get("count")
 
     if category == "Pravachan":
-        if not count:
+        if not count and not (name and _is_leaf_directory(directory)):
             return None
     elif not name:
         return None
 
-    language = merged.get("language", "hi")
-    lang_key = _LANG_KEYS_MAP.get(language, "hi")
+    lang_key = normalize_language(merged.get("language"))
 
     return {
         "category": category,
@@ -160,3 +172,29 @@ def rebuild_catalogue_index(config: Config, opensearch_client: OpenSearch):
         log_handle.info(f"Rebuilt catalogue index: {len(actions)} rows written.")
     except Exception as e:
         log_handle.error(f"Error rebuilding catalogue index: {e}", exc_info=True)
+
+
+def update_catalogue_row(config: Config, opensearch_client: OpenSearch, directory: str):
+    """
+    Upserts (or removes) the single catalogue row for `directory`, without
+    touching any other row -- the cheap, no-delete-of-everything-else
+    counterpart to rebuild_catalogue_index(), meant to be called right after
+    indexing a single document so the catalogue reflects it immediately
+    instead of waiting for the next full crawl/--refresh-metadata.
+
+    Args:
+        directory: Absolute path to the folder the just-indexed PDF lives in.
+    """
+    base_folder = config.BASE_PDF_PATH
+    catalogue_index = config.OPENSEARCH_CATALOGUE_INDEX_NAME
+    relative_path = os.path.relpath(directory, base_folder)
+
+    try:
+        create_indices_if_not_exists(config, opensearch_client)
+        row = _row_for_directory(directory, base_folder)
+        if row:
+            opensearch_client.index(index=catalogue_index, id=relative_path, body=row)
+        else:
+            opensearch_client.delete(index=catalogue_index, id=relative_path, ignore=[404])
+    except Exception as e:
+        log_handle.error(f"Error updating catalogue row for '{directory}': {e}", exc_info=True)

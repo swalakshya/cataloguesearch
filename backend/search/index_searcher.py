@@ -11,6 +11,7 @@ from opensearchpy import NotFoundError
 from backend.common.opensearch import get_opensearch_config, get_opensearch_client
 from backend.common.embedding_models import get_embedding_model_factory
 from backend.common.utils import get_pravachankar_display
+from backend.common.language import normalize_language, text_field_for_language
 from backend.search.result_ranker import ResultRanker
 from backend.utils import json_dumps
 
@@ -30,12 +31,6 @@ class IndexSearcher:
         self._opensearch_client = get_opensearch_client(self._config)
         log_handle.info(f"Initialized IndexSearcher for index: {self._index_name}")
 
-        self._text_fields = {
-            "hindi": "text_content_hindi",
-            "gujarati": "text_content_gujarati",
-            "hi": "text_content_hindi",
-            "gu": "text_content_gujarati",
-        }
         self._vector_field = "vector_embedding"
         self._metadata_prefix = "metadata"
         try:
@@ -230,12 +225,7 @@ class IndexSearcher:
         exact_match determines if exact phrase match is used.
         exclude_words are terms to exclude from results.
         """
-        query_field = self._text_fields.get(detected_language)
-        if not query_field:
-            log_handle.warning(
-                f"Detected language '{detected_language}' not supported. "
-                f"Defaulting to Hindi field.")
-            query_field = 'text_content_hindi'
+        query_field = text_field_for_language(detected_language)
 
         log_handle.verbose(
             f"Lexical search targeting field: {query_field} for language: {detected_language}, "
@@ -335,9 +325,7 @@ class IndexSearcher:
         # Add language filter if specified
         all_filters = category_filters[:]
         if language and language != 'all':
-            # Convert language name to language code for filtering
-            language_code_map = {"hindi": "hi", "gujarati": "gu"}
-            language_code = language_code_map.get(language, language)
+            language_code = normalize_language(language)
 
             language_filter = {
                 "term": {
@@ -382,9 +370,7 @@ class IndexSearcher:
             content_snippet = ""
 
             if is_lexical:
-                if language is None:
-                    language = 'hi'
-                field = self._text_fields.get(language)
+                field = text_field_for_language(language)
 
                 # Prioritise the highlighted content if available
                 highlighted_fragment = hit.get('highlight', {}).get(field, [])
@@ -392,7 +378,7 @@ class IndexSearcher:
                     content_snippet = "...".join(highlighted_fragment)
             elif not is_lexical:
                 # For vector search, we might just take a snippet of the content
-                field = self._text_fields.get(language or 'hi', 'text_content_hindi')
+                field = text_field_for_language(language)
                 content_snippet = source.get(field)
 
             metadata = source.get(self._metadata_prefix, {})
@@ -558,7 +544,7 @@ class IndexSearcher:
 
         # --- Optional cross-encoder reranking on top of RRF ---
         if rerank and self._reranker and fused:
-            text_field = self._text_fields.get(detected_language, "text_content_hindi")
+            text_field = text_field_for_language(detected_language)
             # Build sentence pairs from the fused list (which holds _source via content_snippet)
             # Fall back to content_snippet since _source is not retained after _extract_results.
             sentence_pairs = [[keywords, r.get("content_snippet", "")] for r in fused]
@@ -607,7 +593,7 @@ class IndexSearcher:
                 log_handle.info(f"Vector search executed (no reranking). Total hits: {total_hits}")
                 return self._extract_results(hits, is_lexical=False, language=language), total_hits
 
-            text_field = self._text_fields.get(language, "text_content_hindi")
+            text_field = text_field_for_language(language)
             log_handle.info(
                 f"Performing reranking on {len(hits)} documents for query: '{keywords}'")
 
@@ -802,7 +788,7 @@ class IndexSearcher:
 
         client = get_opensearch_client(self._config)
         suggester_name = "spell-check"
-        text_field = self._text_fields.get(language)
+        text_field = text_field_for_language(language)
 
         query_body = {
             "size": 0,

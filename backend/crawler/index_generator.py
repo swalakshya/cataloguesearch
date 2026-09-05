@@ -11,6 +11,8 @@ from opensearchpy import OpenSearch, helpers
 
 from backend.common.embedding_models import get_embedding_model_factory
 from backend.common.opensearch import delete_documents_by_document_id, update_metadata_index, refresh_pravachan_series_metadata
+from backend.common.catalogue import update_catalogue_row
+from backend.common.language import normalize_language, text_field_for_language
 from backend.config import Config
 from backend.crawler.pdf_factory import create_pdf_processor
 from backend.crawler.paragraph_generator.factory import create_paragraph_generator
@@ -33,11 +35,6 @@ class IndexGenerator:
         self._opensearch_settings = {}
         self._embedding_model_name = config.EMBEDDING_MODEL_NAME
         self._opensearch_client = opensearch_client
-
-        self._index_keys_per_lang = {
-            "hi": "text_content_hindi",
-            "gu": "text_content_gujarati"
-        }
 
 
     def index_document(
@@ -78,7 +75,7 @@ class IndexGenerator:
                         f"Invalid date format for metadata.{date_field}: {metadata[date_field]}"
                     )
 
-        language = metadata.get("language", "hi")
+        language = normalize_language(metadata.get("language"))
         language_meta = get_language_meta(language, scan_config)
 
         # Create appropriate paragraph generator based on chunk_strategy / ocr_engine
@@ -103,7 +100,7 @@ class IndexGenerator:
 
         timestamp = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
         if reindex_metadata_only:
-            self._reindex_metadata_only(document_id, metadata, page_to_pravachan_data, timestamp)
+            self._reindex_metadata_only(document_id, original_filename, metadata, page_to_pravachan_data, timestamp)
             return
 
         # --- Full Re-indexing Logic ---
@@ -148,6 +145,13 @@ class IndexGenerator:
         if metadata.get("category") == "Pravachan":
             refresh_pravachan_series_metadata(self._config, self._opensearch_client)
 
+        # 6. Keep this file's catalogue row in sync -- a cheap single-row
+        # upsert (no delete of anything else), so /search-index reflects a
+        # freshly indexed/renamed/re-curated document without waiting for
+        # the next full crawl or --refresh-metadata.
+        directory = os.path.dirname(os.path.join(self._config.BASE_PDF_PATH, original_filename))
+        update_catalogue_row(self._config, self._opensearch_client, directory)
+
         log_handle.info(
             f"Finished full indexing for document {document_id}: total_chunks: {len(chunks)}.")
 
@@ -180,7 +184,7 @@ class IndexGenerator:
                     traceback.print_exc()
                     log_handle.error(f"Failed to write {meta_fname}")
 
-    def _reindex_metadata_only(self, document_id, metadata, page_to_pravachan_data, timestamp):
+    def _reindex_metadata_only(self, document_id, original_filename, metadata, page_to_pravachan_data, timestamp):
         """Handles the logic for updating metadata and pravachan fields of existing documents."""
         try:
             query = {"query": {"term": {"document_id": document_id}}, "size": 10000}
@@ -239,6 +243,12 @@ class IndexGenerator:
             if metadata.get("category") == "Pravachan":
                 refresh_pravachan_series_metadata(self._config, self._opensearch_client)
 
+            # Keep this file's catalogue row in sync too -- see index_document()'s
+            # equivalent step for why this is a cheap single-row upsert, not a
+            # full rebuild.
+            directory = os.path.dirname(os.path.join(self._config.BASE_PDF_PATH, original_filename))
+            update_catalogue_row(self._config, self._opensearch_client, directory)
+
             log_handle.info(f"Metadata and pravachan fields re-indexed for document {document_id}.")
         except Exception as e:
             log_handle.error(f"Error during metadata-only re-indexing for {document_id}: {e}")
@@ -292,9 +302,10 @@ class IndexGenerator:
             language = metadata.get("language", "hi")
             chunk["language"] = language
 
-            # Default to Hindi for unsupported languages or English text
-            lang_key = self._index_keys_per_lang.get(language, self._index_keys_per_lang["hi"])
-            chunk[lang_key] = para_text
+            # text_field_for_language() normalizes first (e.g. "gu+hi" -> "gu"),
+            # so this lands in the right field even though `chunk["language"]`
+            # above deliberately keeps the raw, unnormalized config value.
+            chunk[text_field_for_language(language)] = para_text
 
             chunks.append(chunk)
         return chunks

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from opensearchpy import OpenSearch
 
+from backend.common.language import text_field_for_language
 from backend.config import Config
 from backend.crawler.index_generator import IndexGenerator
 
@@ -174,7 +175,7 @@ class LLMIndexGenerator(IndexGenerator):
         page_mapping = page_mapping or {}
         chunks = []
         language = metadata.get("language", "hi")
-        lang_key = self._index_keys_per_lang.get(language, self._index_keys_per_lang["hi"])
+        text_field = text_field_for_language(language)
 
         i = 0
         for page_num, verses in verse_data:
@@ -202,7 +203,7 @@ class LLMIndexGenerator(IndexGenerator):
                     "sutra": pravachan_data.get('sutra'),
                     "timestamp_indexed": timestamp,
                     "language": language,
-                    lang_key: verse_text,
+                    text_field: verse_text,
                 }
                 chunks.append(chunk)
                 i += 1

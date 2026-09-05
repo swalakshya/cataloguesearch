@@ -72,6 +72,19 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
     // Store PDF's parent directory handle for better UX when browsing
     const [pdfParentDirHandle, setPdfParentDirHandle] = useState(null);
 
+    // "Latest function" refs for processSelectedFolder/loadPDFForSinglePage --
+    // both are large, unmemoized functions with their own web of dependencies,
+    // referenced from effects further up/down. Calling them through a ref kept
+    // in sync on every render (rather than depending on the function directly)
+    // avoids both a TDZ error (processSelectedFolder is declared after the
+    // effect that needs it) and, for loadPDFForSinglePage, a genuine infinite
+    // loop: unlike processSelectedFolder's effect, that one's guard condition
+    // doesn't change based on anything loadPDFForSinglePage itself sets, so a
+    // literal "add it to the deps array" fix would re-run it on every render,
+    // forever.
+    const processSelectedFolderRef = useRef(null);
+    const loadPDFForSinglePageRef = useRef(null);
+
     // Load persisted directory handles on component mount
     useEffect(() => {
         const loadPersistedHandles = async () => {
@@ -148,16 +161,19 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
         }
     };
 
-    // Update selectedFolder when prop changes and automatically process if permissions granted
+    // Update selectedFolder when prop changes and automatically process if permissions granted.
+    // (processSelectedFolder is called through processSelectedFolderRef -- see its
+    // declaration above -- since it's declared below and referencing it directly
+    // in this deps array would throw "Cannot access before initialization".)
     useEffect(() => {
         if (propSelectedFolder && propSelectedFolder !== selectedFolder) {
             setSelectedFolder(propSelectedFolder);
             // Automatically process if we have base directory permissions
             if (propSelectedFolder && permissionsGranted) {
-                processSelectedFolder(propSelectedFolder);
+                processSelectedFolderRef.current(propSelectedFolder);
             }
         }
-    }, [propSelectedFolder, permissionsGranted]);
+    }, [propSelectedFolder, permissionsGranted, selectedFolder]);
 
     // Process selected folder using base directory handles
     const processSelectedFolder = async (selection) => {
@@ -240,6 +256,7 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
             setIsLoading(false);
         }
     };
+    processSelectedFolderRef.current = processSelectedFolder;
 
 
     const handleFolderSelect = async (selection) => {
@@ -335,6 +352,14 @@ Please select the SOURCE directory (${selection.sourcePath})`;
     };
 
 
+    // Referenced (as a dependency) by navigate's useCallback below. displayFiles
+    // itself isn't memoized -- it calls renderPDFPage, which is declared *after*
+    // displayFiles and itself closes over the PDF.js hook's pdfDoc/renderPage --
+    // so memoizing displayFiles for real would mean reordering and
+    // ref-indirecting through that whole chain too, which isn't worth the
+    // regression risk for a lint cleanup. navigate's instability from this is
+    // harmless: useArrowNavigation only uses it to add/remove a keydown listener.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const displayFiles = async (fileName, sourceDir = sourceHandle, targetDir = targetHandle, ocrRelPath = selectedFolder?.relativePath) => {
         if (!fileName || !sourceDir || !targetDir) return;
 
@@ -383,17 +408,23 @@ Please select the SOURCE directory (${selection.sourcePath})`;
         }
     };
 
-    const navigate = (direction) => {
+    // Wrapped in useCallback to satisfy exhaustive-deps below, but -- like
+    // handlePageNavigation in PDFParser.js -- this doesn't achieve true stability:
+    // displayFiles is itself a large, unmemoized function with its own web of
+    // dependencies, so navigate is still a new reference every render regardless.
+    // Fully memoizing that chain is out of scope for a lint cleanup. useArrowNavigation
+    // only uses these to add/remove a keydown listener, so the extra churn is harmless.
+    const navigate = useCallback((direction) => {
         const newIndex = currentIndex + direction;
         if (newIndex >= 0 && newIndex < fileList.length) {
             setCurrentIndex(newIndex);
             displayFiles(fileList[newIndex]);
         }
-    };
+    }, [currentIndex, fileList, displayFiles]);
 
     useArrowNavigation(
-        useCallback(() => navigate(-1), [currentIndex, fileList]),
-        useCallback(() => navigate(1),  [currentIndex, fileList]),
+        useCallback(() => navigate(-1), [navigate]),
+        useCallback(() => navigate(1),  [navigate]),
         fileList.length > 0,
     );
 
@@ -451,6 +482,7 @@ Please select the SOURCE directory (${selection.sourcePath})`;
             console.error('Error loading PDF:', err);
         }
     };
+    loadPDFForSinglePageRef.current = loadPDFForSinglePage;
 
     // Handle bookmark click — backend bookmarks already have logical_page as pageNumber
     const handleBookmarkClick = (bookmark) => {
@@ -497,10 +529,15 @@ Please select the SOURCE directory (${selection.sourcePath})`;
         }
     };
 
-    // Load PDF (single-page only) when a PDF is selected and directories are set up
+    // Load PDF (single-page only) when a PDF is selected and directories are set up.
+    // Calls through loadPDFForSinglePageRef -- see its declaration above -- rather
+    // than depending on loadPDFForSinglePage directly: that function's identity
+    // changes every render, but nothing it does changes this effect's guard
+    // condition, so literally adding it as a dependency would re-run it on every
+    // render forever (repeatedly re-fetching and re-loading the same PDF).
     useEffect(() => {
         if (selectedFolder?.selectedPDFFile && permissionsGranted && sourceHandle && targetHandle) {
-            loadPDFForSinglePage();
+            loadPDFForSinglePageRef.current();
         }
     }, [selectedFolder, permissionsGranted, sourceHandle, targetHandle]);
 

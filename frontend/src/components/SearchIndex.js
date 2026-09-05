@@ -25,6 +25,7 @@ const renderCount = (count) => {
   // Plain text throughout -- a count is a value, not a state, so it never
   // gets a badge/pill treatment. "compiled" is the one non-numeric value.
   if (count === 'compiled') return <span className="text-ink-muted">Compiled</span>;
+  if (count == null || count === '') return <span className="text-ink-muted">-</span>;
   const n = parseInt(count, 10);
   return <span className="font-semibold" style={{ fontVariantNumeric: 'tabular-nums' }}>{Number.isNaN(n) ? count : n.toLocaleString()}</span>;
 };

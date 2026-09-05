@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.common.embedding_models import get_embedding_model_factory
 from backend.common.opensearch import get_opensearch_client, get_metadata
 from backend.common.catalogue import get_catalogue
+from backend.common.language import text_field_for_language
 from backend.config import Config
 from backend.search.index_searcher import IndexSearcher
 from backend.utils import json_dumps, JSONResponse, log_memory_usage
@@ -713,7 +714,7 @@ async def get_chunk(request: Request, chunk_id: str, language: str = Query("hi",
         source = doc.get("_source", {})
         metadata = source.get("metadata", {})
         chunk_labels = source.get("chunk_labels", {})
-        text_field = "text_content_hindi" if language != "gu" else "text_content_gujarati"
+        text_field = text_field_for_language(language)
         author = (
             metadata.get("Author")
             or metadata.get("Tikakaar")

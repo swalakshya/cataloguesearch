@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from backend.api.admin.metrics_store import normalize_language
 from backend.common.opensearch import get_metadata, get_opensearch_client
 from backend.common.utils import get_pravachankar_display
+from backend.common.language import text_field_for_language
 from backend.search.result_ranker import ResultRanker
 from backend.utils import JSONResponse
 from utils.logger import set_query_id, get_query_id
@@ -77,10 +78,6 @@ class AgentShortenUrlResponse(BaseModel):
     short_url: str
 
 
-def _get_text_field(language: str) -> str:
-    return "text_content_gujarati" if language == "gu" else "text_content_hindi"
-
-
 def _first_value(dct: Dict[str, Any], keys: List[str]) -> Optional[Any]:
     for key in keys:
         if key in dct and dct[key] not in (None, ""):
@@ -91,7 +88,7 @@ def _first_value(dct: Dict[str, Any], keys: List[str]) -> Optional[Any]:
 def _chunk_from_hit(hit: Dict[str, Any], language: str) -> Dict[str, Any]:
     source = hit.get("_source", {})
     metadata = source.get("metadata", {})
-    text_field = _get_text_field(language)
+    text_field = text_field_for_language(language)
 
     # Be defensive: some hits can have `_score: null` or rerank_score missing.
     raw_score = hit.get("rerank_score", hit.get("_score", 0.0))
@@ -399,7 +396,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
         )
         filters = _build_filters(payload)
 
-        text_field = _get_text_field(payload.language)
+        text_field = text_field_for_language(payload.language)
         from_ = (payload.page - 1) * payload.page_size
 
         log_handle.debug("agent_search mode=%s", search_mode)

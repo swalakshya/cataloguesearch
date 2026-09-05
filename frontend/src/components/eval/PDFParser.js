@@ -178,13 +178,21 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
         else pdfViewer.loadImagePreview(file);
     };
 
-    const handlePageNavigation = async (direction) => {
+    // Wrapped in useCallback to satisfy exhaustive-deps below, but this doesn't
+    // achieve true stability: pdfViewer is a fresh object every render (usePDFViewer
+    // returns a plain object literal, not memoized), so this -- and the two
+    // callbacks below that depend on it -- still change every render regardless.
+    // Fixing that for real would mean memoizing usePDFViewer's return value,
+    // which is shared with other consumers and out of scope here. useArrowNavigation
+    // only uses these to add/remove a keydown listener, so the extra churn is
+    // harmless, not a risk of a render loop.
+    const handlePageNavigation = useCallback(async (direction) => {
         await pdfViewer.handlePageNavigation(direction, cropTop, cropBottom, () => setResults(null));
-    };
+    }, [pdfViewer, cropTop, cropBottom]);
 
     useArrowNavigation(
-        useCallback(() => handlePageNavigation('prev'), [pdfViewer, cropTop, cropBottom]),
-        useCallback(() => handlePageNavigation('next'), [pdfViewer, cropTop, cropBottom]),
+        useCallback(() => handlePageNavigation('prev'), [handlePageNavigation]),
+        useCallback(() => handlePageNavigation('next'), [handlePageNavigation]),
         !!pdfDoc,
     );
 
