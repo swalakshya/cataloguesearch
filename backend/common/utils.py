@@ -8,6 +8,31 @@ import logging
 
 log_handle = logging.getLogger(__name__)
 
+# Maps the raw "Pravachankar" value stored in metadata (config.json's Pravachankar
+# field) to the honorific display string per language. Add an entry here whenever
+# a new Pravachankar is onboarded.
+PRAVACHANKAR_HONORIFICS = {
+    "Gurudev Kanji Swami": {
+        "gu": "પૂજ્ય ગુરુદેવશ્રી કાનજી સ્વામી, સોનગઢ",
+        "hi": "पूज्य गुरुदेव श्री कानजी स्वामी, सोनगढ़",
+    },
+    "Bahinshree Champaben": {
+        "gu": "પૂજ્ય બહેનશ્રી ચંપાબેન",
+        "hi": "पूज्य बहिनश्री चम्पाबेन",
+    },
+}
+
+
+def get_pravachankar_display(pravachankar: str, language: str) -> str:
+    """
+    Returns the honorific display string for a Pravachankar in the given language,
+    falling back to the raw metadata value when the Pravachankar isn't in
+    PRAVACHANKAR_HONORIFICS yet.
+    """
+    lang_key = "gu" if language in ("gujarati", "gu") else "hi"
+    honorifics = PRAVACHANKAR_HONORIFICS.get(pravachankar)
+    return honorifics[lang_key] if honorifics else pravachankar
+
 
 def _collect_folders(directory: str, base_folder: str) -> list:
     """Collects all folders from base_folder down to (and including) directory."""

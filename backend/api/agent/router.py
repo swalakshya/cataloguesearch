@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from backend.api.admin.metrics_store import normalize_language
 from backend.common.opensearch import get_metadata, get_opensearch_client
+from backend.common.utils import get_pravachankar_display
 from backend.search.result_ranker import ResultRanker
 from backend.utils import JSONResponse
 from utils.logger import set_query_id, get_query_id
@@ -123,8 +124,9 @@ def _chunk_from_hit(hit: Dict[str, Any], language: str) -> Dict[str, Any]:
         "file_url": metadata.get("file_url", ""),
         "score": score,
     }
-    if "Kanji" in metadata.get("Pravachankar", {}):
-        result["Pravachankar"] = "Pujya Gurudev Shri Kanji Swami"
+    pravachankar = metadata.get("Pravachankar")
+    if pravachankar:
+        result["Pravachankar"] = get_pravachankar_display(pravachankar, language)
     return result
 
 

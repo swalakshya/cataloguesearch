@@ -203,6 +203,7 @@ export default function SettingsModal({
                             selected={draftChatCategories}
                             onChange={setDraftChatCategories}
                             compact
+                            align="left"
                         />
                     </div>
                 </div>
@@ -217,6 +218,7 @@ export default function SettingsModal({
                             selected={draftKhojCategories}
                             onChange={setDraftKhojCategories}
                             compact
+                            align="left"
                         />
                     </div>
                 </div>

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, FastAPI, HTTPException, File, UploadFile, Form, BackgroundTasks
+from fastapi import APIRouter, FastAPI, HTTPException, File, UploadFile, Form, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from utils.logger import setup_logging, VERBOSE_LEVEL_NUM
@@ -50,6 +50,13 @@ class PathsResponse(BaseModel):
     base_pdf_path: str
     base_text_path: str
     base_ocr_path: str
+
+class FsEntry(BaseModel):
+    name: str
+    is_dir: bool
+
+class FsListResponse(BaseModel):
+    entries: List[FsEntry]
 
 class TextBox(BaseModel):
     x: int
@@ -166,6 +173,86 @@ async def get_evaluation_paths():
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error loading configuration: {str(e)}")
+
+
+# Which config.py attribute backs each named root that /fs/* exposes.
+_FS_ROOT_ATTR = {"pdf": "BASE_PDF_PATH", "ocr": "BASE_OCR_PATH", "text": "BASE_TEXT_PATH"}
+
+
+def _resolve_within_root(config: Config, root: str, relative_path: str) -> str:
+    """
+    Resolves relative_path under the named root's configured base folder,
+    rejecting anything that would escape it (e.g. "../../etc/passwd") --
+    unlike the other endpoints in this file, /fs/* take an arbitrary
+    client-supplied path rather than one derived from an already-known
+    OCR/index entry, so they need this guard where the rest of the eval API
+    doesn't.
+    """
+    attr = _FS_ROOT_ATTR.get(root)
+    if not attr:
+        raise HTTPException(status_code=400, detail=f"unknown root: {root}")
+    base = getattr(config, attr)
+    if not base:
+        raise HTTPException(status_code=500, detail=f"{attr} not configured")
+    base_real = os.path.realpath(base)
+    target_real = os.path.realpath(os.path.join(base, relative_path or ""))
+    if target_real != base_real and not target_real.startswith(base_real + os.sep):
+        raise HTTPException(status_code=400, detail="path escapes base directory")
+    return target_real
+
+
+@router.get("/fs/list", response_model=FsListResponse)
+async def list_fs_directory(path: str = "", root: str = "pdf"):
+    """
+    Lists the immediate contents of a directory under the named root
+    (pdf/ocr/text -> BASE_PDF_PATH/BASE_OCR_PATH/BASE_TEXT_PATH). Backs the
+    Eval UI's remote filesystem mode, which lets the "Browse Files" picker,
+    PDF Parser and Paragraph Gen Eval read the server's copy of these trees
+    instead of the browser's local disk -- needed when the UI is viewed
+    through an SSH port-forward, where the browser and the backend are on
+    different machines.
+    """
+    config = Config("configs/config.yaml")
+    target = _resolve_within_root(config, root, path)
+    if not os.path.isdir(target):
+        raise HTTPException(status_code=404, detail=f"directory not found: {path}")
+    entries = []
+    for name in os.listdir(target):
+        if name.startswith('.'):
+            continue
+        entries.append(FsEntry(name=name, is_dir=os.path.isdir(os.path.join(target, name))))
+    return FsListResponse(entries=entries)
+
+
+@router.get("/fs/read")
+async def read_fs_file(path: str, root: str = "pdf"):
+    """Streams a file's bytes from under the named root. See list_fs_directory."""
+    config = Config("configs/config.yaml")
+    target = _resolve_within_root(config, root, path)
+    if not os.path.isfile(target):
+        raise HTTPException(status_code=404, detail=f"file not found: {path}")
+    media_type = "application/pdf" if target.lower().endswith(".pdf") else "application/octet-stream"
+    return FileResponse(target, media_type=media_type, filename=os.path.basename(target))
+
+
+@router.put("/fs/write")
+async def write_fs_file(path: str, root: str, request: Request):
+    """
+    Overwrites a file's content under the named root with the request body.
+    Only ever overwrites an existing file (mirrors the one write call site in
+    the Eval UI -- saving corrected OCR JSON back in place) rather than
+    creating new ones, so a typo'd path fails loudly instead of silently
+    writing to an unintended location.
+    """
+    config = Config("configs/config.yaml")
+    target = _resolve_within_root(config, root, path)
+    if not os.path.isfile(target):
+        raise HTTPException(status_code=404, detail=f"file not found: {path}")
+    content = await request.body()
+    with open(target, "wb") as f:
+        f.write(content)
+    return {"status": "ok", "bytes_written": len(content)}
+
 
 @router.get("/ocr/scan-config")
 async def get_file_scan_config(relative_path: str):
@@ -406,28 +493,50 @@ async def process_ocr(
 
 @router.post("/ocr/batch", response_model=BatchJobResponse)
 async def start_batch_ocr(
-    file: UploadFile = File(..., description="PDF file to process"),
+    file: UploadFile = File(None, description="PDF file to process (not needed if relative_path is provided)"),
+    relative_path: Optional[str] = Form(None, description="Relative path to PDF file from BASE_PDF_PATH"),
     language: str = Form("hin", description="Language code for OCR (hin, guj, eng)"),
     use_google_ocr: bool = Form(False, description="Use Google Vision OCR instead of Tesseract"),
 ):
     """
-    Start batch OCR processing of a PDF file.
-    Returns a job ID for tracking progress.
-    """
-    if not file.filename or not file.filename.lower().endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Please upload a PDF file")
+    Start batch OCR processing of a PDF file. Returns a job ID for tracking progress.
 
-    log_handle.info(f"Starting batch OCR for {file.filename} with language={language}")
+    Provide either 'file' (upload) or 'relative_path' (a PDF already under
+    BASE_PDF_PATH) -- the latter avoids uploading a whole book's worth of
+    pages that the browser only just downloaded from this same server to
+    display it.
+    """
+    if not file and not relative_path:
+        raise HTTPException(status_code=400, detail="Either provide 'file' upload OR 'relative_path'")
+    if file and relative_path:
+        raise HTTPException(status_code=400, detail="Provide either 'file' upload OR 'relative_path', not both")
 
     try:
-        # Read file content upfront to avoid "read of closed file" error
-        file_content = await file.read()
-
-        ocr_service = get_ocr_service()
-        job_id = ocr_service.start_batch_processing(file_content, language, use_google_ocr)
+        if relative_path:
+            config = Config("configs/config.yaml")
+            pdf_file_path = os.path.join(config.BASE_PDF_PATH, relative_path)
+            if not pdf_file_path.endswith(".pdf"):
+                pdf_file_path = f"{pdf_file_path}.pdf"
+            if not os.path.exists(pdf_file_path):
+                raise HTTPException(status_code=404, detail=f"PDF file not found: {relative_path}")
+            log_handle.info(f"Starting batch OCR for {pdf_file_path} with language={language}")
+            # start_batch_processing accepts either bytes or a file path -- passing
+            # the path directly skips reading the whole PDF into memory here too.
+            ocr_service = get_ocr_service()
+            job_id = ocr_service.start_batch_processing(pdf_file_path, language, use_google_ocr)
+        else:
+            if not file.filename or not file.filename.lower().endswith('.pdf'):
+                raise HTTPException(status_code=400, detail="Please upload a PDF file")
+            log_handle.info(f"Starting batch OCR for {file.filename} with language={language}")
+            # Read file content upfront to avoid "read of closed file" error
+            file_content = await file.read()
+            ocr_service = get_ocr_service()
+            job_id = ocr_service.start_batch_processing(file_content, language, use_google_ocr)
 
         return BatchJobResponse(job_id=job_id)
 
+    except HTTPException:
+        raise
     except Exception as e:
         log_handle.error(f"Failed to start batch OCR: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to start batch processing: {str(e)}")
@@ -961,7 +1070,8 @@ async def generate_ocr_preview(
 
 @router.post("/scripture-llm", response_model=ScriptureLLMResponse)
 async def process_scripture_llm(
-    image: UploadFile = File(..., description="PDF or image file to process"),
+    image: UploadFile = File(None, description="PDF or image file to process (not needed if relative_path is provided)"),
+    relative_path: Optional[str] = Form(None, description="Relative path to PDF file from BASE_PDF_PATH"),
     page_number: int = Form(1, description="Page number to extract from PDF (1-indexed)"),
     language: str = Form("hin", description="Language code (hin, guj, eng)"),
     model_name: str = Form("gemini-2.5-flash", description="Gemini model to use"),
@@ -973,8 +1083,18 @@ async def process_scripture_llm(
 ):
     """
     Process a scripture page using Gemini LLM for text extraction and categorisation.
-    Accepts a PDF (extracts the specified page) or an image file.
+
+    Two modes, same as /ocr:
+    1. Upload mode: provide 'image' (a PDF or image file)
+    2. PDF extraction mode: provide 'relative_path' -- the page is read directly
+       off the server's BASE_PDF_PATH instead of uploading the whole PDF, which
+       the browser would otherwise have to fetch (to view it) and then send
+       right back unchanged.
     """
+    if not image and not relative_path:
+        raise HTTPException(status_code=400, detail="Either provide 'image' file OR 'relative_path'")
+    if image and relative_path:
+        raise HTTPException(status_code=400, detail="Provide either 'image' file OR 'relative_path', not both")
     if not (0 <= crop_top <= 50 and 0 <= crop_bottom <= 50 and 0 <= crop_left <= 50 and 0 <= crop_right <= 50):
         raise HTTPException(status_code=400, detail="Crop percentages must be between 0 and 50")
 
@@ -984,15 +1104,6 @@ async def process_scripture_llm(
     temp_path = None
 
     try:
-        # Save uploaded file to temp
-        is_pdf = image.content_type == 'application/pdf' or (image.filename and image.filename.lower().endswith('.pdf'))
-        suffix = '.pdf' if is_pdf else '.png'
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
-            content = await image.read()
-            temp_file.write(content)
-            temp_path = temp_file.name
-
         # Build scan_config
         scan_config = _load_default_scan_config(language, "Granth") if use_default_scan_config else {}
         if crop_top > 0 or crop_bottom > 0 or crop_left > 0 or crop_right > 0:
@@ -1002,27 +1113,52 @@ async def process_scripture_llm(
             scan_config["crop"]["left"] = crop_left
             scan_config["crop"]["right"] = crop_right
 
-        if is_pdf:
-            # Extract the specified page from PDF
+        if relative_path:
+            # Mode 2: extract the page directly from the PDF already on disk
             config = Config("configs/config.yaml")
-            pdf_processor = AdvancedPDFProcessor(config)
+            pdf_file_path = os.path.join(config.BASE_PDF_PATH, relative_path)
+            if not pdf_file_path.endswith(".pdf"):
+                pdf_file_path = f"{pdf_file_path}.pdf"
+            if not os.path.exists(pdf_file_path):
+                raise HTTPException(status_code=404, detail=f"PDF file not found: {relative_path}")
 
-            images, page_numbers = pdf_processor._get_image(temp_path, [page_number], scan_config)
+            pdf_processor = AdvancedPDFProcessor(config)
+            images, page_numbers = pdf_processor._get_image(pdf_file_path, [page_number], scan_config)
             if not images:
                 raise HTTPException(status_code=400, detail=f"Failed to extract page {page_number} from PDF")
 
             pil_image = images[0]
         else:
-            # Load image directly and apply cropping
-            pil_image = Image.open(temp_path)
+            # Mode 1: save uploaded file to temp
+            is_pdf = image.content_type == 'application/pdf' or (image.filename and image.filename.lower().endswith('.pdf'))
+            suffix = '.pdf' if is_pdf else '.png'
 
-            if crop_top > 0 or crop_bottom > 0 or crop_left > 0 or crop_right > 0:
-                width, height = pil_image.size
-                top_px = int(height * crop_top / 100)
-                bottom_px = int(height * crop_bottom / 100)
-                left_px = int(width * crop_left / 100)
-                right_px = int(width * crop_right / 100)
-                pil_image = pil_image.crop((left_px, top_px, width - right_px, height - bottom_px))
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+                content = await image.read()
+                temp_file.write(content)
+                temp_path = temp_file.name
+
+            if is_pdf:
+                # Extract the specified page from PDF
+                config = Config("configs/config.yaml")
+                pdf_processor = AdvancedPDFProcessor(config)
+
+                images, page_numbers = pdf_processor._get_image(temp_path, [page_number], scan_config)
+                if not images:
+                    raise HTTPException(status_code=400, detail=f"Failed to extract page {page_number} from PDF")
+
+                pil_image = images[0]
+            else:
+                # Load image directly and apply cropping
+                pil_image = Image.open(temp_path)
+
+                if crop_top > 0 or crop_bottom > 0 or crop_left > 0 or crop_right > 0:
+                    width, height = pil_image.size
+                    top_px = int(height * crop_top / 100)
+                    bottom_px = int(height * crop_bottom / 100)
+                    left_px = int(width * crop_left / 100)
+                    right_px = int(width * crop_right / 100)
+                    pil_image = pil_image.crop((left_px, top_px, width - right_px, height - bottom_px))
 
         # Generate base64 preview of the cropped image
         buffer = io.BytesIO()

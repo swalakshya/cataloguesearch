@@ -49,6 +49,7 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
         pdfDoc,
         loadPDF,
         renderPage: renderPDFPageFromHook,
+        reset: resetPdfViewer,
     } = usePDFJsViewer();
     const [showBookmarksModal, setShowBookmarksModal] = useState(false);
     const [bookmarks, setBookmarks] = useState([]);
@@ -168,6 +169,15 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
         try {
             setIsLoading(true);
             setError(null);
+
+            // Clear the previous document's loaded PDF and rendered page image up
+            // front, before navigating to the new one. Without this, displayFiles()
+            // below can render the *new* document's page number from the *old*
+            // pdfDoc, since loadPDFForSinglePage() (which loads the new PDF into
+            // pdfDoc) runs asynchronously in a separate effect and isn't guaranteed
+            // to finish first.
+            resetPdfViewer();
+            setPdfPageDataUrl(null);
 
             // Navigate to the relative path in both OCR and Text directories
             const relativePath = selection.relativePath;
@@ -493,6 +503,23 @@ Please select the SOURCE directory (${selection.sourcePath})`;
             loadPDFForSinglePage();
         }
     }, [selectedFolder, permissionsGranted, sourceHandle, targetHandle]);
+
+    // Re-render the current page once a (single-page) pdfDoc finishes loading.
+    // displayFiles() already renders the page as soon as a folder is selected,
+    // but at that point pdfDoc may still be the *previous* document's (the load
+    // above is async and racy against it) or null (right after the reset in
+    // processSelectedFolder) -- either way that initial render can be stale or
+    // skipped. This effect corrects the picture the moment the right pdfDoc is
+    // actually in hand, without waiting for the user to click Next/Previous.
+    useEffect(() => {
+        if (!pdfDoc || pageMappingRef.current) return;
+        const fileName = getCurrentFileName();
+        if (!fileName) return;
+        const pageNumber = parseInt(fileName.replace('page_', '').replace(/\.(txt|json)$/, ''), 10);
+        if (!pageNumber) return;
+        renderPDFPage(pageNumber);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pdfDoc]);
 
     // Fetch scan-config to get skip_pdf_pages when folder changes
     useEffect(() => {

@@ -10,6 +10,7 @@ from opensearchpy import NotFoundError
 
 from backend.common.opensearch import get_opensearch_config, get_opensearch_client
 from backend.common.embedding_models import get_embedding_model_factory
+from backend.common.utils import get_pravachankar_display
 from backend.search.result_ranker import ResultRanker
 from backend.utils import json_dumps
 
@@ -417,12 +418,9 @@ class IndexSearcher:
                 "series_start_date": metadata.get('series_start_date'),
                 "series_end_date": metadata.get('series_end_date')
             }
-            if "Kanji" in metadata.get("Pravachankar", {}):
-                # Set Pravachankar text based on language
-                if language in ['gujarati', 'gu']:
-                    result["Pravachankar"] = "પૂજ્ય ગુરુદેવશ્રી કાનજી સ્વામી, સોનગઢ"
-                else:
-                    result["Pravachankar"] = "पूज्य गुरुदेव श्री कानजी स्वामी, सोनगढ़"
+            pravachankar = metadata.get("Pravachankar")
+            if pravachankar:
+                result["Pravachankar"] = get_pravachankar_display(pravachankar, language)
             extracted.append(result)
         return extracted
 

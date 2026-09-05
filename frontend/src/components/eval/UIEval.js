@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import PDFParser from './PDFParser';
 import ParagraphGenEval from './ParagraphGenEval';
 import OCRPreview from './OCRPreview';
@@ -8,8 +8,35 @@ import UnindexedPDFs from './UnindexedPDFs';
 import LoadTest from './LoadTest';
 import BookmarkBackfill from './BookmarkBackfill';
 import { storeDirectoryHandles, getStoredDirectoryHandles, validateDirectoryHandles, requestStoredPermissions, clearStoredDirectoryHandles } from '../../utils/directoryHandlers';
+import { createRemoteDirectoryHandle } from '../../utils/remoteFsHandles';
 
 const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
+
+// Persisted so the choice survives reloads without needing a rebuild/restart --
+// server is the default since most usage is over an SSH port-forward, where
+// the browser's native folder picker would browse the laptop, not the remote
+// machine the backend runs on. Flip to 'local' only in the tab where the
+// browser and backend actually share a filesystem with the backend.
+const FS_MODE_KEY = 'eval_fs_mode';
+
+const LocalModeIcon = ({ className = 'w-4 h-4' }) => (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.25 17L4 20h16l-1.25-3M4 4h16a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V5a1 1 0 011-1z" />
+    </svg>
+);
+
+const ServerModeIcon = ({ className = 'w-4 h-4' }) => (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 4h14a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1zM5 14h14a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4a1 1 0 011-1z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7.5 7.5h.01M7.5 17.5h.01" />
+    </svg>
+);
+
+const FolderIcon = ({ className = 'w-4 h-4' }) => (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
+    </svg>
+);
 
 const UIEval = () => {
     const [activeTab, setActiveTab] = useState('home');
@@ -21,6 +48,42 @@ const UIEval = () => {
     const [expiredHandles, setExpiredHandles] = useState(null); // stored but permissions lapsed
     const [pendingHandles, setPendingHandles] = useState({ pdf: null, ocr: null, text: null });
     const [pdfParentDirPath, setPdfParentDirPath] = useState('');
+    const [fsMode, setFsMode] = useState(() => {
+        try {
+            return localStorage.getItem(FS_MODE_KEY) === 'local' ? 'local' : 'server';
+        } catch {
+            return 'server';
+        }
+    });
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(FS_MODE_KEY, fsMode);
+        } catch {
+            // localStorage unavailable (private mode, etc.) -- mode just won't persist
+        }
+    }, [fsMode]);
+
+    // All three roots (pdf/ocr/text) when browsing via the backend API instead
+    // of the local File System Access picker. In 'local' mode these are all
+    // null and effectiveDirectoryHandles below just passes baseDirectoryHandles
+    // through untouched, so the original local-picker flow is unaffected.
+    const remoteHandles = useMemo(() => {
+        if (fsMode !== 'server' || !basePaths) return null;
+        return {
+            pdf: basePaths.base_pdf_path ? createRemoteDirectoryHandle(API_BASE_URL, 'pdf', basePaths.base_pdf_path) : null,
+            ocr: basePaths.base_ocr_path ? createRemoteDirectoryHandle(API_BASE_URL, 'ocr', basePaths.base_ocr_path) : null,
+            text: basePaths.base_text_path ? createRemoteDirectoryHandle(API_BASE_URL, 'text', basePaths.base_text_path) : null,
+        };
+    }, [fsMode, basePaths]);
+
+    const effectiveDirectoryHandles = fsMode === 'server' ? remoteHandles : baseDirectoryHandles;
+
+    // In 'server' mode nothing local needs to be granted at all -- all three
+    // roots come from remoteHandles once basePaths has loaded.
+    const permissionsReady = fsMode === 'server'
+        ? !!remoteHandles
+        : !!(baseDirectoryHandles?.pdf && baseDirectoryHandles?.ocr && baseDirectoryHandles?.text);
 
     // Debug activeTab changes
     useEffect(() => {
@@ -55,7 +118,9 @@ const UIEval = () => {
         loadBasePaths();
     }, []);
 
-    // Load stored directory handles on component mount
+    // Load stored directory handles on component mount. Only relevant to
+    // 'local' mode -- 'server' mode never touches this (see remoteHandles
+    // above), so no mode-awareness needed here.
     useEffect(() => {
         const loadStoredHandles = async () => {
             try {
@@ -201,7 +266,7 @@ const UIEval = () => {
                     onClose={handleCloseFileBrowser}
                     onFolderSelect={handleFolderSelect}
                     basePaths={basePaths}
-                    baseDirectoryHandles={baseDirectoryHandles}
+                    baseDirectoryHandles={effectiveDirectoryHandles}
                     currentTab={activeTab}
                     startPath={pdfParentDirPath}
                 />
@@ -274,11 +339,13 @@ const UIEval = () => {
                                 {['pdf-parser', 'ocr-preview', 'paragraph-eval', 'paragraph-classifier'].includes(activeTab) && (
                                     <button
                                         onClick={handleBrowseFiles}
-                                        className="bg-green-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-green-700 transition-colors flex items-center"
+                                        className="bg-green-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-green-700 transition-colors inline-flex items-center gap-2 leading-none"
                                     >
-                                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
-                                        </svg>
+                                        {fsMode === 'server' ? (
+                                            <ServerModeIcon className="w-4 h-4 flex-shrink-0" />
+                                        ) : (
+                                            <LocalModeIcon className="w-4 h-4 flex-shrink-0" />
+                                        )}
                                         Browse Files
                                     </button>
                                 )}
@@ -321,14 +388,39 @@ const UIEval = () => {
                                 {/* Directory Permissions Setup */}
                                 {basePaths && (
                                     <div className="rounded-lg shadow-sm border border-slate-200 p-6" style={{ backgroundColor: 'var(--bg-card)' }}>
-                                        <div className="mb-4">
-                                            <h3 className="text-lg font-semibold text-slate-800 mb-2">Directory Permissions</h3>
-                                            <p className="text-slate-600 text-sm">
-                                                Grant access to your base directories to enable file browsing across all evaluation tools.
-                                            </p>
+                                        <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+                                            <div>
+                                                <h3 className="text-lg font-semibold text-slate-800 mb-2">Directory Permissions</h3>
+                                                <p className="text-slate-600 text-sm">
+                                                    {fsMode === 'server'
+                                                        ? "Reading configs/PDFs, OCR output, and Text output from the backend's configured base paths — no local folder permissions needed."
+                                                        : 'Grant access to your base directories to enable file browsing across all evaluation tools.'}
+                                                </p>
+                                            </div>
+
+                                            {/* Filesystem source toggle — governs all three roots (pdf/ocr/text) at once.
+                                                Use "Server" when viewing this UI through an SSH port-forward, where the
+                                                browser's native folder picker would browse your laptop, not the remote
+                                                machine the backend actually runs on. */}
+                                            <div className="inline-flex rounded-md border border-slate-300 overflow-hidden flex-shrink-0">
+                                                <button
+                                                    onClick={() => setFsMode('local')}
+                                                    className={`px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5 ${fsMode === 'local' ? 'bg-sky-600 text-white' : 'bg-white text-slate-600 hover:bg-neutral-100'}`}
+                                                >
+                                                    <LocalModeIcon className="w-3.5 h-3.5" />
+                                                    Local folder
+                                                </button>
+                                                <button
+                                                    onClick={() => setFsMode('server')}
+                                                    className={`px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5 ${fsMode === 'server' ? 'bg-sky-600 text-white' : 'bg-white text-slate-600 hover:bg-neutral-100'}`}
+                                                >
+                                                    <ServerModeIcon className="w-3.5 h-3.5" />
+                                                    Server path (via API)
+                                                </button>
+                                            </div>
                                         </div>
 
-                                        {baseDirectoryHandles ? (
+                                        {fsMode === 'local' && (permissionsReady ? (
                                             // State 1 — all good
                                             <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
                                                 <div className="flex items-start">
@@ -339,9 +431,9 @@ const UIEval = () => {
                                                         <p className="text-green-800 font-medium text-sm">Directory permissions granted</p>
                                                         <p className="text-green-700 text-sm mt-1">File browsing is available across all evaluation tools.</p>
                                                         <div className="mt-2 text-xs text-green-600 space-y-0.5">
-                                                            <div>📁 Configs & PDFs: {baseDirectoryHandles.pdf?.name}</div>
-                                                            <div>📁 OCR Output: {baseDirectoryHandles.ocr?.name}</div>
-                                                            <div>📁 Text Output: {baseDirectoryHandles.text?.name}</div>
+                                                            <div className="flex items-center gap-1.5"><FolderIcon className="w-3 h-3" /> Configs & PDFs: {baseDirectoryHandles.pdf?.name}</div>
+                                                            <div className="flex items-center gap-1.5"><FolderIcon className="w-3 h-3" /> OCR Output: {baseDirectoryHandles.ocr?.name}</div>
+                                                            <div className="flex items-center gap-1.5"><FolderIcon className="w-3 h-3" /> Text Output: {baseDirectoryHandles.text?.name}</div>
                                                         </div>
                                                         <button
                                                             onClick={resetPermissions}
@@ -365,9 +457,9 @@ const UIEval = () => {
                                                             Your previously selected folders are remembered. Click Re-grant — the browser will show Allow dialogs, no folder navigation needed.
                                                         </p>
                                                         <div className="mt-2 text-xs text-amber-700 space-y-0.5">
-                                                            <div>📁 Configs & PDFs: <span className="font-mono">{expiredHandles.pdf?.name}</span></div>
-                                                            <div>📁 OCR Output: <span className="font-mono">{expiredHandles.ocr?.name}</span></div>
-                                                            <div>📁 Text Output: <span className="font-mono">{expiredHandles.text?.name}</span></div>
+                                                            <div className="flex items-center gap-1.5"><FolderIcon className="w-3 h-3" /> Configs & PDFs: <span className="font-mono">{expiredHandles.pdf?.name}</span></div>
+                                                            <div className="flex items-center gap-1.5"><FolderIcon className="w-3 h-3" /> OCR Output: <span className="font-mono">{expiredHandles.ocr?.name}</span></div>
+                                                            <div className="flex items-center gap-1.5"><FolderIcon className="w-3 h-3" /> Text Output: <span className="font-mono">{expiredHandles.text?.name}</span></div>
                                                         </div>
                                                         <div className="mt-3 flex items-center gap-3">
                                                             <button
@@ -433,7 +525,7 @@ const UIEval = () => {
                                                     </div>
                                                 </div>
                                             </div>
-                                        )}
+                                        ))}
                                     </div>
                                 )}
 
@@ -513,7 +605,7 @@ const UIEval = () => {
                                 selectedFile={selectedFile}
                                 onFileSelect={handleFileSelect}
                                 basePaths={basePaths}
-                                baseDirectoryHandles={baseDirectoryHandles}
+                                baseDirectoryHandles={effectiveDirectoryHandles}
                                 onPdfParentDirChange={(dirPath) => {
                                     console.log('PDF parent directory changed to:', dirPath);
                                     setPdfParentDirPath(dirPath);
@@ -527,7 +619,7 @@ const UIEval = () => {
                                 onCloseFileBrowser={handleCloseFileBrowser}
                                 basePaths={basePaths}
                                 selectedFolder={selectedFolder}
-                                baseDirectoryHandles={baseDirectoryHandles}
+                                baseDirectoryHandles={effectiveDirectoryHandles}
                                 onPdfParentDirChange={(dirPath) => {
                                     console.log('PDF parent directory changed to:', dirPath);
                                     setPdfParentDirPath(dirPath);
@@ -538,14 +630,14 @@ const UIEval = () => {
                         {activeTab === 'ocr-preview' && (
                             <OCRPreview
                                 selectedFile={selectedFile}
-                                baseDirectoryHandles={baseDirectoryHandles}
+                                baseDirectoryHandles={effectiveDirectoryHandles}
                             />
                         )}
 
                         {activeTab === 'paragraph-classifier' && (
                             <ParaClassifier
                                 selectedFile={selectedFile}
-                                baseDirectoryHandles={baseDirectoryHandles}
+                                baseDirectoryHandles={effectiveDirectoryHandles}
                                 basePaths={basePaths}
                             />
                         )}

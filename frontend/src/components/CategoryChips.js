@@ -12,7 +12,7 @@ const CATEGORY_META = {
 // filter type" pickers, so both stay visually and behaviorally identical —
 // including the "at least one category stays selected" guard — instead of two
 // hand-duplicated implementations drifting apart.
-export default function CategoryChips({ categories, selected, onChange, compact = false }) {
+export default function CategoryChips({ categories, selected, onChange, compact = false, align = 'center' }) {
     const toggle = (cat) => {
         if (selected.includes(cat)) {
             if (selected.length === 1) return;
@@ -39,7 +39,7 @@ export default function CategoryChips({ categories, selected, onChange, compact 
     const checkSize = compact ? 12 : 14;
 
     return (
-        <div className={`flex items-center flex-wrap justify-center ${compact ? 'gap-1.5' : 'gap-2.5'}`}>
+        <div className={`flex items-center flex-wrap ${align === 'left' ? 'justify-start' : 'justify-center'} ${compact ? 'gap-1.5' : 'gap-2.5'}`}>
             {categories.map((cat) => {
                 const active = selected.includes(cat);
                 const meta = CATEGORY_META[cat] || {};

@@ -241,7 +241,11 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
         return data;
     };
 
-    const callLLMApi = async (imageFile) => {
+    // `relativePath`, when given, skips uploading imageFile entirely -- the
+    // backend already has this exact PDF under BASE_PDF_PATH (that's how the
+    // browser got it in the first place, via /eval/fs/read), so it reads the
+    // page itself instead of receiving it back over the wire.
+    const callLLMApi = async (imageFile, relativePath = null) => {
         const fd = new FormData();
         fd.append('language', language);
         fd.append('model_name', modelName);
@@ -250,8 +254,12 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
         fd.append('crop_left', cropLeft);
         fd.append('crop_right', cropRight);
         fd.append('page_number', currentPage);
-        fd.append('use_default_scan_config', useDefaultScanConfig);
-        fd.append('image', imageFile);
+        if (relativePath) {
+            fd.append('relative_path', relativePath);
+        } else {
+            fd.append('use_default_scan_config', useDefaultScanConfig);
+            fd.append('image', imageFile);
+        }
         const res = await fetch(`${API_BASE_URL}/eval/scripture-llm`, { method: 'POST', body: fd });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || `HTTP error! status: ${res.status}`);
@@ -305,13 +313,21 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                 if (!res.ok) throw new Error(data.detail || `HTTP error! status: ${res.status}`);
                 setResults(data);
             } else {
-                let fileToProcess = selectedFile;
-                if (isPDF) {
-                    fileToProcess = await convertCurrentPageToImage();
-                    if (!fileToProcess) throw new Error('Failed to convert PDF page to image');
+                const isFromBrowser = propSelectedFile?.relativePath && selectedFile?.name === propSelectedFile.selectedPDFFile;
+                if (isFromBrowser && isPDF) {
+                    // Skip client-side page conversion entirely -- the backend extracts
+                    // the page itself from the same PDF it already has on disk.
+                    const data = await callLLMApi(null, propSelectedFile.relativePath);
+                    setResults(data);
+                } else {
+                    let fileToProcess = selectedFile;
+                    if (isPDF) {
+                        fileToProcess = await convertCurrentPageToImage();
+                        if (!fileToProcess) throw new Error('Failed to convert PDF page to image');
+                    }
+                    const data = await callLLMApi(fileToProcess);
+                    setResults(data);
                 }
-                const data = await callLLMApi(fileToProcess);
-                setResults(data);
             }
             setActiveResultTab(mode === 'tesseract' ? 'paragraphs' : 'llm-results');
         } catch (err) {
@@ -328,8 +344,15 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
         setResults(null);
         resetBatchState();
         try {
+            const isFromBrowser = propSelectedFile?.relativePath && selectedFile?.name === propSelectedFile.selectedPDFFile;
             const formData = new FormData();
-            formData.append('file', selectedFile);
+            if (isFromBrowser) {
+                // The backend already has this PDF under BASE_PDF_PATH; skip re-uploading
+                // a whole book's worth of pages the browser only just downloaded from it.
+                formData.append('relative_path', propSelectedFile.relativePath);
+            } else {
+                formData.append('file', selectedFile);
+            }
             formData.append('language', language);
             formData.append('use_google_ocr', false);
             const res = await fetch(`${API_BASE_URL}/eval/ocr/batch`, { method: 'POST', body: formData });
