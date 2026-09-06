@@ -3,3 +3,8 @@ omit =
     backend/api/feedback_api.py
     backend/crawler/llm_pdf_processor.py
     backend/crawler/bookmark_extractor/ollama.py
+    backend/crawler/bookmark_extractor/gemini.py
+    backend/crawler/bookmark_extractor/factory.py
+    backend/crawler/llm_pdf_offline_processor.py
+    backend/api/pdf_export.py
+    backend/api/pdf_proxy.py
