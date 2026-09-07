@@ -200,12 +200,30 @@ body {
   font-style: normal;
 }
 
+/* A real button, not an inline text link — it used to be bold underlined text
+   buried at the end of the metadata caption line, easy to miss and a poor
+   touch target. Padded, bordered chip instead, so it reads as a distinct
+   tappable control without making the whole quote box (whose text people
+   want to select/copy) a click target. */
 .llm-view-pdf-link {
+  display: inline-flex;
+  align-items: center;
   font-style: normal;
   font-weight: 600;
+  font-size: 0.95em;
   color: var(--color-danger);
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  background-color: color-mix(in srgb, var(--color-danger) 8%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-danger) 30%, var(--color-border));
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  margin-left: 0.15rem;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.llm-view-pdf-link:hover {
+  background-color: color-mix(in srgb, var(--color-danger) 16%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
 }
 
 @keyframes aibotAnswerEnter {

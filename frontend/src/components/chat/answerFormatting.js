@@ -61,19 +61,28 @@ export const buildReferencePdfUrl = (fileUrl, pdfPageNumber, fallbackPageNumber)
     return url.endsWith(`/${page}`) ? url : `${url}/${page}`;
 };
 
-// [[QPDF:category:url-encoded-pdf-url]] -- an inert marker carrying a quote's
-// category + PDF link through the whole tokenize/escape pipeline, resolved into a
-// real badge + "View PDF" link at the very end of formatAnswerHtml. Used by both
-// citation paths (the chunk-quote path in resolveChunkQuotes, and the <citation> tag
-// path in formatAnswerHtml) so there's one single place that turns "category + url"
-// into markup. Bracket-delimited rather than space-delimited -- a space-based version
-// of this marker was silently losing its surrounding spaces somewhere in the pipeline
-// (never root-caused), so this uses characters no realistic answer text or
-// encodeURIComponent output can produce, no whitespace involved at all.
+// [[QPDF:category:chunk_id:url-encoded-pdf-url]] -- an inert marker carrying a
+// quote's category + chunk_id + PDF link through the whole tokenize/escape pipeline,
+// resolved into a real badge + "View PDF" button at the very end of formatAnswerHtml.
+// Used by both citation paths (the chunk-quote path in resolveChunkQuotes, and the
+// <citation> tag path in formatAnswerHtml) so there's one single place that turns
+// "category + chunk_id + url" into markup. Bracket-delimited rather than
+// space-delimited -- a space-based version of this marker was silently losing its
+// surrounding spaces somewhere in the pipeline (never root-caused), so this uses
+// characters no realistic answer text or encodeURIComponent output can produce, no
+// whitespace involved at all. chunk_id is safe to embed unescaped the same way --
+// it's an internal id (doc_id + page/paragraph suffix), never free-form text, so it
+// can't contain ':' or ']' either.
+//
+// The chunk_id round-trips back to the *full* citation object (granth, pravachankar,
+// volume, ...) via a msg.citations lookup in StructuredAnswer's click handler --
+// carrying the full metadata as extra marker fields instead would mean re-deriving a
+// safe escaping scheme for arbitrary (possibly Devanagari/Gujarati) text inside this
+// same bracket-delimited format, for data that already lives in memory one lookup away.
 export const buildQuoteMetaMarker = (source) => {
     const pdfUrl = buildReferencePdfUrl(source?.file_url, source?.pdf_page_number, source?.page_number);
     if (!source?.category && !pdfUrl) return '';
-    return `[[QPDF:${source?.category || ''}:${pdfUrl ? encodeURIComponent(pdfUrl) : ''}]]`;
+    return `[[QPDF:${source?.category || ''}:${source?.chunk_id || ''}:${pdfUrl ? encodeURIComponent(pdfUrl) : ''}]]`;
 };
 
 // Each content category gets a distinct token-driven badge variant (not a literal
@@ -172,12 +181,22 @@ export const stripSummaryReferenceMarkers = (text) => {
         .trim();
 };
 
+// Shared by resolveChunkQuotes (building the marker) and StructuredAnswer's
+// click handler (resolving the full citation back out of the marker's
+// chunk_id) -- same lookup, one place.
+export const findCitationByChunkId = (citations, chunkId) =>
+    (citations || []).find(c => c.chunk_id === chunkId) || null;
+
 export const resolveChunkQuotes = (text, citations, chunkTexts) => {
     if (!text || !chunkTexts) return text;
     return text.replace(/^(\s*>\s*)\{\{([^}]+)\}\}\s*$/gm, (match, prefix, chunkId) => {
         const chunkData = chunkTexts[chunkId];
         if (!chunkData?.text_content) return match;
-        const source = (citations || []).find(c => c.chunk_id === chunkId) || chunkData;
+        const matched = findCitationByChunkId(citations, chunkId);
+        // Always carry chunk_id forward even when only chunkData was found (it isn't
+        // guaranteed to have chunk_id as a field itself) -- StructuredAnswer's click
+        // handler needs it to look the full citation back up from msg.citations.
+        const source = { ...(matched || chunkData), chunk_id: matched?.chunk_id || chunkId };
         const label = buildInlineQuoteLabel(source);
         const marker = buildQuoteMetaMarker(source);
         const inner = [label, marker].filter(Boolean).join('');
@@ -369,7 +388,7 @@ export const formatAnswerHtml = (answerText, preloadedCitationBlocks) => {
         const attrs = parseCitationAttrs(block.attrStr);
         const escapedText = escapeHtml(block.innerText.trim()).replace(/\r?\n/g, '<br/>');
         const label = buildCitationLabel(attrs);
-        const marker = buildQuoteMetaMarker({ category: attrs.category, file_url: attrs.file_url, pdf_page_number: attrs.pdf_page_number, page_number: attrs.page });
+        const marker = buildQuoteMetaMarker({ category: attrs.category, chunk_id: attrs.chunk_id, file_url: attrs.file_url, pdf_page_number: attrs.pdf_page_number, page_number: attrs.page });
         const inner = `${escapeHtml(label)}${marker}`;
         const labelHtml = (label || marker) ? `<span class="llm-quote-citation">${inner}</span>` : '';
         return `<span class="llm-quote-block">${escapedText}${labelHtml}</span>`;
@@ -398,7 +417,7 @@ export const formatAnswerHtml = (answerText, preloadedCitationBlocks) => {
     // Resolve QPDF markers (see buildQuoteMetaMarker) into "| <emoji> Category: X | <emoji> View PDF",
     // now that escaping is done — the one place both citation paths (embedded
     // <citation> tags, and {{chunk_id}} quotes) end up rendered.
-    html = html.replace(/\[\[QPDF:([^:\]]*):([^\]]*)\]\]/g, (match, category, encodedUrl) => {
+    html = html.replace(/\[\[QPDF:([^:\]]*):([^:\]]*):([^\]]*)\]\]/g, (match, category, chunkId, encodedUrl) => {
         const parts = [];
         if (category) {
             const meta = getCitationCategoryMeta(category);
@@ -409,10 +428,12 @@ export const formatAnswerHtml = (answerText, preloadedCitationBlocks) => {
         if (encodedUrl) {
             const pdfUrl = decodeURIComponent(encodedUrl);
             // A button, not an <a href target="_blank"> — StructuredAnswer's delegated
-            // click handler reads data-app-action/data-pdf-url to open the shared
-            // PdfCitationModal instead of navigating away. See PdfCitationModal's
-            // resolveCitationTarget for how the page-suffixed URL gets parsed back apart.
-            parts.push(`<button type="button" data-app-action="view-pdf" data-pdf-url="${escapeHtml(pdfUrl)}" data-category="${escapeHtml(category || '')}" class="llm-quote-meta-item llm-view-pdf-link"><img src="${documentEmoji}" alt="" class="llm-inline-emoji" />View PDF</button>`);
+            // click handler reads data-app-action/data-chunk-id (falling back to
+            // data-pdf-url/data-category when there's no chunk_id, e.g. the legacy
+            // <citation>-tag path) to open the shared PdfCitationModal instead of
+            // navigating away. See PdfCitationModal's resolveCitationTarget for how the
+            // page-suffixed URL gets parsed back apart.
+            parts.push(`<button type="button" data-app-action="view-pdf" data-pdf-url="${escapeHtml(pdfUrl)}" data-category="${escapeHtml(category || '')}" data-chunk-id="${escapeHtml(chunkId || '')}" class="llm-quote-meta-item llm-view-pdf-link"><img src="${documentEmoji}" alt="" class="llm-inline-emoji" />View PDF</button>`);
         }
         return parts.length ? ` | ${parts.join(' | ')}` : '';
     });
