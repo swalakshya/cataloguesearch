@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -234,6 +235,18 @@ async def lifespan(app: FastAPI):
             f"Catalogue cache populated with {len(app.state.catalogue_cache['data'])} rows")
     except Exception as e:
         log_handle.exception(f"Failed to populate catalogue cache at startup: {e}")
+
+    # Self-hosted PDFs with no third-party URL of their own (see LOCAL_PDFS_DIR
+    # docstring in config.py). Mounted here at startup, not module level, since
+    # the directory comes from config.yaml which isn't loaded until now. Doesn't
+    # exist on dev/test machines -- StaticFiles errors out if constructed against
+    # a missing directory, so skip the mount entirely rather than crash startup.
+    local_pdfs_dir = config.LOCAL_PDFS_DIR
+    if local_pdfs_dir and os.path.isdir(local_pdfs_dir):
+        app.mount("/api/media/pdfs", StaticFiles(directory=local_pdfs_dir), name="local-pdfs")
+        log_handle.info(f"Mounted local PDFs directory at /api/media/pdfs: {local_pdfs_dir}")
+    else:
+        log_handle.info(f"Local PDFs directory not found ({local_pdfs_dir}) — skipping /api/media/pdfs mount.")
 
     log_memory_usage()
     yield

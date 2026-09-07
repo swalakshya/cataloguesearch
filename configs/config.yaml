@@ -2,6 +2,13 @@
 app:
   name: "swalakshya"
 
+# Static files with no home elsewhere on the internet, served straight off disk
+# at /api/media/pdfs. Bind-mounted from the host in prod (see
+# docker-compose.prod.yml) -- this directory won't exist on dev/test machines,
+# which is fine, search_api.py skips the mount when it's missing.
+api:
+  local_pdfs_dir: "{BASE_DIR}/data/local-pdfs"
+
 crawler:
   base_pdf_path: "{HOME}/github/swalakshya/cataloguesearch-configs"
   base_text_path: "{HOME}/cataloguesearch/text"

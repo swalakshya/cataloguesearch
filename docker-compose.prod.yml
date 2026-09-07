@@ -82,6 +82,11 @@ services:
       - api-data:/app/data
       - api-logs:/app/logs
       - model-cache:/app/data/.cache
+      # Self-hosted PDFs with no third-party URL — a host bind mount, not a
+      # named volume, so files live at this path on the VM directly (scp in,
+      # they're immediately servable) and persist independently of the
+      # container's own lifecycle. Read-only: the API only ever serves these.
+      - /root/pdfs:/app/data/local-pdfs:ro
     networks:
       - app-net
     depends_on:

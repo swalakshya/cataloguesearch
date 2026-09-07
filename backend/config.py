@@ -156,6 +156,13 @@ class Config:
             return self._settings.get("search", {}).get("filtered_metadata_fields", {})
         elif name == "APP_NAME":
             return self._settings.get("app", {}).get("name", "swalakshya")
+        elif name == "LOCAL_PDFS_DIR":
+            # Backs the /api/media/pdfs static mount -- self-hosted PDFs that have no
+            # third-party URL, e.g. content with no home elsewhere on the internet.
+            # In prod this is a read-only bind mount of a host directory (see
+            # docker-compose.prod.yml); on dev/test machines it usually just doesn't
+            # exist, which search_api.py's startup handles by skipping the mount.
+            return self._settings.get("api", {}).get("local_pdfs_dir", None)
         elif name == "METRICS_DB_PATH":
             return os.environ.get("METRICS_DB_PATH")
         elif name == "DEBUG_MODE":
