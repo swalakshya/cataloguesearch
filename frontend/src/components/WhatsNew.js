@@ -34,6 +34,7 @@ const WhatsNew = () => {
                 "A new settings UI that lets you adjust themes, and other settings"
             ],
             newContent: [
+                "Granth: Added Panchadhyayi",
                 "Books: Added three new books by Babu Jugal Kishore Jain 'Yugal' - Charcha Chaitanya Ki, Chaitanya Vihar, Jain Kshitiz ke Udit Nakshatra and Chaitanya ki Surabhit Pankhuriyan",
             ]
         },
