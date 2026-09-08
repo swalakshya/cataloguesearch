@@ -28,6 +28,16 @@ const WhatsNew = () => {
 
     const updates = [
         {
+            date: "September 8, 2026",
+            newFeatures: [
+                "Swalakshya Chat now supports a new 'At a Glance' mode.",
+                "A new settings UI that lets you adjust themes, and other settings"
+            ],
+            newContent: [
+                "Books: Added three new books by Babu Jugal Kishore Jain 'Yugal' - Charcha Chaitanya Ki, Chaitanya Vihar, Jain Kshitiz ke Udit Nakshatra and Chaitanya ki Surabhit Pankhuriyan",
+            ]
+        },
+        {
             date: "September 4, 2026",
             newFeatures: [
                 "Visual UI Refresh! Now supports dark mode too.",

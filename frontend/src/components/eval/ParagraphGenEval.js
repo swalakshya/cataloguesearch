@@ -17,6 +17,7 @@ import {
 import { usePDFJsViewer } from '../../hooks/usePDFJsViewer';
 import useArrowNavigation from '../../hooks/useArrowNavigation';
 import BlockAnnotator from './BlockAnnotator';
+import LineAnnotator from './LineAnnotator';
 import { BLOCK_TYPES } from './classifierConstants';
 
 
@@ -60,10 +61,18 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
     const [pdfPageDataUrl, setPdfPageDataUrl] = useState(null);
     const [leftView, setLeftView] = useState('pdf'); // 'pdf' | 'json'
 
-    // JSON view — editable blocks
+    // JSON view — editable blocks (ocr_engine=llm block-typed JSON)
     const [editableBlocks, setEditableBlocks] = useState([]);
     const [originalTypes, setOriginalTypes] = useState([]);
     const [jsonSaveStatus, setJsonSaveStatus] = useState(null);
+
+    // JSON view — raw Tesseract line-level JSON (ocr_engine=tesseract), with
+    // per-line is_indented/is_centered/left%/right% fetched from the real
+    // classifier via /eval/ocr/classify-lines
+    const [tesseractPageData, setTesseractPageData] = useState(null);
+    const [lineClassifications, setLineClassifications] = useState(null);
+    const [classifyError, setClassifyError] = useState(null);
+    const [scanConfig, setScanConfig] = useState(null);
 
     // Multi-page PDF mapping (null = single-page PDF, no cropping needed)
     const [pageMapping, setPageMapping] = useState(null);
@@ -377,15 +386,29 @@ Please select the SOURCE directory (${selection.sourcePath})`;
             const targetText = await readFileContent(targetDir, targetFileName);
             setTargetContent(targetText.startsWith('--- File not found') ? '' : targetText);
 
-            // Always load OCR JSON for the JSON view
+            // Always load OCR JSON for the JSON view. Two shapes are possible:
+            // an array of {type, text} blocks (ocr_engine=llm), or a single
+            // {page_num, metadata, lines: [...]} object (ocr_engine=tesseract).
             const ocrJsonText = await readFileContent(sourceDir, fileName);
             try {
                 const parsed = JSON.parse(ocrJsonText);
-                setEditableBlocks(parsed);
-                setOriginalTypes(parsed.map(b => b.type));
+                if (Array.isArray(parsed)) {
+                    setEditableBlocks(parsed);
+                    setOriginalTypes(parsed.map(b => b.type));
+                    setTesseractPageData(null);
+                } else if (parsed && Array.isArray(parsed.lines)) {
+                    setEditableBlocks([]);
+                    setOriginalTypes([]);
+                    setTesseractPageData(parsed);
+                } else {
+                    setEditableBlocks([]);
+                    setOriginalTypes([]);
+                    setTesseractPageData(null);
+                }
             } catch {
                 setEditableBlocks([]);
                 setOriginalTypes([]);
+                setTesseractPageData(null);
             }
             setJsonSaveStatus(null);
 
@@ -558,10 +581,11 @@ Please select the SOURCE directory (${selection.sourcePath})`;
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pdfDoc]);
 
-    // Fetch scan-config to get skip_pdf_pages when folder changes
+    // Fetch scan-config (skip_pdf_pages, and the full config for line classification) when folder changes
     useEffect(() => {
         if (!selectedFolder?.relativePath) {
             setSkipPdfPages([]);
+            setScanConfig(null);
             return;
         }
         const pdfRelPath = selectedFolder.relativePath + (selectedFolder.selectedPDFFile ? `/${selectedFolder.selectedPDFFile}` : '.pdf');
@@ -569,9 +593,44 @@ Please select the SOURCE directory (${selection.sourcePath})`;
             .then(r => r.ok ? r.json() : null)
             .then(data => {
                 setSkipPdfPages(data?.skip_pdf_pages || []);
+                setScanConfig(data || null);
             })
-            .catch(() => setSkipPdfPages([]));
+            .catch(() => {
+                setSkipPdfPages([]);
+                setScanConfig(null);
+            });
     }, [selectedFolder]);
+
+    // When a Tesseract-shaped OCR page is loaded, classify its lines via the
+    // real LineClassifier (backend) so the JSON view can show is_indented /
+    // is_centered / left% / right% per line, matching what indexing would do.
+    useEffect(() => {
+        if (!tesseractPageData) {
+            setLineClassifications(null);
+            setClassifyError(null);
+            return;
+        }
+        let cancelled = false;
+        setLineClassifications(null);
+        setClassifyError(null);
+        fetch(`${API_BASE_URL}/eval/ocr/classify-lines`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                page_data: tesseractPageData,
+                scan_config: scanConfig || {},
+                language: scanConfig?.language || 'hi',
+            }),
+        })
+            .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+            .then(data => {
+                if (!cancelled) setLineClassifications(data.lines || []);
+            })
+            .catch(err => {
+                if (!cancelled) setClassifyError(`Could not classify lines: ${err.message}`);
+            });
+        return () => { cancelled = true; };
+    }, [tesseractPageData, scanConfig]);
 
     // Helper functions to construct file paths for copy buttons
     const getPdfPath = () => {
@@ -819,6 +878,9 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                             setTargetContent('');
                             setEditableBlocks([]);
                             setOriginalTypes([]);
+                            setTesseractPageData(null);
+                            setLineClassifications(null);
+                            setClassifyError(null);
                             setJsonSaveStatus(null);
                             setError(null);
                             setPageMapping(null);
@@ -917,7 +979,15 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                         <div className="border border-slate-300 rounded-lg overflow-hidden mt-2" style={{ backgroundColor: 'var(--bg-surface)' }}>
                             <div className="p-4 max-h-[700px] overflow-y-auto flex justify-center">
                                 {leftView === 'json' ? (
-                                    editableBlocks.length > 0 ? (
+                                    tesseractPageData ? (
+                                        <div className="w-full">
+                                            <LineAnnotator
+                                                lines={tesseractPageData.lines}
+                                                classifications={lineClassifications}
+                                                error={classifyError}
+                                            />
+                                        </div>
+                                    ) : editableBlocks.length > 0 ? (
                                         <div className="w-full">
                                             <BlockAnnotator
                                                 blocks={editableBlocks}

@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 import asyncio
 import json
 import os
+import re
 import sys
 import tempfile
 import logging
@@ -35,7 +36,7 @@ from backend.crawler.bookmark_extractor.factory import create_bookmark_extractor
 from backend.utils import json_dumps
 from backend.crawler.llm_pdf_processor import BLOCK_TYPES
 from eval.multi_llm import extract_indic_text_any, ALLOWED_MODELS as LLM_ALLOWED_MODELS
-from backend.crawler.paragraph_generator.advanced import AdvancedParagraphGenerator
+from backend.crawler.paragraph_generator.advanced import AdvancedParagraphGenerator, LineClassifier
 from backend.crawler.paragraph_generator.language_meta import get_language_meta
 from .ocr import get_ocr_service
 
@@ -78,6 +79,24 @@ class OCRResponse(BaseModel):
     language: str
     ocr_json: Optional[Dict] = None
     scan_config: Optional[Dict] = None
+
+class LineClassification(BaseModel):
+    line_num: int
+    text: str
+    x_start: int
+    x_end: int
+    is_indented: bool
+    is_centered: bool
+    left_pct: float
+    right_pct: float
+
+class ClassifyLinesRequest(BaseModel):
+    page_data: Dict[str, Any] = Field(..., description="Raw Tesseract OCR page JSON: {page_num, metadata, lines}")
+    scan_config: Dict[str, Any] = Field(default_factory=dict)
+    language: str = "hi"
+
+class ClassifyLinesResponse(BaseModel):
+    lines: List[LineClassification]
 
 class HealthResponse(BaseModel):
     status: str
@@ -285,6 +304,67 @@ async def get_file_scan_config(relative_path: str):
     except Exception as e:
         log_handle.error(f"Error getting scan config: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error getting scan config: {str(e)}")
+
+@router.post("/ocr/classify-lines", response_model=ClassifyLinesResponse)
+async def classify_lines(request: ClassifyLinesRequest):
+    """
+    Runs the real LineClassifier (backend/crawler/paragraph_generator/advanced.py)
+    over one already-saved Tesseract OCR page's lines and returns each line's
+    is_indented/is_centered tags plus the underlying left/right gap percentages.
+
+    Powers the Paragraph Gen Eval "View JSON" panel's per-line diagnostics for
+    ocr_engine=tesseract pages -- calls the production classifier directly
+    rather than reimplementing the threshold logic in the frontend, so the
+    eval view can never drift from what indexing actually does.
+    """
+    try:
+        metadata = request.page_data.get("metadata", {})
+        prose_left_margin = metadata.get("prose_left_margin", 0)
+        prose_right_margin = metadata.get("prose_right_margin", 0)
+
+        lang_code = "gu" if request.language.lower() in ("guj", "gu") else "hi"
+        language_meta = get_language_meta(lang_code, request.scan_config)
+        gen = AdvancedParagraphGenerator(Config("configs/config.yaml"), language_meta)
+
+        typo_list = request.scan_config.get("typo_list", [])
+        strip_regex = request.scan_config.get("strip_regex", [])
+        hard_end_regexes = [re.compile(p) for p in request.scan_config.get("hard_end_regex", [])]
+
+        classifier = LineClassifier(
+            prose_left_margin, prose_right_margin,
+            header_regexes=request.scan_config.get("header_regex", []),
+            question_prefix=request.scan_config.get("question_prefix", []),
+            answer_prefix=request.scan_config.get("answer_prefix", []),
+            sentence_terminators=language_meta.sentence_terminators,
+            hard_end_regexes=hard_end_regexes,
+        )
+
+        results = []
+        for line_data in request.page_data.get("lines", []):
+            normalized_text = gen._normalize_text(line_data.get("text", ""), typo_list, strip_regex)
+            line = classifier.classify(
+                text=normalized_text,
+                x_start=line_data.get("x_start", 0),
+                x_end=line_data.get("x_end", 0),
+                page_num=request.page_data.get("page_num", 0),
+                line_num=line_data.get("line_num", 0),
+            )
+            results.append(LineClassification(
+                line_num=line.line_num,
+                text=line.text,
+                x_start=line.x_start,
+                x_end=line.x_end,
+                is_indented='IS_INDENTED' in line.tags or 'IS_CENTERED' in line.tags,
+                is_centered='IS_CENTERED' in line.tags,
+                left_pct=round(line.left_pct, 1),
+                right_pct=round(line.right_pct, 1),
+            ))
+        return ClassifyLinesResponse(lines=results)
+
+    except Exception as e:
+        log_handle.error(f"Error classifying lines: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error classifying lines: {str(e)}")
+
 
 _LANG_TO_FOLDER = {
     "hi": "hindi", "hin": "hindi",

@@ -4,6 +4,7 @@ import ShowBookmarksButton from '../ShowBookmarksButton';
 import BookmarksModal from '../BookmarksModal';
 import ParseBookmarksControl from '../ParseBookmarksControl';
 import FileOrUrlInput from './FileOrUrlInput';
+import LineAnnotator from './LineAnnotator';
 import usePDFViewer from '../../hooks/usePDFViewer';
 import useMultiPageSplit from '../../hooks/useMultiPageSplit';
 import useArrowNavigation from '../../hooks/useArrowNavigation';
@@ -50,6 +51,12 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
     const [showBookmarkModal, setShowBookmarkModal] = useState(false);
     const [activeResultTab, setActiveResultTab] = useState('preview');
     const [jumpPageNumber, setJumpPageNumber] = useState('');
+
+    // Per-line is_indented/is_centered/left%/right% from the real classifier,
+    // for the active OCR result page (tesseract mode only)
+    const [lineClassifications, setLineClassifications] = useState(null);
+    const [classifyError, setClassifyError] = useState(null);
+    const [showRawJson, setShowRawJson] = useState(false);
 
     // LLM-specific
     const [modelName, setModelName] = useState('gemini-2.5-flash');
@@ -147,6 +154,54 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
         }
         return () => { if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current); };
     }, [batchJobId, batchJobStatus]);
+
+    // Classify the active result's raw OCR lines via the real LineClassifier
+    // (is_indented / is_centered / left% / right%) -- tesseract mode only.
+    useEffect(() => {
+        const active = results?.isMultiPage ? results[activeHalf] : results;
+        const ocrJson = active?.ocr_json;
+        if (mode !== 'tesseract' || !ocrJson?.lines?.length) {
+            setLineClassifications(null);
+            setClassifyError(null);
+            return;
+        }
+        let cancelled = false;
+        setLineClassifications(null);
+        setClassifyError(null);
+        fetch(`${API_BASE_URL}/eval/ocr/classify-lines`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                page_data: ocrJson,
+                scan_config: active?.scan_config || {},
+                language,
+            }),
+        })
+            .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+            .then(data => {
+                if (!cancelled) setLineClassifications(data.lines || []);
+            })
+            .catch(err => {
+                if (!cancelled) setClassifyError(`Could not classify lines: ${err.message}`);
+            });
+        return () => { cancelled = true; };
+    }, [mode, results, activeHalf, language]);
+
+    // Match a merged VERSE_BLOCK paragraph's lines back to their classified
+    // line (by exact normalized-text match) so each line's left%/right% can
+    // be shown next to it. Matches are consumed as found, to cope with
+    // duplicate lines (e.g. a repeated refrain) each claiming their own line.
+    const usedClassificationLineNums = useRef(new Set());
+    const getVerseLineStats = (paraText) => {
+        if (!lineClassifications) return null;
+        const stats = paraText.split('\n').map(lineText =>
+            lineClassifications.find(c =>
+                !usedClassificationLineNums.current.has(c.line_num) && c.text === lineText
+            )
+        );
+        stats.forEach(s => { if (s) usedClassificationLineNums.current.add(s.line_num); });
+        return stats;
+    };
 
     const resetBatchState = () => {
         setBatchJobId(null);
@@ -412,8 +467,12 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
 
     const renderParagraphList = (paragraphs) => {
         if (!paragraphs?.length) return <div className="text-center py-4 text-slate-400 text-sm">No text detected.</div>;
+        usedClassificationLineNums.current = new Set();
         return paragraphs.map((para, i) => {
             const style = PARAGRAPH_TYPE_STYLES[para.paragraph_type] || DEFAULT_PARAGRAPH_STYLE;
+            const isVerse = para.paragraph_type === 'VERSE_BLOCK';
+            const lineStats = isVerse ? getVerseLineStats(para.text) : null;
+            const lines = para.text.split('\n');
             return (
                 <div key={i} className={`${style.bg} border ${style.border} rounded-lg p-3`}>
                     <div className="flex items-center justify-between mb-2">
@@ -423,7 +482,20 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                         </div>
                         <CopyButton text={para.text} />
                     </div>
-                    <div className={`text-sm ${style.text} whitespace-pre-wrap font-mono`}>{para.text}</div>
+                    {lineStats ? (
+                        <div className="space-y-1">
+                            {lines.map((lineText, li) => (
+                                <div key={li} className="flex items-baseline justify-between gap-3">
+                                    <span className={`text-sm ${style.text} font-mono`}>{lineText}</span>
+                                    <span className="text-xs text-slate-400 font-mono whitespace-nowrap">
+                                        {lineStats[li] ? `L ${lineStats[li].left_pct.toFixed(1)}% · R ${lineStats[li].right_pct.toFixed(1)}%` : '—'}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className={`text-sm ${style.text} whitespace-pre-wrap font-mono`}>{para.text}</div>
+                    )}
                 </div>
             );
         });
@@ -725,12 +797,28 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                             <div className="relative h-[660px] overflow-auto border border-slate-200 rounded-lg bg-slate-50 p-3">
                                 {activeData?.ocr_json ? (
                                     <>
-                                        <div className="absolute top-2 right-2">
+                                        <div className="absolute top-2 right-2 flex items-center gap-2">
+                                            <button
+                                                onClick={() => setShowRawJson(v => !v)}
+                                                className="px-2.5 py-1 text-xs font-medium border border-slate-300 rounded-md bg-white text-slate-600 hover:bg-slate-100 transition-colors"
+                                            >
+                                                {showRawJson ? 'Show Annotated' : 'Show Raw JSON'}
+                                            </button>
                                             <CopyButton text={JSON.stringify(activeData.ocr_json, null, 2)} />
                                         </div>
-                                        <pre className="text-xs font-mono text-slate-700 whitespace-pre-wrap">
-                                            {JSON.stringify(activeData.ocr_json, null, 2)}
-                                        </pre>
+                                        {showRawJson ? (
+                                            <pre className="text-xs font-mono text-slate-700 whitespace-pre-wrap">
+                                                {JSON.stringify(activeData.ocr_json, null, 2)}
+                                            </pre>
+                                        ) : (
+                                            <div className="pt-9">
+                                                <LineAnnotator
+                                                    lines={activeData.ocr_json.lines}
+                                                    classifications={lineClassifications}
+                                                    error={classifyError}
+                                                />
+                                            </div>
+                                        )}
                                     </>
                                 ) : (
                                     <div className="flex items-center justify-center h-full text-slate-400 text-sm">

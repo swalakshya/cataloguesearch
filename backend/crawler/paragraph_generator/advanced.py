@@ -33,6 +33,8 @@ class Line:
     line_num: int
     tags: Set[str] = field(default_factory=set)
     speaker: Optional[str] = None
+    left_pct: float = 0.0
+    right_pct: float = 0.0
 
 
 @dataclass
@@ -63,6 +65,12 @@ GUJARATI_SENTENCE_TERMINATORS = ('।', '.', '?', '!', '।।', ')', ']', '}')
 _MIN_PARA_LENGTH = 50   # default minimum words per output paragraph
 _MAX_PARA_LENGTH = 170  # default maximum words per output paragraph (override via scan_config max_words_per_para)
 
+# Indent/center thresholds are a % of the page's own prose line width
+# (prose_right_margin - prose_left_margin), not a fixed pixel count — a fixed
+# pixel count doesn't scale across OCR DPI or page size.
+DEFAULT_INDENT_THRESHOLD_PCT = 5.0
+DEFAULT_CENTER_THRESHOLD_PCT = 14.0
+
 
 # --- LineClassifier (EXACT copy from para_gen.py) ---
 
@@ -71,14 +79,16 @@ class LineClassifier:
     Analyzes raw line data and assigns classification tags.
     """
 
-    def __init__(self, avg_left_margin, avg_right_margin, indent_threshold=15,
-                 center_threshold=20, header_regexes=None,
+    def __init__(self, avg_left_margin, avg_right_margin,
+                 indent_threshold_pct=DEFAULT_INDENT_THRESHOLD_PCT,
+                 center_threshold_pct=DEFAULT_CENTER_THRESHOLD_PCT, header_regexes=None,
                  question_prefix=None, answer_prefix=None, sentence_terminators=None,
                  hard_end_regexes=None):
         self.avg_left_margin = avg_left_margin
         self.avg_right_margin = avg_right_margin
-        self.indent_threshold = indent_threshold
-        self.center_threshold = center_threshold
+        self.line_length = avg_right_margin - avg_left_margin
+        self.indent_threshold_pct = indent_threshold_pct
+        self.center_threshold_pct = center_threshold_pct
         self.header_regexes = header_regexes if header_regexes is not None else []
         self.question_prefix = question_prefix if question_prefix is not None else []
         self.answer_prefix = answer_prefix if answer_prefix is not None else []
@@ -91,15 +101,18 @@ class LineClassifier:
         tags = set()
         speaker = None
 
-        is_indented = (x_start - self.avg_left_margin) > self.indent_threshold
         left_indent_amount = x_start - self.avg_left_margin
         right_indent_amount = self.avg_right_margin - x_end
+        left_pct = (left_indent_amount / self.line_length * 100) if self.line_length else 0.0
+        right_pct = (right_indent_amount / self.line_length * 100) if self.line_length else 0.0
+
+        is_indented = left_pct > self.indent_threshold_pct
         is_centered = (
                 is_indented and
-                right_indent_amount > self.center_threshold
+                right_pct > self.center_threshold_pct
         )
         is_not_right_justified = (
-                right_indent_amount > self.indent_threshold
+                right_pct > self.indent_threshold_pct
         )
 
         if is_centered:
@@ -113,7 +126,8 @@ class LineClassifier:
         stripped_text = text.strip()
         if not stripped_text:
             tags.add('IS_EMPTY')
-            return Line(text, int(x_start), int(x_end), page_num, line_num, tags, speaker)
+            return Line(text, int(x_start), int(x_end), page_num, line_num, tags, speaker,
+                        left_pct, right_pct)
 
         # Detect very short centered lines (likely decorative elements misread by OCR)
         # Examples: stars (★ ★ ★) OCR'd as random chars like "और #औ", dashes, etc.
@@ -146,7 +160,8 @@ class LineClassifier:
         if any(r.search(stripped_text) for r in self.hard_end_regexes):
             tags.add('IS_HARD_END')
 
-        return Line(text, int(x_start), int(x_end), page_num, line_num, tags, speaker)
+        return Line(text, int(x_start), int(x_end), page_num, line_num, tags, speaker,
+                    left_pct, right_pct)
 
 
 # --- ParagraphGenerator State Machine (EXACT copy from para_gen.py) ---

@@ -323,7 +323,8 @@ class TestQABlock:
 
     def test_is_indented_in_qa_block_exits_to_prose(self, paragraphs):
         """
-        Page 5 L11 is IS_INDENTED (x_start=130) inside QA_BLOCK → flushes QA,
+        Page 5 L11 is IS_INDENTED (x_start=150, 5.6% of the 900px prose width)
+        inside QA_BLOCK → flushes QA,
         switches to STANDARD_PROSE. Phase 3 type-change boundary keeps the prose
         fragment separate from the preceding QA block.
         Covers advanced.py lines 302-306.
