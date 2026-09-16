@@ -12,6 +12,21 @@ pytesseract==0.3.10          # Python wrapper for Google's Tesseract-OCR Engine
 Pillow==10.4.0               # Image processing library, required by pytesseract and pdf2image
 google-cloud-vision==3.10.2  # Google Cloud Vision API client for advanced OCR/image analysis
 opencv-python==4.8.1.78
+## Layout model for header_detection=surya (heading_detector.classify_document_via_surya).
+## Pinned to 0.20.0: the first release with the SuryaInferenceManager API this
+## code uses, and the last one whose transformers floor (>=4.56.1) still fits
+## below sentence-transformers' <5.0.0 ceiling -- 0.21.0+ requires
+## transformers>=5.12.1, which sentence-transformers==3.3.1 can't satisfy.
+surya-ocr==0.20.0
+## surya-ocr==0.20.0 requires httpx<0.28,>=0.27.0 (its llama.cpp backend talks
+## OpenAI-compatible chat completions over it); google-genai (below) declares
+## httpx>=0.28.1. These two ranges don't overlap at all -- pinned to 0.27.2 to
+## satisfy surya-ocr's hard ceiling; verified empirically that genai.Client()
+## construction and its actual usage in llm_pdf_processor.py don't touch
+## anything version-gated on httpx internally, so this is a real but harmless
+## metadata conflict (pip check will still flag it). Revisit if google-genai
+## calls start failing.
+httpx==0.27.2
 
 ## Markdown Processing
 markdown==3.7             # Markdown to HTML conversion

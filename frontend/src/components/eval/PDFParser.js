@@ -13,9 +13,12 @@ const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
 
 // Tesseract paragraph type styles
 const PARAGRAPH_TYPE_STYLES = {
-    STANDARD_PROSE: { label: 'Prose', bg: 'bg-blue-50',   border: 'border-blue-200',   text: 'text-blue-800',   badge: 'bg-blue-100 text-blue-700' },
-    VERSE_BLOCK:    { label: 'Verse', bg: 'bg-amber-50',  border: 'border-amber-200',  text: 'text-amber-800',  badge: 'bg-amber-100 text-amber-700' },
-    QA_BLOCK:       { label: 'Q&A',   bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-800', badge: 'bg-purple-100 text-purple-700' },
+    STANDARD_PROSE: { label: 'Prose',   bg: 'bg-blue-50',   border: 'border-blue-200',   text: 'text-blue-800',   badge: 'bg-blue-100 text-blue-700' },
+    VERSE_BLOCK:    { label: 'Verse',   bg: 'bg-amber-50',  border: 'border-amber-200',  text: 'text-amber-800',  badge: 'bg-amber-100 text-amber-700' },
+    QA_BLOCK:       { label: 'Q&A',     bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-800', badge: 'bg-purple-100 text-purple-700' },
+    // Same styling as the LLM path's chapter_heading (BLOCK_TYPE_STYLES below) --
+    // same concept, different OCR engine, should read the same in the UI.
+    HEADING:        { label: 'Heading', bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-800', badge: 'bg-purple-100 text-purple-700' },
 };
 const DEFAULT_PARAGRAPH_STYLE = { label: null, bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-800', badge: '' };
 
@@ -34,7 +37,7 @@ const DEFAULT_BLOCK_STYLE = { label: 'Unknown', bg: 'bg-gray-50', border: 'borde
 
 const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, baseDirectoryHandles, onPdfParentDirChange }) => {
     // Mode
-    const [mode, setMode] = useState('tesseract'); // 'tesseract' | 'llm'
+    const [mode, setMode] = useState('tesseract'); // 'tesseract' | 'llm' | 'surya'
 
     // Shared state
     const [selectedFile, setSelectedFile] = useState(null);
@@ -288,7 +291,11 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
         }
     };
 
-    const callOCRApi = async (imageFile) => {
+    // `endpoint` lets this serve both /eval/ocr (Tesseract density/height heading
+    // heuristic) and /eval/ocr/surya (same Tesseract text extraction, but
+    // is_heading comes from Surya's layout model instead) -- same request shape,
+    // same OCRResponse shape, just a different heading signal server-side.
+    const callOCRApi = async (imageFile, endpoint = '/eval/ocr') => {
         const fd = new FormData();
         fd.append('language', language);
         fd.append('crop_top', cropTop);
@@ -298,7 +305,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
         fd.append('mode', 'advanced');
         fd.append('image', imageFile);
         fd.append('use_default_scan_config', useDefaultScanConfig);
-        const res = await fetch(`${API_BASE_URL}/eval/ocr`, { method: 'POST', body: fd });
+        const res = await fetch(`${API_BASE_URL}${endpoint}`, { method: 'POST', body: fd });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || `HTTP error! status: ${res.status}`);
         return data;
@@ -347,10 +354,12 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                     splitImageFile(fullPageFile, splitPct, 'left'),
                     splitImageFile(fullPageFile, splitPct, 'right'),
                 ]);
-                const apiCall = mode === 'tesseract' ? callOCRApi : callLLMApi;
+                const ocrEndpoint = mode === 'surya' ? '/eval/ocr/surya' : '/eval/ocr';
+                const apiCall = mode === 'llm' ? callLLMApi : (f) => callOCRApi(f, ocrEndpoint);
                 const [leftResults, rightResults] = await Promise.all([apiCall(leftFile), apiCall(rightFile)]);
                 setResults({ isMultiPage: true, left: leftResults, right: rightResults });
-            } else if (mode === 'tesseract') {
+            } else if (mode === 'tesseract' || mode === 'surya') {
+                const ocrEndpoint = mode === 'surya' ? '/eval/ocr/surya' : '/eval/ocr';
                 const isFromBrowser = propSelectedFile?.relativePath && selectedFile?.name === propSelectedFile.selectedPDFFile;
                 const formData = new FormData();
                 formData.append('language', language);
@@ -371,7 +380,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                     formData.append('image', fileToProcess);
                     formData.append('use_default_scan_config', useDefaultScanConfig);
                 }
-                const res = await fetch(`${API_BASE_URL}/eval/ocr`, { method: 'POST', body: formData });
+                const res = await fetch(`${API_BASE_URL}${ocrEndpoint}`, { method: 'POST', body: formData });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.detail || `HTTP error! status: ${res.status}`);
                 setResults(data);
@@ -392,7 +401,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                     setResults(data);
                 }
             }
-            setActiveResultTab(mode === 'tesseract' ? 'paragraphs' : 'llm-results');
+            setActiveResultTab(mode === 'llm' ? 'llm-results' : 'paragraphs');
         } catch (err) {
             setError(`Processing failed: ${err.message}`);
         } finally {
@@ -519,17 +528,17 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
 
     // ── Derived values ───────────────────────────────────────────────────────
 
-    const tabs = mode === 'tesseract'
+    const tabs = mode === 'llm'
         ? [
+            { id: 'preview',     label: 'OCR Preview' },
+            { id: 'llm-results', label: 'LLM Results' },
+            { id: 'scan-config', label: 'Scan Config' },
+          ]
+        : [
             { id: 'preview',     label: 'OCR Preview' },
             { id: 'ocr-json',    label: 'Raw OCR JSON' },
             { id: 'scan-config', label: 'Scan Config' },
             { id: 'paragraphs',  label: 'Paragraphs' },
-          ]
-        : [
-            { id: 'preview',     label: 'OCR Preview' },
-            { id: 'llm-results', label: 'LLM Results' },
-            { id: 'scan-config', label: 'Scan Config' },
           ];
 
     const activeData = results?.isMultiPage ? results[activeHalf] : results;
@@ -593,6 +602,11 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                             <button onClick={() => setMode('llm')}
                                 className={`px-3 py-1 text-xs border-l border-slate-300 ${mode === 'llm' ? 'bg-sky-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
                                 LLM
+                            </button>
+                            <button onClick={() => setMode('surya')}
+                                title="Tesseract text extraction, but headings come from Surya's layout model instead of density/height"
+                                className={`px-3 py-1 text-xs border-l border-slate-300 ${mode === 'surya' ? 'bg-sky-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+                                Surya
                             </button>
                         </div>
 
@@ -687,8 +701,8 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                                 {isLoading && !batchJobId ? <><Spinner /><span>Processing…</span></> : 'Process'}
                             </button>
                             <button onClick={handleBatchProcess}
-                                disabled={!selectedFile || isLoading || mode === 'llm'}
-                                title={mode === 'llm' ? 'Batch not available in LLM mode' : 'Process all pages and download as ZIP'}
+                                disabled={!selectedFile || isLoading || mode === 'llm' || mode === 'surya'}
+                                title={mode !== 'tesseract' ? `Batch not available in ${mode === 'llm' ? 'LLM' : 'Surya'} mode` : 'Process all pages and download as ZIP'}
                                 className="text-xs px-3 py-1.5 bg-slate-600 text-white font-semibold rounded-md hover:bg-slate-700 disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-1 transition-colors">
                                 {isLoading && batchJobId ? <><Spinner /><span>Batching…</span></> : 'Batch'}
                             </button>

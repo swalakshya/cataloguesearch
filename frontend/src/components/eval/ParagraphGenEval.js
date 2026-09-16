@@ -94,8 +94,31 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
     const processSelectedFolderRef = useRef(null);
     const loadPDFForSinglePageRef = useRef(null);
 
-    // Load persisted directory handles on component mount
+    // Load persisted LOCAL directory handles on component mount -- but only
+    // when the parent (UIEval.js) hasn't already resolved handles itself.
+    // parentBaseDirectoryHandles is truthy in BOTH local mode (once granted)
+    // AND server mode (always, via createRemoteDirectoryHandle) -- restoring
+    // from IndexedDB unconditionally here would silently clobber correct
+    // remote handles with stale local ones left over from an earlier local-
+    // mode session, which is exactly what was happening: PDF browsing used
+    // the (correct) remote handle from the prop, but processSelectedFolder's
+    // navigateToPath(baseDirectoryHandles.ocr, ...) used this component's own
+    // state -- overwritten here with a real local FileSystemDirectoryHandle
+    // that doesn't have this book's newer OCR folders, hence the NotFoundError
+    // even while fsMode === 'server'.
     useEffect(() => {
+        if (parentBaseDirectoryHandles) {
+            // Parent already resolved handles -- local (once granted) or
+            // server (always). Trust it outright and keep this component's
+            // own state in sync, including on a LIVE mode switch (no reload),
+            // rather than only checking once on mount -- otherwise toggling
+            // Local -> Server in the same session leaves this state pointing
+            // at whatever was resolved before the switch.
+            setBaseDirectoryHandles(parentBaseDirectoryHandles);
+            setPermissionsGranted(true);
+            return;
+        }
+
         const loadPersistedHandles = async () => {
             try {
                 const stored = await getStoredDirectoryHandles();
@@ -104,7 +127,7 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
                     if (isValid) {
                         setBaseDirectoryHandles(stored);
                         setPermissionsGranted(true);
-                        
+
                         // console.log('Successfully restored directory handles from storage');
                     } else {
                         console.log('Stored handles no longer have permission, clearing storage');
@@ -118,7 +141,7 @@ const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, 
         };
 
         loadPersistedHandles();
-    }, []);
+    }, [parentBaseDirectoryHandles]);
 
 
     // Load base paths from API if not provided by parent
@@ -588,7 +611,13 @@ Please select the SOURCE directory (${selection.sourcePath})`;
             setScanConfig(null);
             return;
         }
-        const pdfRelPath = selectedFolder.relativePath + (selectedFolder.selectedPDFFile ? `/${selectedFolder.selectedPDFFile}` : '.pdf');
+        // selectedFolder.relativePath already mirrors the PDF's own path with the
+        // extension stripped (FileBrowser.js builds it as <pdf dir>/<pdf name
+        // without .pdf>, to match the OCR output directory convention) -- for
+        // BOTH the single-file-selection and whole-folder-selection cases, so it
+        // must not have selectedPDFFile appended again (that double-appends the
+        // file name as a bogus extra path segment, e.g. ".../DLP/DLP.pdf").
+        const pdfRelPath = `${selectedFolder.relativePath}.pdf`;
         fetch(`${API_BASE_URL}/eval/ocr/scan-config?relative_path=${encodeURIComponent(pdfRelPath)}`)
             .then(r => r.ok ? r.json() : null)
             .then(data => {
@@ -632,12 +661,25 @@ Please select the SOURCE directory (${selection.sourcePath})`;
         return () => { cancelled = true; };
     }, [tesseractPageData, scanConfig]);
 
-    // Helper functions to construct file paths for copy buttons
+    // Helper functions to construct file paths for copy buttons.
+    //
+    // selectedFolder.relativePath is the PDF's path with its extension
+    // stripped (FileBrowser.js builds it to match the OCR output directory
+    // convention -- see its handleSelectFile), so it's correct for OCR/text
+    // paths (getJsonPath/getTxtPath below) but WRONG for anything that needs
+    // the PDF's own containing folder (getPdfPath/getScanConfigPath), which
+    // would otherwise double-append the PDF's stem as a bogus extra segment
+    // (e.g. ".../Veer Nirvanotsav/VN/scan_config.json" instead of
+    // ".../Veer Nirvanotsav/scan_config.json").
+    const getPdfDirPath = () => {
+        if (!selectedFolder?.pdfFilePath) return null;
+        const lastSlash = selectedFolder.pdfFilePath.lastIndexOf('/');
+        return lastSlash === -1 ? '' : selectedFolder.pdfFilePath.slice(0, lastSlash);
+    };
+
     const getPdfPath = () => {
-        if (!basePaths || !selectedFolder?.relativePath || !selectedFolder?.selectedPDFFile) {
-            return '';
-        }
-        return `${basePaths.base_pdf_path}/${selectedFolder.relativePath}/${selectedFolder.selectedPDFFile}`;
+        if (!basePaths || !selectedFolder?.pdfFilePath) return '';
+        return `${basePaths.base_pdf_path}/${selectedFolder.pdfFilePath}`;
     };
 
     const getJsonPath = () => {
@@ -657,7 +699,14 @@ Please select the SOURCE directory (${selection.sourcePath})`;
 
     const getScanConfigPath = () => {
         if (!basePaths || !selectedFolder?.relativePath) return '';
-        return `${basePaths.base_pdf_path}/${selectedFolder.relativePath}/scan_config.json`;
+        // Whole-folder selections (handleSelectFolder) have no pdfFilePath at
+        // all -- relativePath there is already the real folder, not a PDF
+        // stem, so it needs no adjustment.
+        const pdfDirPath = getPdfDirPath();
+        const dirPath = pdfDirPath !== null ? pdfDirPath : selectedFolder.relativePath;
+        return dirPath
+            ? `${basePaths.base_pdf_path}/${dirPath}/scan_config.json`
+            : `${basePaths.base_pdf_path}/scan_config.json`;
     };
 
     const getDebugInfo = () => {
@@ -803,8 +852,8 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                 <div className="p-4 border-b border-slate-200">
                     <h2 className="text-2xl font-bold text-slate-800 mb-2">Paragraph Generation Evaluation</h2>
                     <p className="text-slate-600">
-                        {selectedFolder?.selectedPDFFile 
-                            ? `Comparing: ${selectedFolder.relativePath}/${selectedFolder.selectedPDFFile}`
+                        {selectedFolder?.selectedPDFFile
+                            ? `Comparing: ${selectedFolder.pdfFilePath || `${selectedFolder.relativePath}.pdf`}`
                             : `Comparing: ${sourceHandle?.name} vs ${targetHandle?.name}`
                         }
                     </p>

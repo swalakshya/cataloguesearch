@@ -269,6 +269,7 @@ const UIEval = () => {
                     baseDirectoryHandles={effectiveDirectoryHandles}
                     currentTab={activeTab}
                     startPath={pdfParentDirPath}
+                    fsMode={fsMode}
                 />
             )}
             

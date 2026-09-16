@@ -19,6 +19,7 @@ from backend.crawler.index_generator import IndexGenerator
 from backend.crawler.llm_index_generator import LLMIndexGenerator
 from backend.crawler.index_state import IndexState
 from backend.common.utils import get_merged_config, list_directories
+from backend.crawler import heading_detector
 
 # Setup logging for this module
 log_handle = logging.getLogger(__name__)
@@ -279,6 +280,24 @@ class SingleFileProcessor:
             )
 
             if ret:
+                # Heading detection is opt-in, via header_detection=surya, only.
+                # Tesseract's own output carries no heading signal at all by
+                # default -- is_heading is simply absent, so LineClassifier
+                # never sets IS_HEADING for these documents (see advanced.py).
+                # The LLM-OCR path classifies headings itself during
+                # extraction and is unaffected either way.
+                if self._scan_config.get("header_detection") == "surya":
+                    output_ocr_dir = f"{self._output_ocr_base_dir}/{os.path.splitext(relative_pdf_path)[0]}"
+                    try:
+                        heading_detector.classify_document_via_surya(
+                            output_ocr_dir, self._file_path, pdf_processor, self._scan_config,
+                        )
+                    except Exception as heading_error:
+                        # Heading detection is an enrichment, not a requirement -- never
+                        # let it fail the OCR step that already succeeded.
+                        log_handle.error(
+                            f"Heading detection failed for {output_ocr_dir}: {heading_error}")
+
                 # Get current state to preserve parsed_bookmarks if it exists
                 current_state = self._index_state.get_state(document_id) or {}
 
@@ -388,6 +407,16 @@ class SingleFileProcessor:
 
         # Apply forward-fill logic to map all pages
         page_to_pravachan_data = self._apply_forward_fill(parsed_bookmarks, total_pages)
+
+        if self._scan_config.get("header_detection") == "surya":
+            # Surya already confirms is_heading geometrically (see
+            # heading_detector.classify_document_via_surya). header_regex/
+            # header_prefix were tuned for the density-heuristic path and can
+            # wrongly strip a line Surya has confirmed is a real heading, not
+            # running-header furniture (e.g. "<title> पर प्रवचन" matching a
+            # stop-word regex) -- see eval/api.py's /ocr/surya endpoint.
+            self._scan_config["header_regex"] = []
+            self._scan_config["header_prefix"] = []
 
         index_generator = self._get_index_generator()
         sub_sections = self._scan_config.get("sub_sections", [])

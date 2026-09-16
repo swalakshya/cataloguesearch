@@ -21,6 +21,7 @@ class State(Enum):
     STANDARD_PROSE = auto()
     VERSE_BLOCK = auto()
     QA_BLOCK = auto()
+    HEADING = auto()
 
 
 @dataclass
@@ -96,8 +97,14 @@ class LineClassifier:
         self.hard_end_regexes = hard_end_regexes if hard_end_regexes is not None else []
 
     def classify(self, text: str, x_start: int, x_end: int, page_num: int,
-                 line_num: int) -> Line:
-        """Assigns a set of tags to a line based on its properties."""
+                 line_num: int, is_heading: bool = False) -> Line:
+        """
+        Assigns a set of tags to a line based on its properties.
+
+        `is_heading` is a precomputed signal (density/height outlier vs. this
+        document's own body-text baseline — see heading_detector.py), not
+        derived here; this method only turns it into the IS_HEADING tag.
+        """
         tags = set()
         speaker = None
 
@@ -148,7 +155,7 @@ class LineClassifier:
                 speaker = prefix
                 break
 
-        if stripped_text.startswith(HEADING_MARKERS):
+        if stripped_text.startswith(HEADING_MARKERS) or is_heading:
             tags.add('IS_HEADING')
 
         if stripped_text.endswith(self.sentence_terminators):
@@ -220,17 +227,24 @@ class ParagraphGenerator:
             self.process_line(line)
 
     def flush(self):
+        # Same 1-line-verse guard as _handle_verse_block_state, for the case
+        # where the page/document ends while still inside VERSE_BLOCK.
+        if self.state == State.VERSE_BLOCK and len(self.current_paragraph_lines) < 2:
+            self.state = State.STANDARD_PROSE
         self._finalize_paragraph()
         return self.paragraphs
 
     def _handle_standard_prose_state(self, line: Line) -> bool:
-        # IS_HEADING should be its own standalone paragraph
+        # IS_HEADING should be its own standalone paragraph, tagged HEADING
+        # (not STANDARD_PROSE) so it's distinguishable downstream.
         if 'IS_HEADING' in line.tags:
             self._finalize_paragraph()
             self._reset_current_paragraph(line)
             self.current_paragraph_lines.append(line)
+            self.state = State.HEADING
             self._finalize_paragraph()
             self._reset_current_paragraph()
+            self.state = State.STANDARD_PROSE
             return False
 
         # IS_ABSOLUTE_TERMINATOR should end the current paragraph (be the last line)
@@ -286,6 +300,12 @@ class ParagraphGenerator:
             self.current_paragraph_lines.append(line)
             return False
         else:
+            # A verse needs at least 2 consecutive centered lines (a couplet/gatha
+            # is never one line). A lone centered line is far more likely to be a
+            # heading or a decorative element, so demote it to ordinary prose
+            # instead of finalizing a 1-line "verse".
+            if len(self.current_paragraph_lines) < 2:
+                self.state = State.STANDARD_PROSE
             self._finalize_paragraph()
             self._reset_current_paragraph(line)
             self.state = State.STANDARD_PROSE
@@ -462,7 +482,8 @@ class AdvancedParagraphGenerator(BaseParagraphGenerator):
                     x_start=line_data.get("x_start", 0),
                     x_end=line_data.get("x_end", 0),
                     page_num=page_num,
-                    line_num=line_data.get("line_num", 0)
+                    line_num=line_data.get("line_num", 0),
+                    is_heading=line_data.get("is_heading", False)
                 )
 
                 generator.process_line(classified_line)
@@ -564,8 +585,11 @@ class AdvancedParagraphGenerator(BaseParagraphGenerator):
             buffer_page_spans = []
 
         for page_num, text, para_type in typed_paragraphs:
-            # VERSE_BLOCK: flush buffer, emit immediately
-            if para_type == State.VERSE_BLOCK:
+            # VERSE_BLOCK and HEADING: flush buffer, emit immediately, never
+            # merged with neighbors -- including two adjacent headings, which
+            # are two separate headings, not one run-on paragraph (unlike
+            # STANDARD_PROSE, same-type runs here are not "continued text").
+            if para_type in (State.VERSE_BLOCK, State.HEADING):
                 _flush()
                 result.append(ParaInfo(
                     page_num=page_num,

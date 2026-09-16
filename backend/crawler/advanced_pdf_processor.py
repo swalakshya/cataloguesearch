@@ -153,7 +153,12 @@ class AdvancedPDFProcessor(PDFProcessor):
                 text = ' '.join(line_df['text'].astype(str))
                 x_start = line_df['left'].min()
                 x_end = (line_df['left'] + line_df['width']).max()
-                lines_on_page.append({'text': text, 'x_start': x_start, 'x_end': x_end})
+                y_start = line_df['top'].min()
+                y_end = (line_df['top'] + line_df['height']).max()
+                lines_on_page.append({
+                    'text': text, 'x_start': x_start, 'x_end': x_end,
+                    'y_start': int(y_start), 'height': int(y_end - y_start),
+                })
 
             if not lines_on_page:
                 page_data = {
@@ -203,7 +208,9 @@ class AdvancedPDFProcessor(PDFProcessor):
                         "line_num": idx,
                         "text": line['text'],
                         "x_start": int(line['x_start']),
-                        "x_end": int(line['x_end'])
+                        "x_end": int(line['x_end']),
+                        "y_start": line['y_start'],
+                        "height": line['height'],
                     }
                     for idx, line in enumerate(lines_on_page)
                 ]

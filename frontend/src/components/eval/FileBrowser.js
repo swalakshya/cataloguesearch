@@ -1,7 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Spinner } from '../SharedComponents';
 
-const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectoryHandles, currentTab, startPath }) => {
+const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
+
+// Debounce delay for the search box -- long enough to not fire a search (or
+// walk the local tree) on every keystroke, short enough to still feel live.
+const SEARCH_DEBOUNCE_MS = 250;
+
+const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectoryHandles, currentTab, startPath, fsMode }) => {
     const [currentPath, setCurrentPath] = useState('');
     const [directories, setDirectories] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -10,6 +16,19 @@ const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectory
     const [basePdfHandle, setBasePdfHandle] = useState(null);
     const currentTabRef = useRef(currentTab);
     useEffect(() => { currentTabRef.current = currentTab; }, [currentTab]);
+
+    // --- Search ---
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState([]);
+    const [isSearching, setIsSearching] = useState(false);
+    const [searchError, setSearchError] = useState(null);
+    // Local mode has no backend to ask, so the first search walks the whole
+    // local tree once and caches every matching-type file here (path+handle);
+    // every later keystroke just re-filters this in memory instead of
+    // re-walking. Keyed by the extension being searched for (".pdf"/".md")
+    // since different tabs search for different file types, and reset
+    // whenever basePdfHandle itself changes (a new local folder was picked).
+    const localFileIndexRef = useRef({ handle: null, ext: null, files: null });
 
     // loadDirectory/navigateToPath/initializeBasePdfFolder only close over refs
     // and setState functions (both stable across renders) -- wrapping them in
@@ -96,6 +115,88 @@ const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectory
         }
     }, [loadDirectory]);
 
+    // Like navigateToPath, but just resolves the handle -- no loadDirectory
+    // side effect. Used to turn a search result's path back into a real
+    // handle (server mode only; local mode already has one from the walk).
+    const resolveDirectoryHandle = useCallback(async (baseHandle, targetPath) => {
+        let dirHandle = baseHandle;
+        const pathParts = (targetPath || '').split('/').filter(p => p);
+        for (const part of pathParts) {
+            dirHandle = await dirHandle.getDirectoryHandle(part);
+        }
+        return dirHandle;
+    }, []);
+
+    // Recursively collects every file of the given extension under dirHandle,
+    // for local mode's search index (see localFileIndexRef above).
+    const collectAllFiles = useCallback(async (dirHandle, pathPrefix, ext, out) => {
+        for await (const [name, handle] of dirHandle.entries()) {
+            if (name.startsWith('.')) continue;
+            const childPath = pathPrefix ? `${pathPrefix}/${name}` : name;
+            if (handle.kind === 'directory') {
+                await collectAllFiles(handle, childPath, ext, out);
+            } else if (handle.kind === 'file' && name.toLowerCase().endsWith(ext)) {
+                out.push({ name, path: childPath, handle });
+            }
+        }
+    }, []);
+
+    const searchFileExt = currentTabRef.current === 'scripture-eval' ? '.md' : '.pdf';
+
+    // Debounced search: local mode walks+caches the whole tree once then
+    // re-filters in memory; server mode asks the backend fresh each time
+    // (cheap -- see eval/api.py's /fs/search, a single os.walk over ~200 dirs).
+    useEffect(() => {
+        if (!basePdfHandle) return;
+        const query = searchQuery.trim();
+        if (!query) {
+            setSearchResults([]);
+            setSearchError(null);
+            return;
+        }
+
+        let cancelled = false;
+        const ext = searchFileExt;
+        const timer = setTimeout(async () => {
+            setIsSearching(true);
+            setSearchError(null);
+            try {
+                if (fsMode === 'server') {
+                    const qs = new URLSearchParams({ root: 'pdf', q: query, ext });
+                    const res = await fetch(`${API_BASE_URL}/eval/fs/search?${qs.toString()}`);
+                    if (!res.ok) throw new Error(`Search failed (HTTP ${res.status})`);
+                    const data = await res.json();
+                    if (!cancelled) setSearchResults(data.entries || []);
+                } else {
+                    const cache = localFileIndexRef.current;
+                    if (cache.handle !== basePdfHandle || cache.ext !== ext) {
+                        const files = [];
+                        await collectAllFiles(basePdfHandle, '', ext, files);
+                        localFileIndexRef.current = { handle: basePdfHandle, ext, files };
+                    }
+                    const lowerQuery = query.toLowerCase();
+                    const matches = localFileIndexRef.current.files
+                        .filter(f => f.path.toLowerCase().includes(lowerQuery))
+                        .slice(0, 200);
+                    if (!cancelled) setSearchResults(matches);
+                }
+            } catch (err) {
+                console.error('Search failed:', err);
+                if (!cancelled) {
+                    setSearchError(`Search failed: ${err.message}`);
+                    setSearchResults([]);
+                }
+            } finally {
+                if (!cancelled) setIsSearching(false);
+            }
+        }, SEARCH_DEBOUNCE_MS);
+
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [searchQuery, basePdfHandle, fsMode, searchFileExt, collectAllFiles]);
+
     const initializeBasePdfFolder = useCallback(async () => {
         // Don't automatically open the directory picker
         // Instead, show the file browser interface with instructions
@@ -103,6 +204,16 @@ const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectory
         setPathHistory(['']);
         setIsLoading(false);
     }, []);
+
+    // Reset the search box every time the modal opens, so a leftover query
+    // from the last time it was used doesn't hide the normal folder view.
+    useEffect(() => {
+        if (isOpen) {
+            setSearchQuery('');
+            setSearchResults([]);
+            setSearchError(null);
+        }
+    }, [isOpen]);
 
     useEffect(() => {
         if (isOpen && basePaths) {
@@ -198,6 +309,31 @@ const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectory
                 });
                 onClose();
             }
+        }
+    };
+
+    // A search result only carries {name, path} (plus, in local mode, the
+    // handle already obtained while walking the tree). Server-mode results
+    // have no handle yet -- resolve one from the path first, then hand off
+    // to the exact same handleSelectFile used by normal folder browsing.
+    const handleSearchResultClick = async (result) => {
+        try {
+            let handle = result.handle;
+            if (!handle) {
+                const lastSlash = result.path.lastIndexOf('/');
+                const dirPath = lastSlash === -1 ? '' : result.path.slice(0, lastSlash);
+                const dirHandle = await resolveDirectoryHandle(basePdfHandle, dirPath);
+                handle = await dirHandle.getFileHandle(result.name);
+            }
+            handleSelectFile({
+                name: result.name,
+                path: result.path,
+                handle,
+                fileType: searchFileExt === '.md' ? 'markdown' : 'pdf',
+            });
+        } catch (err) {
+            console.error('Error selecting search result:', err);
+            setSearchError(`Could not open ${result.name}: ${err.message}`);
         }
     };
 
@@ -312,8 +448,38 @@ const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectory
                     </button>
                 </div>
 
-                {/* Breadcrumbs - only show when base folder is selected */}
+                {/* Search box - only show when base folder is selected */}
                 {basePdfHandle && (
+                    <div className="px-4 py-2 border-b border-slate-200" style={{ backgroundColor: 'var(--bg-surface)' }}>
+                        <div className="relative">
+                            <svg className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
+                            </svg>
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder={`Search by name or folder (e.g. author, book title)...`}
+                                className="w-full pl-9 pr-8 py-1.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                autoFocus
+                            />
+                            {searchQuery && (
+                                <button
+                                    onClick={() => setSearchQuery('')}
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                    title="Clear search"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Breadcrumbs - only show when base folder is selected and not searching */}
+                {basePdfHandle && !searchQuery.trim() && (
                     <div className="px-4 py-2 border-b border-slate-200" style={{ backgroundColor: 'var(--bg-surface)' }}>
                         <div className="flex items-center space-x-1 text-sm">
                             {getBreadcrumbs().map((crumb, index) => (
@@ -339,8 +505,8 @@ const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectory
                     </div>
                 )}
 
-                {/* Navigation Controls - only show when base folder is selected */}
-                {basePdfHandle && (
+                {/* Navigation Controls - only show when base folder is selected and not searching */}
+                {basePdfHandle && !searchQuery.trim() && (
                     <div className="px-4 py-2 border-b border-slate-200" style={{ backgroundColor: 'var(--bg-surface)' }}>
                         <div className="flex items-center justify-between">
                             <button
@@ -410,6 +576,43 @@ const FileBrowser = ({ isOpen, onClose, onFolderSelect, basePaths, baseDirectory
                                 Select Base PDF Folder
                             </button>
                         </div>
+                    ) : searchQuery.trim() ? (
+                        // Search Results
+                        isSearching ? (
+                            <div className="flex items-center justify-center py-8">
+                                <Spinner />
+                                <span className="ml-2 text-slate-600">Searching...</span>
+                            </div>
+                        ) : searchError ? (
+                            <div className="text-center py-8 text-red-600">{searchError}</div>
+                        ) : searchResults.length === 0 ? (
+                            <div className="text-center py-8 text-slate-500">
+                                <p>No {searchFileExt === '.md' ? 'markdown' : 'PDF'} files match "{searchQuery.trim()}"</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {searchResults.map((result) => (
+                                    <div
+                                        key={result.path}
+                                        className="flex items-center p-3 border border-slate-200 rounded-lg hover:bg-neutral-100 hover:border-slate-300 cursor-pointer transition-colors bg-orange-50 border-orange-200 hover:bg-orange-100"
+                                        onClick={() => handleSearchResultClick(result)}
+                                    >
+                                        <svg className="w-5 h-5 text-red-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                        </svg>
+                                        <div className="min-w-0">
+                                            <div className="text-slate-800 font-medium truncate">{result.name}</div>
+                                            <div className="text-xs text-slate-500 truncate">{result.path}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                                {searchResults.length === 200 && (
+                                    <p className="text-xs text-slate-400 text-center pt-1">
+                                        Showing first 200 matches -- refine your search for more specific results.
+                                    </p>
+                                )}
+                            </div>
+                        )
                     ) : isLoading ? (
                         <div className="flex items-center justify-center py-8">
                             <Spinner />

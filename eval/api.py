@@ -38,6 +38,7 @@ from backend.crawler.llm_pdf_processor import BLOCK_TYPES
 from eval.multi_llm import extract_indic_text_any, ALLOWED_MODELS as LLM_ALLOWED_MODELS
 from backend.crawler.paragraph_generator.advanced import AdvancedParagraphGenerator, LineClassifier
 from backend.crawler.paragraph_generator.language_meta import get_language_meta
+from backend.crawler import heading_detector
 from .ocr import get_ocr_service
 
 log_handle = logging.getLogger(__name__)
@@ -254,6 +255,38 @@ async def read_fs_file(path: str, root: str = "pdf"):
     return FileResponse(target, media_type=media_type, filename=os.path.basename(target))
 
 
+@router.get("/fs/search")
+async def search_fs_files(q: str, root: str = "pdf", ext: str = ".pdf"):
+    """
+    Recursively searches under the named root for files of type `ext` whose
+    relative PATH (not just filename) contains `q`, case-insensitively.
+
+    Matching on the full path -- not just the filename -- matters here: PDFs
+    in this tree are named short cryptic codes (e.g. "DLP.pdf"), while the
+    human-readable title lives in the folder name ("Das Lakshan Parv/"). Backs
+    the Eval UI's file-browser search box in server mode (see FileBrowser.js).
+    """
+    config = Config("configs/config.yaml")
+    target = _resolve_within_root(config, root, "")
+    q_lower = q.strip().lower()
+    ext_lower = ext.lower()
+    if not q_lower:
+        return {"entries": []}
+
+    results = []
+    for dirpath, dirnames, filenames in os.walk(target):
+        dirnames[:] = [d for d in dirnames if not d.startswith('.')]
+        for fname in filenames:
+            if fname.startswith('.') or not fname.lower().endswith(ext_lower):
+                continue
+            rel_path = os.path.relpath(os.path.join(dirpath, fname), target).replace(os.sep, '/')
+            if q_lower in rel_path.lower():
+                results.append({"path": rel_path, "name": fname})
+
+    results.sort(key=lambda e: e["path"])
+    return {"entries": results[:200]}
+
+
 @router.put("/fs/write")
 async def write_fs_file(path: str, root: str, request: Request):
     """
@@ -289,6 +322,8 @@ async def get_file_scan_config(relative_path: str):
         config = Config("configs/config.yaml")
         base_pdf_folder = config.BASE_PDF_PATH
         file_path = os.path.join(base_pdf_folder, relative_path)
+        if not file_path.endswith(".pdf"):
+            file_path = f"{file_path}.pdf"
 
         # Validate file exists
         if not os.path.exists(file_path):
@@ -536,6 +571,11 @@ async def process_ocr(
         )
         page_data = json.loads(json_strings[0])
 
+        # No heading detection here -- plain Tesseract carries no heading
+        # signal at all (is_heading stays absent/False for every line) unless
+        # header_detection=surya is explicitly set, in which case
+        # /eval/ocr/surya is the endpoint to use instead.
+
         # --- Paragraph generation via AdvancedParagraphGenerator ---
         lang_code = "gu" if language.lower() in ("guj", "gu") else "hi"
         para_gen = AdvancedParagraphGenerator(config, get_language_meta(lang_code, scan_config))
@@ -565,6 +605,153 @@ async def process_ocr(
         raise HTTPException(status_code=500, detail=f"OCR processing failed: {str(e)}")
     finally:
         # Clean up temporary files
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except Exception as cleanup_error:
+                log_handle.warning(f"Failed to cleanup temporary file: {cleanup_error}")
+
+@router.post("/ocr/surya", response_model=OCRResponse)
+async def process_ocr_surya(
+    image: UploadFile = File(None, description="Image file to process (not needed if relative_path and page_number are provided)"),
+    language: str = Form("hin", description="Language code for OCR (hin, guj)"),
+    crop_top: float = Form(0, description="Percentage to crop from top (0-50)"),
+    crop_bottom: float = Form(0, description="Percentage to crop from bottom (0-50)"),
+    crop_left: float = Form(0, description="Percentage to crop from left (0-50)"),
+    crop_right: float = Form(0, description="Percentage to crop from right (0-50)"),
+    relative_path: Optional[str] = Form(None, description="Relative path to PDF file from base folder"),
+    page_number: Optional[int] = Form(None, description="Page number to extract from PDF (1-indexed, requires relative_path)"),
+):
+    """
+    Same as /ocr (Tesseract for text extraction), but is_heading comes from
+    Surya's layout model instead of the density/height outlier heuristic --
+    see heading_detector.classify_via_surya_layout. Tesseract and Surya are
+    both run against the exact same rendered image so their coordinate
+    spaces match (see that function's docstring for why this matters).
+
+    Slower than /ocr (a few seconds per page once the layout model is warm,
+    longer on the very first call) -- this is an evaluation endpoint, not
+    meant for high-throughput use.
+    """
+    if not image and not (relative_path and page_number):
+        raise HTTPException(status_code=400, detail="Either provide 'image' file OR both 'relative_path' and 'page_number'")
+    if image and (relative_path and page_number):
+        raise HTTPException(status_code=400, detail="Provide either 'image' file OR 'relative_path'+'page_number', not both")
+    if not (0 <= crop_top <= 50 and 0 <= crop_bottom <= 50 and 0 <= crop_left <= 50 and 0 <= crop_right <= 50):
+        raise HTTPException(status_code=400, detail="Crop percentages must be between 0 and 50")
+
+    scan_config = {}
+    if relative_path:
+        try:
+            config = Config("configs/config.yaml")
+            base_pdf_folder = config.BASE_PDF_PATH
+            file_path = os.path.join(base_pdf_folder, relative_path)
+            if not file_path.endswith(".pdf"):
+                file_path = f"{file_path}.pdf"
+            if os.path.exists(file_path):
+                scan_config = get_scan_config(file_path, base_pdf_folder)
+        except Exception as e:
+            log_handle.warning(f"Failed to load scan_config for {relative_path}: {e}")
+
+    if crop_top > 0 or crop_bottom > 0 or crop_left > 0 or crop_right > 0:
+        scan_config.setdefault("crop", {})
+        scan_config["crop"].update({"top": crop_top, "bottom": crop_bottom, "left": crop_left, "right": crop_right})
+
+    config = Config("configs/config.yaml")
+    pdf_processor = AdvancedPDFProcessor(config)
+
+    temp_path = None
+    pil_image = None
+    page_num = 1
+    try:
+        if relative_path and page_number:
+            base_pdf_folder = config.BASE_PDF_PATH
+            pdf_file_path = os.path.join(base_pdf_folder, relative_path)
+            if not pdf_file_path.endswith(".pdf"):
+                pdf_file_path = f"{pdf_file_path}.pdf"
+            if not os.path.exists(pdf_file_path):
+                raise HTTPException(status_code=404, detail=f"PDF file not found: {relative_path}")
+            images, page_numbers = pdf_processor._get_image(pdf_file_path, [page_number], scan_config)
+            if not images:
+                raise HTTPException(status_code=400, detail=f"Failed to extract page {page_number} from PDF")
+            pil_image = images[0]
+            page_num = page_numbers[0]
+        else:
+            suffix = '.pdf' if image.content_type == 'application/pdf' else '.png'
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+                content = await image.read()
+                temp_file.write(content)
+                temp_path = temp_file.name
+            if image.content_type == 'application/pdf':
+                images, page_numbers = pdf_processor._get_image(temp_path, [1], scan_config)
+                if not images:
+                    raise HTTPException(status_code=400, detail="Failed to extract page from PDF")
+                pil_image = images[0]
+                page_num = page_numbers[0]
+            else:
+                pil_image = Image.open(temp_path)
+                if crop_top > 0 or crop_bottom > 0 or crop_left > 0 or crop_right > 0:
+                    width, height = pil_image.size
+                    pil_image = pil_image.crop((
+                        int(width * crop_left / 100), int(height * crop_top / 100),
+                        width - int(width * crop_right / 100), height - int(height * crop_bottom / 100),
+                    ))
+
+        # --- Tesseract, exactly as /ocr does ---
+        tesseract_lang = language.replace(' ', '+')
+        _, json_strings = AdvancedPDFProcessor._process_single_page(
+            (page_num, pil_image, tesseract_lang, 6)
+        )
+        page_data = json.loads(json_strings[0])
+
+        # --- Surya layout (detector 1) + rule-line framing (detector 2), on the
+        # SAME pil_image, combined by OR -- see classify_via_surya_and_rules.
+        layout_predictor = heading_detector._get_surya_layout_predictor()
+        layout_results = layout_predictor([pil_image])
+        layout_bboxes = [(b.label, tuple(b.bbox)) for b in layout_results[0].bboxes]
+        page_metadata = page_data.get("metadata", {})
+        heading_detector.classify_via_surya_and_rules(
+            page_data.get("lines", []), layout_bboxes, pil_image,
+            page_metadata.get("prose_left_margin", 0),
+            page_metadata.get("prose_right_margin", 0),
+        )
+
+        # --- Paragraph generation, exactly as /ocr does ---
+        # Surya + rule-line detection already identifies headings geometrically, so
+        # regex-based header stripping (header_regex/header_prefix) is disabled here:
+        # it was designed for the density/height-only pipeline and can otherwise
+        # silently discard a line that Surya has already confirmed is a real heading
+        # (e.g. "<title> पर प्रवचन" matching a stop-word regex meant for running headers).
+        lang_code = "gu" if language.lower() in ("guj", "gu") else "hi"
+        surya_scan_config = {k: v for k, v in scan_config.items() if k not in ("header_regex", "header_prefix")}
+        para_gen = AdvancedParagraphGenerator(config, get_language_meta(lang_code, surya_scan_config))
+        phase1 = para_gen._phase1_lines_to_typed_paragraphs([page_data], surya_scan_config)
+        typed_paragraphs = para_gen._phase2_combine_by_type(phase1)
+
+        api_paragraphs = [
+            Paragraph(text=text, boxes=[], paragraph_type=state.name)
+            for _, text, state in typed_paragraphs
+        ]
+        extracted_text = '\n\n----\n\n'.join(p.text for p in api_paragraphs)
+        log_handle.info(
+            f"Surya OCR processing completed: {len(api_paragraphs)} paragraphs, "
+            f"{len(layout_bboxes)} layout regions ({sum(1 for l,_ in layout_bboxes if l in heading_detector.SURYA_HEADER_LABELS)} header-like)")
+
+        return OCRResponse(
+            text=extracted_text,
+            boxes=[],
+            paragraphs=api_paragraphs,
+            language=language,
+            ocr_json=page_data,
+            scan_config=scan_config,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_handle.error(f"Surya OCR processing failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Surya OCR processing failed: {str(e)}")
+    finally:
         if temp_path and os.path.exists(temp_path):
             try:
                 os.unlink(temp_path)
