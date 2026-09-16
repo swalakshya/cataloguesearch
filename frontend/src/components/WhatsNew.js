@@ -33,6 +33,7 @@ const WhatsNew = () => {
                 "Books: Added seven more articles/books by Babu Jugal Kishore Jain 'Yugal' - Das Lakshan Parv, Veer Nirvanotsav, Kshama, Veer Shasan Jayanti, Veer Nirvan Parv, Shrut Panchmi and Swarnapuri par Swarna Purush ka Uday",
                 "Granths: Naychakko (Dravyanuyog) by Mailla Dhawal",
                 "Granths: Adhyatma Kamal Martand (Dravyanuyog) by Pandit Rajmal Pandey",
+                "Granths: Aptamimamsa (Dravyanuyog) by Acharya Samant Bhadra (Bhasha Vachanika: Pandit Jaychand Chhabbra)",
             ]
         },
         {

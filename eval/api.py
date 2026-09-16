@@ -151,6 +151,7 @@ class BookmarkExtractionResponse(BaseModel):
 class ScriptureLLMTextBlock(BaseModel):
     type: str
     text: str
+    original_text: Optional[str] = None
 
 class ScriptureLLMResponse(BaseModel):
     blocks: List[ScriptureLLMTextBlock]
@@ -1207,7 +1208,11 @@ async def proxy_file(url: str):
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "GET",
                 "Access-Control-Allow-Headers": "*",
-                "Cache-Control": "no-store",
+                # Repeat loads of the same URL (eval PDF Parser's "load" button)
+                # are then served from the browser's own disk cache instead of
+                # re-fetching from the backend/origin. 10 days is a ceiling, not
+                # a guarantee -- browsers may evict earlier under disk pressure.
+                "Cache-Control": "public, max-age=864000",
             }
         )
 
@@ -1341,6 +1346,9 @@ async def process_scripture_llm(
     relative_path: Optional[str] = Form(None, description="Relative path to PDF file from BASE_PDF_PATH"),
     page_number: int = Form(1, description="Page number to extract from PDF (1-indexed)"),
     language: str = Form("hin", description="Language code (hin, guj, eng)"),
+    dhundhari: bool = Form(False, description="Treat this page as containing archaic Dhundhari "
+                                               "commentary — Gemini returns modern Hindi as 'text' "
+                                               "and the archaic original as 'original_text'"),
     model_name: str = Form("gemini-2.5-flash", description="Gemini model to use"),
     crop_top: float = Form(0, description="Percentage to crop from top (0-50)"),
     crop_bottom: float = Form(0, description="Percentage to crop from bottom (0-50)"),
@@ -1433,9 +1441,15 @@ async def process_scripture_llm(
         buffer.seek(0)
         preview_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
 
-        # Call LLM extractor
-        log_handle.info(f"Calling LLM extractor: model={model_name}, language={language}")
-        blocks = extract_indic_text_any(pil_image, model_name)
+        # Call LLM extractor. `dhundhari` is independent of `language` (which only
+        # picks the hin/guj scan_config folder above) — it selects the prompt variant
+        # that also asks Gemini to translate Dhundhari blocks to modern Hindi.
+        extraction_language = "dhundhari" if dhundhari else "hi"
+        log_handle.info(
+            f"Calling LLM extractor: model={model_name}, language={language}, "
+            f"extraction_language={extraction_language}"
+        )
+        blocks = extract_indic_text_any(pil_image, model_name, extraction_language)
 
         return ScriptureLLMResponse(
             blocks=[ScriptureLLMTextBlock(**b) for b in blocks],

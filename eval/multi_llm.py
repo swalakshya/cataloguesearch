@@ -9,7 +9,7 @@ import json
 import logging
 import os
 
-from backend.crawler.llm_pdf_processor import PROMPT, extract_indic_text
+from backend.crawler.llm_pdf_processor import select_prompt, extract_indic_text
 
 log_handle = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ def _parse_json_response(raw: str) -> list:
     return json.loads(raw.strip())
 
 
-def _extract_claude(image, model_name: str) -> list:
+def _extract_claude(image, model_name: str, language: str = "hi") -> list:
     import anthropic
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
@@ -70,14 +70,14 @@ def _extract_claude(image, model_name: str) -> list:
                         "data": image_data,
                     },
                 },
-                {"type": "text", "text": PROMPT},
+                {"type": "text", "text": select_prompt(language)},
             ],
         }],
     )
     return _parse_json_response(response.content[0].text)
 
 
-def _extract_openai(image, model_name: str) -> list:
+def _extract_openai(image, model_name: str, language: str = "hi") -> list:
     from openai import OpenAI
     api_key = os.environ.get("OPENAI_API_KEY", "")
     if not api_key:
@@ -95,7 +95,7 @@ def _extract_openai(image, model_name: str) -> list:
                     "type": "image_url",
                     "image_url": {"url": f"data:image/png;base64,{image_data}"},
                 },
-                {"type": "text", "text": PROMPT},
+                {"type": "text", "text": select_prompt(language)},
             ],
         }],
         response_format={"type": "json_object"},
@@ -112,17 +112,18 @@ def _extract_openai(image, model_name: str) -> list:
     return []
 
 
-def extract_indic_text_any(image, model_name: str) -> list:
+def extract_indic_text_any(image, model_name: str, language: str = "hi") -> list:
     """
     Unified dispatcher — routes to the right provider based on model name prefix.
-    Returns list of {"type": ..., "text": ...} dicts.
+    Returns list of {"type": ..., "text": ...} dicts (plus "original_text" for
+    Dhundhari-register hindi_text/hindi_verse blocks when language="dhundhari").
     """
     if model_name.startswith(_CLAUDE_PREFIX):
-        log_handle.info(f"Using Claude extractor: {model_name}")
-        return _extract_claude(image, model_name)
+        log_handle.info(f"Using Claude extractor: {model_name}, language={language}")
+        return _extract_claude(image, model_name, language)
     elif model_name.startswith(_OPENAI_PREFIX):
-        log_handle.info(f"Using OpenAI extractor: {model_name}")
-        return _extract_openai(image, model_name)
+        log_handle.info(f"Using OpenAI extractor: {model_name}, language={language}")
+        return _extract_openai(image, model_name, language)
     else:
-        log_handle.info(f"Using Gemini extractor: {model_name}")
-        return extract_indic_text(image, model_name=model_name)
+        log_handle.info(f"Using Gemini extractor: {model_name}, language={language}")
+        return extract_indic_text(image, model_name=model_name, language=language)

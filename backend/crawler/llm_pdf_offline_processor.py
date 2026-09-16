@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from google import genai
 from google.genai import types
 
-from backend.crawler.llm_pdf_processor import LLMPDFProcessor, PROMPT
+from backend.crawler.llm_pdf_processor import LLMPDFProcessor, select_prompt
 
 log_handle = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ def _page_num_from_key(key: str) -> int | None:
         return None
 
 
-def _image_to_request(image) -> dict:
+def _image_to_request(image, language: str = "hi") -> dict:
     buf = io.BytesIO()
     image.save(buf, format="JPEG")
     data = base64.b64encode(buf.getvalue()).decode("ascii")
@@ -58,7 +58,7 @@ def _image_to_request(image) -> dict:
         "contents": [{
             "role": "user",
             "parts": [
-                {"text": PROMPT},
+                {"text": select_prompt(language)},
                 {"inline_data": {"mime_type": "image/jpeg", "data": data}},
             ],
         }],
@@ -125,13 +125,14 @@ class LLMPDFOfflineProcessor(LLMPDFProcessor):
             return True
 
         llm_model = scan_config.get("llm_model", self._llm_model)
+        language = scan_config.get("language", "hi")
         images, page_numbers = self._get_image(pdf_file, missing_pages, scan_config)
         if not images:
             log_handle.warning(f"No pages could be rendered for {pdf_file}; nothing to submit.")
             return False
 
         client = _get_gemini_client()
-        job_name = self._create_batch_job(client, llm_model, page_numbers, images, document_id)
+        job_name = self._create_batch_job(client, llm_model, page_numbers, images, document_id, language)
 
         self._index_state.set_batch_job(
             document_id,
@@ -147,9 +148,9 @@ class LLMPDFOfflineProcessor(LLMPDFProcessor):
         )
         return False
 
-    def _create_batch_job(self, client, model, page_numbers, images, document_id) -> str:
+    def _create_batch_job(self, client, model, page_numbers, images, document_id, language: str = "hi") -> str:
         lines = [
-            json.dumps({"key": _page_key(p), "request": _image_to_request(img)}, ensure_ascii=False)
+            json.dumps({"key": _page_key(p), "request": _image_to_request(img, language)}, ensure_ascii=False)
             for p, img in zip(page_numbers, images)
         ]
         jsonl_content = "\n".join(lines)
@@ -298,10 +299,11 @@ class LLMPDFOfflineProcessor(LLMPDFProcessor):
         if not self._fallback_model:
             return failed_pages
 
+        language = scan_config.get("language", "hi")
         images, page_numbers = self._get_image(pdf_file, failed_pages, scan_config)
         still_failed = []
         for page_num, image in zip(page_numbers, images):
-            blocks = self._try_single_model(image, self._fallback_model)
+            blocks = self._try_single_model(image, self._fallback_model, language=language)
             if blocks is None:
                 still_failed.append(page_num)
             else:

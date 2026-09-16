@@ -33,7 +33,7 @@ def _get_gemini_client():
     return _thread_local.client
 
 
-def extract_indic_text(image, model_name: str = "gemini-2.5-flash") -> list:
+def extract_indic_text(image, model_name: str = "gemini-2.5-flash", language: str = "hi") -> list:
     """
     Extract and categorise text blocks from a Jain scripture image using Gemini.
 
@@ -43,11 +43,14 @@ def extract_indic_text(image, model_name: str = "gemini-2.5-flash") -> list:
     Args:
         image: PIL.Image object of the page
         model_name: Gemini model to use
+        language: scan_config-style language hint ("hi", "gu", "dhundhari", ...);
+                   selects which prompt is sent, see select_prompt()
 
     Returns:
-        List of dicts with "type" and "text" keys
+        List of dicts with "type" and "text" keys (plus "original_text" for
+        Dhundhari-register hindi_text/hindi_verse blocks when language="dhundhari")
     """
-    _, blocks = LLMPDFProcessor._process_single_page_llm(0, image, model_name)
+    _, blocks = LLMPDFProcessor._process_single_page_llm(0, image, model_name, language=language)
     return blocks
 
 # Canonical list of all block types produced by LLMPDFProcessor.
@@ -91,6 +94,71 @@ Output a JSON array of objects, each with "type" and "text" keys. Example:
 
 Preserve the order in which the text appears on the page. Output ONLY the JSON array.
 """
+
+# Dhundhari mode — used only when scan_config.json's "language" is "dhundhari".
+# Older commentaries in this collection mix an archaic Rajasthani/Marwari-inflected
+# register of Hindi ("Dhundhari") with plain modern Hindi (e.g. the Prastavana is
+# often plain Hindi even in an otherwise-Dhundhari book) and Sanskrit/Prakrit verses.
+#
+# Deliberately reuses BLOCK_TYPES/PROMPT's exact "type" enum — a Dhundhari block is
+# still tagged "hindi_text"/"hindi_verse", with the natural modern-Hindi rendering
+# in "text" (as always) and the archaic original in an extra "original_text" field.
+# That keeps every downstream consumer (paragraph/verse generators, indexing) able
+# to treat this book exactly like any other Hindi book with zero code changes —
+# "original_text" is just an inert extra key nothing else reads.
+PROMPT_DHUNDHARI = f"""
+The attached image is from a Jain Scripture. It has different types of text:
+
+- Sanskrit text (often separated by lines or in blocks)
+- Prakrit Verses
+- Sanskrit Verses
+- Hindi Verses
+- Hindi text (which may contain sanskrit or prakrit words in brackets)
+- Footnotes (usually at the bottom with smaller text or marked with small numbers)
+- Chapter headings (will be in bigger font)
+
+Some of the Hindi text/verses in this book are written in an archaic
+Rajasthani/Marwari-inflected register called Dhundhari, e.g. "kahiye", "bahuri",
+"jātaiṁ", "kāhūkai", "tinahīkūṃ", "yākai" where modern Hindi would use "kehte
+hain", "phir", "jisase", "kisi", "unako", "usaka". This book mixes such Dhundhari
+commentary with plain modern Hindi — for example, the Prastavana/introduction is
+often plain Hindi even when the rest of the book is Dhundhari — so judge each
+block on its own merits; do not assume a block is Dhundhari just because other
+blocks on the page or other pages of the book are.
+
+Your job is to parse the image and categorise each block of text into one of the
+categories below. For a block written in the Dhundhari register, still tag it
+"hindi_text" or "hindi_verse" as appropriate, but put a natural, modern Hindi
+rendering of it in "text" and the original archaic Dhundhari wording verbatim in
+an additional "original_text" field. For a block already in plain modern Hindi
+(or any other category), do not add "original_text".
+
+Valid values for "type":
+{_BLOCK_TYPES_BULLET_LIST}
+
+Output a JSON array of objects, each with "type" and "text" keys, plus an
+"original_text" key only for Dhundhari-register "hindi_text"/"hindi_verse"
+blocks. Example:
+[
+  {{"type": "chapter_heading", "text": "अध्याय १"}},
+  {{"type": "sanskrit_verse", "text": "ॐ नमो भगवते..."}},
+  {{"type": "hindi_text", "text": "यहाँ कोई कहता है...", "original_text": "इहां कोई कहिये..."}},
+  {{"type": "hindi_text", "text": "प्रस्तावना में यह स्पष्ट है कि..."}},
+  {{"type": "footnote", "text": "१. यह पाठान्तर है"}}
+]
+
+Preserve the order in which the text appears on the page. Output ONLY the JSON array.
+"""
+
+_PROMPTS_BY_LANGUAGE = {
+    "dhundhari": PROMPT_DHUNDHARI,
+}
+
+
+def select_prompt(language: str | None) -> str:
+    """Picks the extraction prompt for a scan_config-style language value."""
+    return _PROMPTS_BY_LANGUAGE.get((language or "").lower(), PROMPT)
+
 
 # Retry settings for Gemini API rate limiting
 _MAX_RETRIES = 5
@@ -147,11 +215,12 @@ class LLMPDFProcessor(PDFProcessor):
         # Get model/worker overrides from scan_config
         llm_model = scan_config.get("llm_model", self._llm_model)
         llm_workers = scan_config.get("llm_workers", self._llm_workers)
+        language = scan_config.get("language", "hi")
 
         images, page_numbers = self._get_image(pdf_file, missing_pages, scan_config)
 
         _, failed_pages = self._generate_paragraphs_llm(
-            images, page_numbers, llm_model, llm_workers, output_ocr_dir
+            images, page_numbers, llm_model, llm_workers, output_ocr_dir, language
         )
 
         if failed_pages:
@@ -171,6 +240,7 @@ class LLMPDFProcessor(PDFProcessor):
             llm_model: str,
             llm_workers: int,
             output_ocr_dir: str,
+            language: str = "hi",
     ) -> tuple[list, list]:
         """
         Runs LLM extraction concurrently using ThreadPoolExecutor.
@@ -182,12 +252,14 @@ class LLMPDFProcessor(PDFProcessor):
 
         log_handle.info(
             f"Starting LLM extraction: {len(tasks)} pages, "
-            f"model={llm_model}, workers={llm_workers}"
+            f"model={llm_model}, workers={llm_workers}, language={language}"
         )
 
         with ThreadPoolExecutor(max_workers=llm_workers) as executor:
             future_to_page = {
-                executor.submit(self._process_single_page_llm, page_num, image, llm_model, self._fallback_model): page_num
+                executor.submit(
+                    self._process_single_page_llm, page_num, image, llm_model, self._fallback_model, language
+                ): page_num
                 for page_num, image in tasks
             }
 
@@ -214,7 +286,7 @@ class LLMPDFProcessor(PDFProcessor):
         return results, failed_pages
 
     @staticmethod
-    def _try_single_model(image, model_name: str, num_tries: int = _MAX_RETRIES) -> list | None:
+    def _try_single_model(image, model_name: str, num_tries: int = _MAX_RETRIES, language: str = "hi") -> list | None:
         """
         Attempts to extract text blocks from a page image using a single model.
         Retries with exponential backoff up to num_tries times.
@@ -224,12 +296,13 @@ class LLMPDFProcessor(PDFProcessor):
             None on total failure.
         """
         backoff = _INITIAL_BACKOFF
+        prompt = select_prompt(language)
 
         for attempt in range(num_tries):
             try:
                 response = _get_gemini_client().models.generate_content(
                     model=model_name,
-                    contents=[PROMPT, image],
+                    contents=[prompt, image],
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json"
                     )
@@ -260,13 +333,13 @@ class LLMPDFProcessor(PDFProcessor):
 
     @staticmethod
     def _process_single_page_llm(
-            page_num: int, image, llm_model: str, fallback_model: str = None
+            page_num: int, image, llm_model: str, fallback_model: str = None, language: str = "hi"
     ) -> tuple[int, list]:
         """
         Calls Gemini to extract and categorise text from a single page image.
         Falls back to fallback_model if the primary model fails entirely.
         """
-        blocks = LLMPDFProcessor._try_single_model(image, llm_model)
+        blocks = LLMPDFProcessor._try_single_model(image, llm_model, language=language)
         if blocks is not None:
             log_handle.info(f"Page {page_num}: extracted {len(blocks)} blocks via {llm_model}")
             return page_num, blocks
@@ -275,7 +348,7 @@ class LLMPDFProcessor(PDFProcessor):
             log_handle.warning(
                 f"Page {page_num}: primary model {llm_model} failed, switching to {fallback_model}"
             )
-            blocks = LLMPDFProcessor._try_single_model(image, fallback_model)
+            blocks = LLMPDFProcessor._try_single_model(image, fallback_model, language=language)
             if blocks is not None:
                 log_handle.info(f"Page {page_num}: extracted {len(blocks)} blocks via {fallback_model}")
                 return page_num, blocks

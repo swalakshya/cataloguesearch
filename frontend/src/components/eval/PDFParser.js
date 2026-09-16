@@ -3,6 +3,7 @@ import { Spinner } from '../SharedComponents';
 import ShowBookmarksButton from '../ShowBookmarksButton';
 import BookmarksModal from '../BookmarksModal';
 import ParseBookmarksControl from '../ParseBookmarksControl';
+import { Modal } from '../ui';
 import FileOrUrlInput from './FileOrUrlInput';
 import LineAnnotator from './LineAnnotator';
 import usePDFViewer from '../../hooks/usePDFViewer';
@@ -52,6 +53,8 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
     const [results, setResults] = useState(null);
     const [error, setError] = useState(null);
     const [showBookmarkModal, setShowBookmarkModal] = useState(false);
+    // Dhundhari block clicked in the LLM results list, for the compare modal below.
+    const [compareBlock, setCompareBlock] = useState(null);
     const [activeResultTab, setActiveResultTab] = useState('preview');
     const [jumpPageNumber, setJumpPageNumber] = useState('');
 
@@ -63,6 +66,11 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
 
     // LLM-specific
     const [modelName, setModelName] = useState('gemini-2.5-flash');
+    // When set, extraction also asks Gemini to translate Dhundhari (archaic
+    // Rajasthani/Marwari-inflected Hindi) blocks to modern Hindi. Independent
+    // of `language` — a book can be flagged dhundhari while still containing
+    // plain-Hindi pages (e.g. the Prastavana), which the prompt itself handles.
+    const [dhundhari, setDhundhari] = useState(false);
 
     // Batch state (tesseract only)
     const [batchJobId, setBatchJobId] = useState(null);
@@ -318,6 +326,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
     const callLLMApi = async (imageFile, relativePath = null) => {
         const fd = new FormData();
         fd.append('language', language);
+        fd.append('dhundhari', dhundhari);
         fd.append('model_name', modelName);
         fd.append('crop_top', cropTop);
         fd.append('crop_bottom', cropBottom);
@@ -514,10 +523,23 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
         if (!blocks?.length) return <div className="text-center py-4 text-slate-400 text-sm">No text detected.</div>;
         return blocks.map((block, i) => {
             const style = BLOCK_TYPE_STYLES[block.type] || DEFAULT_BLOCK_STYLE;
+            // Dhundhari-origin blocks still report type "hindi_text"/"hindi_verse"
+            // (so indexing needs no special-casing) but carry the archaic original
+            // in original_text -- that's the only signal this block is Dhundhari.
+            const hasOriginal = !!block.original_text;
             return (
-                <div key={i} className={`${style.bg} border ${style.border} rounded-lg p-3`}>
+                <div key={i}
+                    onClick={hasOriginal ? () => setCompareBlock(block) : undefined}
+                    className={`${style.bg} border ${style.border} rounded-lg p-3 ${hasOriginal ? 'cursor-pointer hover:ring-1 hover:ring-rose-300 transition-shadow' : ''}`}
+                    title={hasOriginal ? 'Click to compare with the original Dhundhari wording' : undefined}
+                >
                     <div className="flex items-center justify-between mb-2">
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded ${style.badge}`}>{style.label}</span>
+                        <div className="flex items-center gap-2">
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded ${style.badge}`}>{style.label}</span>
+                            {hasOriginal && (
+                                <span className="text-xs text-rose-600 font-medium">⇄ compare with Dhundhari original</span>
+                            )}
+                        </div>
                         <CopyButton text={block.text} />
                     </div>
                     <div className={`text-sm ${style.text} whitespace-pre-wrap font-mono`}>{block.text}</div>
@@ -560,6 +582,37 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                 bookmarks={bookmarks}
                 onBookmarkClick={handleBookmarkClick}
             />
+
+            <Modal
+                open={!!compareBlock}
+                onClose={() => setCompareBlock(null)}
+                title="Dhundhari ↔ Hindi"
+                size="lg"
+                accentColorVar="--color-danger"
+            >
+                {compareBlock && (
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <div className="flex items-center justify-between mb-1">
+                                <span className="text-xs font-semibold text-rose-600">Dhundhari (original)</span>
+                                <CopyButton text={compareBlock.original_text} />
+                            </div>
+                            <div className="text-sm text-rose-900 whitespace-pre-wrap font-mono bg-rose-50 border border-rose-200 rounded-lg p-3">
+                                {compareBlock.original_text}
+                            </div>
+                        </div>
+                        <div>
+                            <div className="flex items-center justify-between mb-1">
+                                <span className="text-xs font-semibold text-blue-600">Hindi (translation)</span>
+                                <CopyButton text={compareBlock.text} />
+                            </div>
+                            <div className="text-sm text-blue-900 whitespace-pre-wrap font-mono bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                {compareBlock.text}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </Modal>
 
             <div className="rounded-lg shadow-sm border border-slate-200" style={{ width: '130%', maxWidth: 'none', backgroundColor: 'var(--bg-card)' }}>
                 {/* Header */}
@@ -646,6 +699,14 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                                     onChange={(e) => setSplitPct(parseFloat(e.target.value) || 50)}
                                     className="w-16 text-xs px-2 py-1 border border-slate-300 rounded-md focus:outline-none focus:ring-sky-500 focus:border-sky-500" />
                             </div>
+                        )}
+                        {mode === 'llm' && (
+                            <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer"
+                                title="Ask the LLM to also translate archaic Dhundhari commentary blocks to modern Hindi">
+                                <input type="checkbox" checked={dhundhari} onChange={(e) => setDhundhari(e.target.checked)}
+                                    className="h-3.5 w-3.5 text-sky-600 border-slate-300 rounded" />
+                                Dhundhari → Hindi
+                            </label>
                         )}
                         {mode === 'llm' && (
                             <select value={modelName} onChange={(e) => setModelName(e.target.value)}
