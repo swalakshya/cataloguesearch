@@ -13,6 +13,13 @@ const STORAGE_KEY = 'chat_response_format';
 // agree on the same key instead of two hand-typed string literals drifting apart.
 export const CHAT_SESSION_STORAGE_KEY = 'llmChatSession';
 
+// AuthContext dispatches this on logout so a currently-mounted ChatPage can
+// clear its own in-memory session immediately, not just on next page load.
+// This is purely a local/browser-side reset -- it must never touch the
+// server (the conversation stays in the account's History, same as ending a
+// chat normally does).
+export const AUTH_LOGOUT_EVENT = 'swalakshya:logout';
+
 export const ANSWER_FORMAT_OPTIONS = [
     {
         value: 'structured',

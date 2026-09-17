@@ -10,6 +10,8 @@ import AdminPageComponent from './components/admin/AdminPage';
 import { SearchBar, MetadataFilters, SearchFilters, AdvancedSearch, SearchOptions } from './components/SearchInterface';
 import { ResultsList, SuggestionsCard, Tabs, SimilarSourceInfoCard, SkeletonResultsList } from './components/SearchResults';
 import { ExpandModal, GranthVerseModal, GranthProseModal, WelcomeModal } from './components/Modals';
+import SignUpPromptModal from './components/auth/SignUpPromptModal';
+import { useAuth } from './auth/AuthContext';
 import { FeedbackForm } from './components/Feedback';
 import Home from './components/Home';
 import Footer from './components/layout/Footer';
@@ -21,7 +23,7 @@ import SearchIndex from './components/SearchIndex';
 import UIEval from './components/eval/UIEval';
 import ChatPage from './components/chat/ChatPage';
 import PdfCitationModal from './components/chat/PdfCitationModal';
-import { getStoredAnswerFormat, setStoredAnswerFormat, CHAT_SESSION_STORAGE_KEY } from './config/chatConfig';
+import { getStoredAnswerFormat, setStoredAnswerFormat, CHAT_SESSION_STORAGE_KEY, AUTH_LOGOUT_EVENT } from './config/chatConfig';
 import { setStoredChatDefaultCategories, getStoredKhojDefaultCategories, setStoredKhojDefaultCategories } from './config/filterDefaults';
 import StatsStrip from './components/chat/StatsStrip';
 import { Spinner, ChevronUpIcon, ChevronDownIcon, ExpandIcon } from './components/SharedComponents';
@@ -115,7 +117,8 @@ const TipsModal = ({ onClose }) => {
 const AppContent = () => {
     const location = useLocation();
     const navigate = useNavigate();
-    
+    const { user, loading: authLoading } = useAuth();
+
     // State to track current page selection
     const [currentPageState, setCurrentPageState] = useState(() => {
         const path = location.pathname;
@@ -240,6 +243,7 @@ const AppContent = () => {
     const [granthProseData, setGranthProseData] = useState(null);
     const [isGranthProseLoading, setIsGranthProseLoading] = useState(false);
     const [showWelcomePopup, setShowWelcomePopup] = useState(false);
+    const [showSignUpPrompt, setShowSignUpPrompt] = useState(false);
     const [showTipsModal, setShowTipsModal] = useState(false);
     const [showExportModal, setShowExportModal] = useState(false);
     const [exportCategory, setExportCategory] = useState(null);
@@ -264,6 +268,29 @@ const AppContent = () => {
     const [pendingChatQuestion, setPendingChatQuestion] = useState(null);
     const chatPageRef = useRef(null);
     const [answerFormat, setAnswerFormat] = useState(() => getStoredAnswerFormat());
+    // Bumped by ChatPage whenever a session is created or changes — the only
+    // signal Sidebar's History list has that it might be stale, since it has
+    // no other connection to ChatPage's own session state.
+    const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+    const handleSessionActivity = useCallback(() => setHistoryRefreshKey((k) => k + 1), []);
+
+    // On logout, ChatPage's own listener clears its in-memory session, but
+    // that alone isn't enough: if a history conversation was open,
+    // location.state.remoteSessionId is still sitting in the browser's own
+    // history entry (window.history.state survives a hard refresh). Without
+    // this, refreshing right after logout would remount ChatPage, see that
+    // stale remoteSessionId, and re-fetch that session -- for a claimed
+    // session this now correctly 403s since there's no cookie anymore, but
+    // it's still the wrong thing to attempt, and for a session that
+    // happens to still resolve (edge cases aside) it's exactly the kind of
+    // leftover state a shared/public browser shouldn't retain after
+    // sign-out. Replacing the current history entry with no state clears it
+    // without adding a new entry (so back-button behavior is unaffected).
+    useEffect(() => {
+        const onLogout = () => navigate(location.pathname, { replace: true });
+        window.addEventListener(AUTH_LOGOUT_EVENT, onLogout);
+        return () => window.removeEventListener(AUTH_LOGOUT_EVENT, onLogout);
+    }, [navigate, location.pathname]);
 
     // Changing answer type ends the active chat session — its already-rendered
     // messages assume one format (structured's inline blockquote citations
@@ -418,7 +445,25 @@ const AppContent = () => {
             console.warn('localStorage not available:', error);
         }
     }, []);
-    
+
+    // Shown once ever per browser, site-wide (not just on the chat page) —
+    // same one-time mechanism as the welcome popup above, but waits for it to
+    // close first so a first-ever visit doesn't stack two modals at once.
+    // Also waits on the auth check (authLoading) so an already-logged-in
+    // visitor never sees it flash before we know they're signed in.
+    useEffect(() => {
+        if (authLoading || user || showWelcomePopup) return;
+        try {
+            if (localStorage.getItem('signUpPromptDismissed')) return;
+        } catch {}
+        setShowSignUpPrompt(true);
+    }, [authLoading, user, showWelcomePopup]);
+
+    const handleDismissSignUpPrompt = () => {
+        setShowSignUpPrompt(false);
+        try { localStorage.setItem('signUpPromptDismissed', '1'); } catch {}
+    };
+
     const addFilter = (filter) => {
         setActiveFilters(prevFilters => {
             // Check if filter already exists
@@ -754,6 +799,8 @@ const AppContent = () => {
                 />
             )}
 
+            {showSignUpPrompt && <SignUpPromptModal onClose={handleDismissSignUpPrompt} />}
+
             {showTipsModal && <TipsModal onClose={() => setShowTipsModal(false)} />}
             
             {debugMode && (
@@ -776,6 +823,7 @@ const AppContent = () => {
                 mobileOpen={sidebarMobileOpen}
                 onCloseMobile={() => setSidebarMobileOpen(false)}
                 onOpenSettings={() => setShowSettings(true)}
+                historyRefreshKey={historyRefreshKey}
             />
 
             <SettingsModal
@@ -817,6 +865,9 @@ const AppContent = () => {
                                 pendingChatQuestion={pendingChatQuestion}
                                 onPendingChatQuestionConsumed={() => setPendingChatQuestion(null)}
                                 onNavigateFeedback={() => setCurrentPage('feedback')}
+                                remoteSessionId={location.state?.remoteSessionId}
+                                remoteSessionNavKey={location.state?.navKey}
+                onSessionActivity={handleSessionActivity}
                             />
                         </main>
                     )}

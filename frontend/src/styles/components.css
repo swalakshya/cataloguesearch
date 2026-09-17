@@ -320,3 +320,27 @@ input::placeholder, textarea::placeholder { color: var(--color-ink-muted); }
 @media (prefers-reduced-motion: reduce) {
     .ticker-item { animation: none; }
 }
+
+/* --- Anon login trigger (sidebar/top-bar "Sign in" avatar) ---
+   A brand-tinted ring at rest, brightening to full brand color on hover —
+   signals "clickable" without a border color harsh enough to look like an
+   error/warning state. .group:hover is the real (invisible) Google button's
+   hover, not this element's own — see AnonLoginAvatar.js for why. */
+.anon-login-ring {
+    border: 2px solid color-mix(in srgb, var(--color-brand) 30%, var(--color-border));
+    background-color: var(--color-bg);
+    transition: border-color 150ms ease, background-color 150ms ease;
+}
+.group:hover .anon-login-ring {
+    border-color: var(--color-brand);
+    background-color: color-mix(in srgb, var(--color-brand) 10%, var(--color-surface));
+}
+/* The real, focusable Google button is opacity:0 -- a keyboard user tabbing
+   to it gets no visible focus ring from the browser, since there's nothing
+   to see. :focus-within on the wrapper fires whenever a descendant (the
+   hidden button included) has focus, so this stands in as the focus
+   indicator for the decorative circle instead. */
+.group:focus-within .anon-login-ring {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+}

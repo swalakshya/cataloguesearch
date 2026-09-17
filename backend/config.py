@@ -165,6 +165,8 @@ class Config:
             return self._settings.get("api", {}).get("local_pdfs_dir", None)
         elif name == "METRICS_DB_PATH":
             return os.environ.get("METRICS_DB_PATH")
+        elif name == "USERS_DB_PATH":
+            return os.environ.get("USERS_DB_PATH")
         elif name == "DEBUG_MODE":
             return os.environ.get("DEBUG", "").lower() == "true"
         elif name == "ACTIVE_CATEGORIES":

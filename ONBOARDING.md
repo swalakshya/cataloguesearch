@@ -57,6 +57,24 @@ You will need the following keys. Get them from a colleague or create your own:
 | `GEMINI_API_KEY` | Granth crawling (LLM OCR + bookmark extraction) |
 | `RECAPTCHA_SECRET_KEY` + `REACT_APP_RECAPTCHA_SITE_KEY` | Feedback form UI                                |
 | `BREVO_API_KEY` | Email delivery for feedback                     |
+| `GOOGLE_CLIENT_ID` + `REACT_APP_GOOGLE_CLIENT_ID` (same value) | Google Sign-In (login + chat history) — see [Google OAuth setup](#google-oauth-setup-login) below |
+| `JWT_SECRET` | Signs/verifies the login session cookie — generate your own, don't reuse a colleague's (see below) |
+
+### Google OAuth setup (login)
+
+`cataloguesearch` and `cataloguesearch-chat` share one login system: this repo issues the session (via Google Sign-In), `cataloguesearch-chat` just verifies it. Both need a piece of this setup.
+
+1. **Create or reuse a Google Cloud project.** [console.cloud.google.com](https://console.cloud.google.com/) — the project behind `GEMINI_API_KEY` works fine too, no need for a separate one.
+2. **Configure the OAuth consent screen** — app name, support email. Audience: **External** (this is a public-facing app, not restricted to a Workspace org). Scopes: `openid`, `email`, `profile` only — these are non-sensitive, so Google never requires a manual review for them.
+3. **Create an OAuth 2.0 Client ID** — type **Web application**. Under **Authorized JavaScript origins**, add every host that will actually serve the frontend and run this login flow from — typically `http://localhost:3000` for local dev, plus your real domain(s) in prod (e.g. `https://swalakshya.me`, `https://chat.swalakshya.me`). One Client ID can hold multiple origins (up to 15) — you don't need a separate one per environment. Leave **Authorized redirect URIs** blank: this flow uses Google's client-side Sign-In button, which hands back an ID token directly to the frontend, no server-side redirect involved.
+4. Copy the **Client ID** (looks like `1234567890-abc...apps.googleusercontent.com`) — that's your `GOOGLE_CLIENT_ID` / `REACT_APP_GOOGLE_CLIENT_ID`. You don't need the Client Secret for this flow.
+5. While the consent screen is in **Testing** mode, only Google accounts you've explicitly added as test users can log in (up to 100). Flip it to **Production** — no review needed for these scopes — once you want any Google account to be able to sign in.
+6. **Generate a `JWT_SECRET`** — a random signing key, not something tied to Google at all:
+   ```bash
+   openssl rand -hex 32
+   ```
+   This exact value needs to go in **both** repos: `cataloguesearch/.env.local` and `cataloguesearch-chat/service/.env.local` (see that repo's own `.env.local.example`) — both services verify the same signed cookie, so they have to agree on the secret. It's not a Google credential, so generate it yourself rather than asking a colleague for theirs.
+7. For the chat service to actually persist sessions (needed for chat history to work at all), `cataloguesearch-chat/service/.env.local` also needs `CHAT_DB_PATH` set — see that repo's README for details. Easy to miss locally since nothing else in that service depends on it.
 
 ---
 
@@ -94,6 +112,11 @@ FEEDBACK_FROM_EMAIL=contact@swalakshya.me
 FEEDBACK_TO_EMAIL=contact@swalakshya.me
 GEMINI_API_KEY=<key>
 BROWSER=none
+
+# Google login + session auth — see "Google OAuth setup" above
+GOOGLE_CLIENT_ID=<client-id>.apps.googleusercontent.com
+REACT_APP_GOOGLE_CLIENT_ID=<client-id>.apps.googleusercontent.com
+JWT_SECRET=<openssl rand -hex 32>
 
 # Optional: throttle CPU/heat during indexing (tune for your machine)
 OCR_MAX_WORKERS=4        # parallel Tesseract processes; 2 for fanless, 4-8 for fan-cooled

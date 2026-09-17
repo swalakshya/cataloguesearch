@@ -6,4 +6,8 @@
 ## PDF export (Aagam Khoj "Export to PDF")
 weasyprint==69.0            # HTML/CSS -> PDF rendering with correct Devanagari/Gujarati shaping (needs system Pango/Cairo libs, see docker/api/Dockerfile)
 
+## Auth (Google login + session JWTs)
+pyjwt==2.9.0                 # Signs/verifies the session cookie JWT
+google-auth==2.35.0          # Verifies Google Sign-In ID tokens
+
 # This file exists to explicitly separate API dependencies from crawler dependencies

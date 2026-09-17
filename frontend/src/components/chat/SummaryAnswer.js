@@ -20,6 +20,7 @@ function formatSummaryHtml(answerText, citations) {
     const boldParts = [];
     const italicParts = [];
     const codeParts = [];
+    const actionLabelParts = [];
 
     let text = cleanAnswerText(answerText);
 
@@ -33,6 +34,21 @@ function formatSummaryHtml(answerText, citations) {
     // what put them there, so an underscore in the placeholder itself would
     // reintroduce the exact same bug one layer down (as happened here once already).
     text = text.replace(SUMMARY_MARKER_PATTERN, (match, numStr) => `@@SUMREFMARK${numStr}ENDMARK@@`);
+
+    // Same closed-set action placeholder as answerFormatting's formatAnswerHtml
+    // (see its own comment for why this is safe against LLM/document text) —
+    // this mode's own content isn't LLM-authored either (the app's greeting
+    // message uses it), so it needs the same handling structured mode has.
+    text = text.replace(/\[feedback_button:([^\]]+)\]/g, (match, label) => {
+        actionLabelParts.push(label);
+        return `__ACTION_FEEDBACK_${actionLabelParts.length - 1}__`;
+    });
+
+    // Strip triple backticks before the single-backtick step below, which
+    // deliberately skips backtick-adjacent-to-backtick runs (its own negative
+    // lookaround) to avoid double-processing exactly this case — without this
+    // step first, a ```triple-backtick``` span is left untouched by either.
+    text = text.replace(/```([^`][\s\S]*?)```/g, (match, content) => content);
 
     text = text.replace(/_([^_\n]+?)_/g, (match, content) => {
         italicParts.push(content);
@@ -62,6 +78,10 @@ function formatSummaryHtml(answerText, citations) {
     html = html.replace(/__BOLD_(\d+)__/g, (m, i) => `<strong>${escapeHtml(boldParts[Number(i)] || '')}</strong>`);
     html = html.replace(/__ITAL_(\d+)__/g, (m, i) => `<em>${escapeHtml(italicParts[Number(i)] || '')}</em>`);
     html = html.replace(/__CODE_(\d+)__/g, (m, i) => `<span class="llm-code">${escapeHtml(codeParts[Number(i)] || '')}</span>`);
+    html = html.replace(/__ACTION_FEEDBACK_(\d+)__/g, (match, idx) => {
+        const label = actionLabelParts[Number(idx)] || 'Feedback';
+        return `<button type="button" data-app-action="feedback" class="text-brand underline decoration-brand underline-offset-2 hover:text-brand-hover transition-colors">${escapeHtml(label)}</button>`;
+    });
 
     html = html.replace(/@@SUMREFMARK(\d+)ENDMARK@@/g, (match, numStr) => {
         const idx = Number(numStr) - 1;
@@ -85,14 +105,20 @@ function formatSummaryHtml(answerText, citations) {
 // author those in this mode. The reference list itself is a separate
 // ReferencePanel rendered by ChatPage at the end of the message (after
 // follow-ups and the share/feedback row), not here.
-export default function SummaryAnswer({ msg, displayedText, expanded, onToggleExpand, onOpenReference }) {
+export default function SummaryAnswer({ msg, displayedText, expanded, onToggleExpand, onOpenReference, onNavigateFeedback }) {
     const fullyDisplayed = displayedText === cleanAnswerText(msg.content);
     const collapsible = fullyDisplayed && shouldCollapseAnswer(msg.content);
     const citations = Array.isArray(msg.citations) ? msg.citations : [];
 
     const handleClick = (event) => {
-        const target = event.target.closest('[data-app-action="view-pdf"]');
+        const target = event.target.closest('[data-app-action]');
         if (!target) return;
+        const action = target.getAttribute('data-app-action');
+        if (action === 'feedback') {
+            onNavigateFeedback?.();
+            return;
+        }
+        if (action !== 'view-pdf') return;
         const idx = Number(target.getAttribute('data-ref-index'));
         const citation = citations[idx];
         if (citation) onOpenReference?.(citation);
