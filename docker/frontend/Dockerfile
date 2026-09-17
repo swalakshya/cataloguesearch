@@ -9,6 +9,7 @@ WORKDIR /app
 # Set placeholder for runtime injection
 ENV REACT_APP_RECAPTCHA_SITE_KEY=__REACT_APP_RECAPTCHA_SITE_KEY__
 ENV REACT_APP_LLM_API_BASE_URL=__REACT_APP_LLM_API_BASE_URL__
+ENV REACT_APP_GOOGLE_CLIENT_ID=__REACT_APP_GOOGLE_CLIENT_ID__
 
 # Copy package files first for better dependency caching
 COPY frontend/package*.json ./

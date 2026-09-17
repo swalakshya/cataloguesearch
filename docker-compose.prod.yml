@@ -78,6 +78,12 @@ services:
       - ADMIN_KEY=${ADMIN_KEY}
       - CHAT_ADMIN_BASE_URL=http://cataloguesearch-chat:8012
       - METRICS_DB_PATH=/app/data/cataloguesearch-api.db
+      - USERS_DB_PATH=/app/data/cataloguesearch-users.db
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - JWT_SECRET=${JWT_SECRET}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
+      - SESSION_COOKIE_DOMAIN=${SESSION_COOKIE_DOMAIN:-.swalakshya.me}
+      - SESSION_COOKIE_SECURE=true
     volumes:
       - api-data:/app/data
       - api-logs:/app/logs
@@ -108,6 +114,7 @@ services:
     environment:
       - REACT_APP_RECAPTCHA_SITE_KEY=${REACT_APP_RECAPTCHA_SITE_KEY}
       - REACT_APP_LLM_API_BASE_URL=${REACT_APP_LLM_API_BASE_URL}
+      - REACT_APP_GOOGLE_CLIENT_ID=${REACT_APP_GOOGLE_CLIENT_ID}
     ports:
       - "80:80"
       - "443:443"
@@ -150,6 +157,8 @@ services:
       - BREVO_API_KEY=${BREVO_API_KEY}
       - FEEDBACK_FROM_EMAIL=${FEEDBACK_FROM_EMAIL}
       - FEEDBACK_TO_EMAIL=${FEEDBACK_TO_EMAIL}
+      - JWT_SECRET=${JWT_SECRET}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
     volumes:
       - chat-data:/app/data
       - chat-logs:/app/logs

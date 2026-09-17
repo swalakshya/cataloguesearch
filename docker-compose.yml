@@ -64,6 +64,12 @@ services:
       - ADMIN_KEY=${ADMIN_KEY}
       - CHAT_ADMIN_BASE_URL=${CHAT_ADMIN_BASE_URL:-http://host.docker.internal:8012}
       - METRICS_DB_PATH=/app/data/cataloguesearch-api.db
+      - USERS_DB_PATH=/app/data/cataloguesearch-users.db
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - JWT_SECRET=${JWT_SECRET}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
+      - SESSION_COOKIE_DOMAIN=${SESSION_COOKIE_DOMAIN}
+      - SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE:-false}
     volumes:
       - cataloguesearch-data:/app/data
       - cataloguesearch-logs:/app/logs
@@ -93,6 +99,7 @@ services:
     container_name: cataloguesearch-frontend
     environment:
       - REACT_APP_RECAPTCHA_SITE_KEY=${REACT_APP_RECAPTCHA_SITE_KEY}
+      - REACT_APP_GOOGLE_CLIENT_ID=${REACT_APP_GOOGLE_CLIENT_ID}
     ports:
       - "3000:80"
     volumes:

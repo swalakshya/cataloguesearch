@@ -30,6 +30,8 @@ from backend.api.url.router import router as url_router
 from backend.api.admin.admin_api import router as admin_router
 from backend.api.admin.analytics import router as analytics_router
 from backend.api.admin.metrics_store import MetricsStore, normalize_language
+from backend.api.auth.auth_api import router as auth_router
+from backend.api.auth.users_store import UsersStore
 from backend.shortener.core import ShortenerStore
 from backend.shortener.opensearch_loader import fetch_file_urls
 
@@ -189,6 +191,10 @@ async def lifespan(app: FastAPI):
     app.state.metrics_store = MetricsStore(db_path)
     log_handle.info("MetricsStore initialised at %s", db_path)
 
+    users_db_path = config.USERS_DB_PATH or os.path.join(logs_dir, "users.db")
+    app.state.users_store = UsersStore(users_db_path)
+    log_handle.info("UsersStore initialised at %s", users_db_path)
+
     agent_app.state.config = config
     agent_app.state.index_searcher = app.state.index_searcher
     agent_app.state.embedding_model = app.state.embedding_model
@@ -261,9 +267,23 @@ app = FastAPI(
 )
 
 # --- CORS Middleware ---
+# allow_origins=["*"] can't be combined with allow_credentials=True per the CORS
+# spec (browsers reject it for credentialed requests) -- an explicit list is
+# required now that /api/auth/* sets a cookie the browser must send back.
+# `or` (not os.environ.get's own default arg) matters here: docker-compose
+# always sets this env var, even to an explicit empty string when the
+# deploy's own env file leaves it unset, so the dict-default form would
+# silently resolve to "" and block every browser request -- no origin
+# allowed at all.
+_default_cors_origins = "https://swalakshya.me,https://chat.swalakshya.me,http://localhost:3000"
+_cors_origins = [
+    origin.strip()
+    for origin in (os.environ.get("CORS_ALLOWED_ORIGINS") or _default_cors_origins).split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -276,6 +296,7 @@ app.include_router(agent_router, prefix="/api/agent")
 app.include_router(url_router)
 app.include_router(admin_router, prefix="/api")
 app.include_router(analytics_router, prefix="/api")
+app.include_router(auth_router, prefix="/api")
 
 # --- Mount Agent sub-app (public OpenAPI surface) ---
 app.mount("/agent", agent_app)

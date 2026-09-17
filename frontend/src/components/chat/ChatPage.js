@@ -12,7 +12,7 @@ import ReferencePanel from './ReferencePanel';
 import { ShareAnswerButtons } from './ShareAnswerButtons';
 import { FeedbackButtons } from '../AibotFeedback';
 import { cleanAnswerText, preTokenizeCitations } from './answerFormatting';
-import { CHAT_SESSION_STORAGE_KEY } from '../../config/chatConfig';
+import { AUTH_LOGOUT_EVENT, CHAT_SESSION_STORAGE_KEY } from '../../config/chatConfig';
 import { getStoredChatDefaultCategories } from '../../config/filterDefaults';
 import { USER_ID } from '../../utils/userId';
 import bulbEmoji from '../../assets/emoji/bulb.svg';
@@ -44,6 +44,9 @@ const ChatPage = forwardRef(function ChatPage(
         onPendingChatQuestionConsumed,
         onNavigateFeedback,
         answerFormat,
+        remoteSessionId,
+        remoteSessionNavKey,
+        onSessionActivity,
     },
     ref
 ) {
@@ -293,30 +296,57 @@ const ChatPage = forwardRef(function ChatPage(
         return () => observer.disconnect();
     }, [chatMessages.length, llmLoading]); // re-attach when chat activates/deactivates
 
-    // Restore a persisted session on mount (replaces the old chatEnabled gate —
-    // this component only exists while chat is the active page).
+    // Restore a session on mount, and again whenever remoteSessionId changes.
+    // The second part matters because History lives inside this very page's
+    // own sidebar (see Sidebar.js) — clicking an item is almost always a
+    // same-path navigate('/chat', { state: { remoteSessionId } }) while
+    // ChatPage is already mounted, which React Router does not remount for,
+    // so a mount-only effect would only ever catch the very first click.
+    // Depending on remoteSessionId here is what makes a second or third
+    // click (while still on /chat) actually load the newly-picked session.
+    // remoteSessionNavKey (a fresh timestamp set on every History click, see
+    // Sidebar.js) is also a dependency so that re-clicking the SAME item
+    // twice in a row still re-triggers this -- remoteSessionId alone
+    // wouldn't change, e.g. after "New Chat" cleared the view and the user
+    // picks that same conversation again.
     useEffect(() => {
+        const applyMessages = (messages) => {
+            setChatMessages(messages);
+            setDisplayedTexts(
+                messages.reduce((acc, msg, idx) => {
+                    if (msg?.role === 'assistant' && msg?.content) {
+                        acc[msg.localId ?? idx] = cleanAnswerText(msg.content);
+                    }
+                    return acc;
+                }, {})
+            );
+        };
+
+        if (remoteSessionId) {
+            let cancelled = false;
+            api.getChatSession(remoteSessionId)
+                .then((data) => {
+                    if (cancelled) return;
+                    setChatSessionId(data.session_id);
+                    applyMessages(data.messages || []);
+                })
+                .catch((error) => console.warn('Could not load session from history:', error));
+            return () => { cancelled = true; };
+        }
+
         try {
             const stored = localStorage.getItem(CHAT_SESSION_STORAGE_KEY);
             if (stored) {
                 const parsed = JSON.parse(stored);
                 if (parsed?.sessionId) {
                     setChatSessionId(parsed.sessionId);
-                    setChatMessages(parsed.messages || []);
-                    setDisplayedTexts(
-                        (parsed.messages || []).reduce((acc, msg, idx) => {
-                            if (msg?.role === 'assistant' && msg?.content) {
-                                acc[msg.localId ?? idx] = cleanAnswerText(msg.content);
-                            }
-                            return acc;
-                        }, {})
-                    );
+                    applyMessages(parsed.messages || []);
                 }
             }
         } catch (error) {
             console.warn('localStorage not available:', error);
         }
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [remoteSessionId, remoteSessionNavKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         try {
@@ -332,6 +362,18 @@ const ChatPage = forwardRef(function ChatPage(
             console.warn('localStorage not available:', error);
         }
     }, [chatSessionId, chatMessages]);
+
+    // Sidebar's History list has no other way to know a session was created
+    // or just got its first exchange (and therefore its title) — this tells
+    // it to refetch. Deliberately depends on chatMessages.length, not the
+    // full chatMessages array: a streaming answer's stageLabel updates
+    // in place (same length, same array reference replaced but same size)
+    // many times per turn, and none of those intermediate updates are
+    // something History needs to know about — only an add/remove (a new
+    // session, or the pending message resolving) actually changes the count.
+    useEffect(() => {
+        onSessionActivity?.();
+    }, [chatSessionId, chatMessages.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // SF3: visibilitychange handler — recover an in-flight message when the tab returns
     useEffect(() => {
@@ -603,9 +645,11 @@ const ChatPage = forwardRef(function ChatPage(
 
     const handleEndChat = useCallback(async () => {
         invalidateChatRuns();
-        if (chatSessionId) {
-            await api.closeChatSession(chatSessionId).catch(() => null);
-        }
+        // Used to call api.closeChatSession (DELETE) here, which permanently
+        // removed the session from the server -- fine before History existed,
+        // but it meant "New Chat" was quietly deleting the exact conversation
+        // History is supposed to keep. This just stops treating it as the
+        // active session locally; it stays in storage and in History.
         clearPendingMessage(chatSessionId);
         setChatSessionId(null);
         setChatMessages([]);
@@ -621,6 +665,15 @@ const ChatPage = forwardRef(function ChatPage(
         // keeping whatever filter was active in the just-ended conversation.
         setChatContentTypes(getStoredChatDefaultCategories(activeCategories || ['Pravachan', 'Granth']));
     }, [activeCategories, chatSessionId, clearPendingMessage, clearPersistedChatSession, clearRecoveryTimer, invalidateChatRuns, resetTypingState]);
+
+    // AuthContext dispatches this right after logout — reuses the same
+    // local-only reset as "New Chat" (no server delete), so a currently-open
+    // conversation doesn't linger on screen for whoever uses this browser next.
+    useEffect(() => {
+        const onLogout = () => { handleEndChat(); };
+        window.addEventListener(AUTH_LOGOUT_EVENT, onLogout);
+        return () => window.removeEventListener(AUTH_LOGOUT_EVENT, onLogout);
+    }, [handleEndChat]);
 
     const handleNewChat = useCallback(async () => {
         await handleEndChat();
@@ -675,6 +728,12 @@ const ChatPage = forwardRef(function ChatPage(
                             const lastUserMsg = [...chatMessages].reverse().find(m => m.role === 'user');
                             return chatMessages.map((msg, idx) => {
                                 const key = msg.localId ?? idx;
+                                // A message replayed from History renders in whatever format it
+                                // was actually answered in, not today's live Settings toggle —
+                                // the two formats' citation encodings aren't interchangeable (see
+                                // handleSaveAnswerFormat's comment on why answerFormat changes end
+                                // the current session instead of just re-rendering it).
+                                const msgFormat = msg.response_format || answerFormat;
                                 const isLastUser = msg.role === 'user' && msg === lastUserMsg;
                                 const isStreaming = msg.role === 'assistant' && (
                                     msg.pending || (
@@ -717,7 +776,7 @@ const ChatPage = forwardRef(function ChatPage(
                                                                     </div>
                                                                 </div>
                                                                 <AnswerBody
-                                                                    format={answerFormat}
+                                                                    format={msgFormat}
                                                                     msg={msg}
                                                                     displayedText={displayedTexts[key]}
                                                                     chunkTextsCache={chunkTextsCache}
@@ -762,7 +821,7 @@ const ChatPage = forwardRef(function ChatPage(
                                                                         </div>
                                                                     </div>
                                                                 )}
-                                                                {fullyDisplayed && answerFormat === 'summary' && (
+                                                                {fullyDisplayed && msgFormat === 'summary' && (
                                                                     <ReferencePanel citations={msg.citations} onOpenReference={setActiveCitation} />
                                                                 )}
                                                             </>

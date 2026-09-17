@@ -345,6 +345,7 @@ export const api = {
             const response = await fetch(`${LLM_API_BASE_URL}/v1/chat/sessions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify(requestPayload),
             });
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -361,6 +362,7 @@ export const api = {
             const submitResponse = await fetch(`${LLM_API_BASE_URL}/v1/chat/sessions/${sessionId}/messages`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify(requestPayload),
             });
             if (!submitResponse.ok) {
@@ -390,6 +392,7 @@ export const api = {
             const submitRes = await fetch(`${LLM_API_BASE_URL}/v1/chat/sessions/${sessionId}/messages`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify({ ...requestPayload, client_message_id: clientMessageId }),
             });
             if (!submitRes.ok) {
@@ -415,6 +418,7 @@ export const api = {
         const response = await fetch(`${LLM_API_BASE_URL}/v1/chat/sessions/${sessionId}/messages`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify(requestPayload),
         });
         if (!response.ok) {
@@ -429,7 +433,9 @@ export const api = {
     },
 
     getChatMessageResult: async (sessionId, messageId) => {
-        const response = await fetch(`${LLM_API_BASE_URL}/v1/chat/sessions/${sessionId}/messages/${messageId}/result`);
+        const response = await fetch(`${LLM_API_BASE_URL}/v1/chat/sessions/${sessionId}/messages/${messageId}/result`, {
+            credentials: 'include',
+        });
         let body = null;
         try { body = await response.json(); } catch { body = null; }
         if (!response.ok) {
@@ -449,6 +455,7 @@ export const api = {
         try {
             const response = await fetch(`${LLM_API_BASE_URL}/v1/chat/sessions/${sessionId}`, {
                 method: 'DELETE',
+                credentials: 'include',
             });
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             return await response.json();
@@ -458,6 +465,52 @@ export const api = {
         }
     },
 
+    // Requires an authenticated session cookie -- the server derives the
+    // caller's own id from it rather than trusting a URL param (see
+    // GET /v1/users/:userId/sessions in cataloguesearch-chat).
+    listChatSessions: async (userId) => {
+        const response = await fetch(`${LLM_API_BASE_URL}/v1/users/${userId}/sessions`, {
+            credentials: 'include',
+        });
+        if (!response.ok) {
+            let detail = null;
+            try { const b = await response.json(); detail = b?.detail || null; } catch { detail = null; }
+            const error = new Error(detail || `HTTP error! status: ${response.status}`);
+            error.status = response.status;
+            error.detail = detail;
+            throw error;
+        }
+        return await response.json(); // { sessions: [{ session_id, title, language, message_count, last_activity_at }] }
+    },
+
+    getChatSession: async (sessionId) => {
+        const response = await fetch(`${LLM_API_BASE_URL}/v1/chat/sessions/${sessionId}`, {
+            credentials: 'include',
+        });
+        if (!response.ok) {
+            let detail = null;
+            try { const b = await response.json(); detail = b?.detail || null; } catch { detail = null; }
+            const error = new Error(detail || `HTTP error! status: ${response.status}`);
+            error.status = response.status;
+            error.detail = detail;
+            throw error;
+        }
+        return await response.json();
+    },
+
+    // Reassigns the browser's pre-login anonymous sessions onto the account
+    // that just logged in. Called once, right after googleLogin() succeeds.
+    mergeAnonymousSessions: async (fromAnonymousId) => {
+        const response = await fetch(`${LLM_API_BASE_URL}/v1/users/merge`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ from_anonymous_id: fromAnonymousId }),
+        });
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return await response.json(); // { merged: number }
+    },
+
     checkLlmHealth: async () => {
         try {
             const response = await fetch(`${LLM_API_BASE_URL}/v1/health`);
@@ -465,6 +518,49 @@ export const api = {
         } catch {
             return false;
         }
+    },
+
+    // --- Auth API (Google login) ---
+    // These carry the session as an httpOnly cookie (credentials: 'include'),
+    // not a bearer token like the admin API below -- the server sets/reads
+    // it, the frontend never sees or stores the token itself.
+    googleLogin: async (idToken) => {
+        const response = await fetch(`${API_BASE_URL}/auth/google`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ id_token: idToken }),
+        });
+        if (!response.ok) {
+            let detail = null;
+            try { const b = await response.json(); detail = b?.detail || null; } catch { detail = null; }
+            const error = new Error(detail || `HTTP error! status: ${response.status}`);
+            error.status = response.status;
+            error.detail = detail;
+            throw error;
+        }
+        return await response.json(); // { user }
+    },
+
+    logout: async () => {
+        const response = await fetch(`${API_BASE_URL}/auth/logout`, {
+            method: 'POST',
+            credentials: 'include',
+        });
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return await response.json();
+    },
+
+    getCurrentUser: async () => {
+        const response = await fetch(`${API_BASE_URL}/auth/me`, {
+            credentials: 'include',
+        });
+        if (!response.ok) {
+            const error = new Error('not_authenticated');
+            error.status = response.status;
+            throw error;
+        }
+        return await response.json(); // { user }
     },
 
     // --- Admin API ---
@@ -658,7 +754,7 @@ async function streamMessageResult(sessionId, messageId, { lastEventId = null, o
     const cursorParam = lastEventId !== null ? `?last_event_id=${lastEventId}` : '';
     const streamUrl = `${LLM_API_BASE_URL}/v1/chat/sessions/${sessionId}/messages/${messageId}/stream${cursorParam}`;
 
-    const response = await fetch(streamUrl);
+    const response = await fetch(streamUrl, { credentials: 'include' });
     if (!response.ok) {
         let detail = null;
         try { const b = await response.json(); detail = b?.detail || null; } catch { detail = null; }
@@ -709,7 +805,7 @@ async function pollChatMessageResult(sessionId, messageId, { maxWaitMs = 300_000
     let delay = 500;
 
     while (Date.now() < deadline) {
-        const res = await fetch(resultUrl);
+        const res = await fetch(resultUrl, { credentials: 'include' });
         if (res.status === 202) {
             const waitMs = delay;
             delay = Math.min(Math.floor(delay * 1.5), 3000);

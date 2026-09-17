@@ -1,7 +1,11 @@
-import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { PanelLeftClose, PanelLeftOpen, Plus, Settings, User, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { MessageSquare, PanelLeftClose, PanelLeftOpen, Plus, Settings, User, X } from 'lucide-react';
 import { useOverlayBehavior } from '../ui/Modal';
+import { useAuth } from '../../auth/AuthContext';
+import { api } from '../../services/api';
+import AnonLoginAvatar from '../auth/AnonLoginAvatar';
+import LoggedInAccountRow from '../auth/LoggedInAccountRow';
 import { ALL_NAV_ITEMS } from './navItems';
 import swalakshyaMark from '../../assets/swalakshya-mark.png';
 
@@ -61,7 +65,150 @@ function MobileNavLinks({ currentPage, setCurrentPage, onNavigate }) {
     );
 }
 
-function SidebarContent({ collapsed, onToggleCollapse, closeButton, onNewChat, navLinks, onOpenSettings }) {
+// Avatar circle shared by every UserRow state — a photo when Google gave us
+// one, otherwise a generic person glyph (also what a still-loading, failed-
+// to-load, or logged-out state shows).
+export function Avatar({ user }) {
+    const [imgFailed, setImgFailed] = useState(false);
+    const showPhoto = user?.avatar_url && !imgFailed;
+    return (
+        <div
+            className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center shrink-0"
+            style={{ backgroundColor: 'var(--color-bg)' }}
+        >
+            {showPhoto ? (
+                <img
+                    src={user.avatar_url}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    // Google's profile-picture CDN (lh3.googleusercontent.com) can
+                    // refuse the request based on the Referer header a plain <img>
+                    // sends by default -- this drops it, which is the documented
+                    // fix. onError still falls back to the plain icon for any other
+                    // reason it fails (network blip, revoked photo, etc).
+                    referrerPolicy="no-referrer"
+                    onError={() => setImgFailed(true)}
+                />
+            ) : (
+                <User size={16} className="text-ink-muted" />
+            )}
+        </div>
+    );
+}
+
+// The sidebar's bottom-left identity slot. Collapsed (96px wide) has no room
+// for a name or Google's button, so it always falls back to an avatar-only
+// circle regardless of login state; expanded shows the real Google Sign-In
+// button when logged out, or the account's name + a sign-out affordance
+// once logged in.
+function UserRow({ collapsed }) {
+    const { user, logout } = useAuth();
+
+    if (!user) {
+        return <AnonLoginAvatar showLabel={!collapsed} />;
+    }
+
+    if (collapsed) {
+        return <Avatar user={user} />;
+    }
+
+    return <LoggedInAccountRow user={user} logout={logout} nameClassName="flex-1 min-w-0" />;
+}
+
+// One history row — truncated to a single line (min-w-0 is what actually
+// makes `truncate` take effect on a flex child; without it the title just
+// keeps growing and spills out past the sidebar's edge instead of eliding).
+// Hovering shows the full title in the app's existing tooltip-bubble style
+// (see components.css, already used the same way elsewhere for hint text)
+// rather than the slow/plain native browser tooltip.
+function HistoryRow({ session, onOpen }) {
+    const [showTooltip, setShowTooltip] = useState(false);
+    const title = session.title || 'New conversation';
+
+    return (
+        <div className="relative">
+            <button
+                onClick={onOpen}
+                onMouseEnter={() => setShowTooltip(true)}
+                onMouseLeave={() => setShowTooltip(false)}
+                onFocus={() => setShowTooltip(true)}
+                onBlur={() => setShowTooltip(false)}
+                className="w-full flex items-center gap-2 px-1 py-1.5 rounded-md text-left hover:bg-bg"
+            >
+                <MessageSquare size={14} className="text-ink-muted shrink-0" />
+                <span className="text-sm text-ink flex-1 min-w-0 truncate">{title}</span>
+            </button>
+            {showTooltip && (
+                <div className="tooltip-bubble absolute left-1 top-full mt-1 rounded px-2 py-1 z-10 text-xs max-w-[220px] whitespace-normal break-words">
+                    {title}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// The chat rail's "History" section — a compact list of past conversations,
+// titled by each session's first question (set server-side, see
+// cataloguesearch-chat's session_store.js). Clicking a row navigates to
+// /chat carrying the session id as router state; ChatPage's mount effect
+// picks that up and loads the full transcript from the server instead of
+// resuming from localStorage. refreshKey is bumped by ChatPage (via App.js)
+// whenever a session is created or changes, since a plain sibling component
+// otherwise has no way to know a new chat just happened.
+function HistoryList({ refreshKey }) {
+    const { user } = useAuth();
+    const navigate = useNavigate();
+    const [sessions, setSessions] = useState(null);
+    const [error, setError] = useState(false);
+
+    useEffect(() => {
+        if (!user) {
+            setSessions(null);
+            return;
+        }
+        let cancelled = false;
+        setError(false); // clear a previous failure before each attempt, including retries
+        api.listChatSessions(user.id)
+            .then(({ sessions: list }) => { if (!cancelled) setSessions(list); })
+            .catch(() => { if (!cancelled) setError(true); });
+        return () => { cancelled = true; };
+    }, [user, refreshKey]);
+
+    if (!user) {
+        return <div className="text-sm text-ink-muted px-1 py-1">Sign in to see your history.</div>;
+    }
+    if (error) {
+        return <div className="text-sm text-ink-muted px-1 py-1">Could not load history.</div>;
+    }
+    if (sessions === null) {
+        return <div className="text-sm text-ink-muted px-1 py-1">Loading…</div>;
+    }
+    if (sessions.length === 0) {
+        return <div className="text-sm text-ink-muted px-1 py-1">No conversations yet.</div>;
+    }
+
+    return (
+        <div className="space-y-0.5">
+            {sessions.map((session) => (
+                <HistoryRow
+                    key={session.session_id}
+                    session={session}
+                    onOpen={() => navigate('/chat', {
+                        // navKey makes re-clicking the SAME history item work
+                        // even when ChatPage never remounted (still on /chat)
+                        // and its local view was already cleared some other
+                        // way (e.g. New Chat) -- ChatPage's load-effect keys
+                        // off both fields together, so a repeat click with an
+                        // unchanged remoteSessionId still re-triggers it.
+                        state: { remoteSessionId: session.session_id, navKey: Date.now() },
+                    })}
+                />
+            ))}
+        </div>
+    );
+}
+
+function SidebarContent({ collapsed, onToggleCollapse, closeButton, onNewChat, navLinks, onOpenSettings, historyRefreshKey }) {
     return (
         <div
             className="flex flex-col h-full"
@@ -96,24 +243,15 @@ function SidebarContent({ collapsed, onToggleCollapse, closeButton, onNewChat, n
             </div>
 
             {!collapsed && (
-                // History has no backend support yet — this stub shows the intended
-                // shape (a list of past sessions) so it's a one-line swap once
-                // multi-thread session storage exists server-side.
                 <div className="flex-1 overflow-y-auto px-3">
                     <div className="text-xs font-semibold text-ink-muted uppercase tracking-wide px-1 mb-2">History</div>
-                    <div className="text-sm text-ink-muted px-1 py-1">Coming soon!</div>
+                    <HistoryList refreshKey={historyRefreshKey} />
                 </div>
             )}
             {collapsed && <div className="flex-1" />}
 
             <div className="p-3 flex items-center gap-2" style={{ borderTop: '1px solid var(--color-border)' }}>
-                <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: 'var(--color-bg)' }}
-                >
-                    <User size={16} className="text-ink-muted" />
-                </div>
-                {!collapsed && <span className="text-sm text-ink flex-1 truncate">Guest</span>}
+                <UserRow collapsed={collapsed} />
                 <button
                     onClick={onOpenSettings}
                     className="p-1.5 rounded-md text-ink-muted hover:text-ink hover:bg-bg shrink-0"
@@ -132,7 +270,7 @@ function SidebarContent({ collapsed, onToggleCollapse, closeButton, onNewChat, n
 // chatMode (backdrop + Escape-to-close, sharing the same overlay behavior as
 // Modal) — this is the only way to reach the nav links below the `lg`
 // breakpoint, since TopBar's own link row is desktop-only.
-export default function Sidebar({ chatMode, currentPage, setCurrentPage, onNewChat, mobileOpen, onCloseMobile, onOpenSettings }) {
+export default function Sidebar({ chatMode, currentPage, setCurrentPage, onNewChat, mobileOpen, onCloseMobile, onOpenSettings, historyRefreshKey }) {
     const [collapsed, setCollapsed] = useState(() => {
         try { return localStorage.getItem(COLLAPSE_KEY) === '1'; } catch { return false; }
     });
@@ -164,6 +302,7 @@ export default function Sidebar({ chatMode, currentPage, setCurrentPage, onNewCh
                         onToggleCollapse={toggleCollapsed}
                         onNewChat={onNewChat}
                         onOpenSettings={onOpenSettings}
+                        historyRefreshKey={historyRefreshKey}
                     />
                 </div>
             )}
@@ -181,6 +320,7 @@ export default function Sidebar({ chatMode, currentPage, setCurrentPage, onNewCh
                             collapsed={false}
                             onNewChat={() => { onNewChat(); onCloseMobile(); }}
                             onOpenSettings={onOpenSettings}
+                            historyRefreshKey={historyRefreshKey}
                             closeButton={(
                                 <button onClick={onCloseMobile} className="p-1.5 rounded-md text-ink-muted hover:text-ink hover:bg-bg">
                                     <X size={18} />

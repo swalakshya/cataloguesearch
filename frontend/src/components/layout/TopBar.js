@@ -1,7 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ChevronDown, Menu, Settings, User } from 'lucide-react';
+import { ChevronDown, Menu, Settings } from 'lucide-react';
 import { NAV_ITEMS, NAV_DROPDOWN_LABEL, NAV_DROPDOWN_ITEMS, NAV_TAIL_ITEMS } from './navItems';
+import { useAuth } from '../../auth/AuthContext';
+import AnonLoginAvatar from '../auth/AnonLoginAvatar';
+import LoggedInAccountRow from '../auth/LoggedInAccountRow';
 
 const linkClass = 'px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap';
 const activeStyle = { color: 'var(--color-brand)', backgroundColor: 'color-mix(in srgb, var(--color-brand) 12%, var(--color-surface))', fontWeight: 600 };
@@ -76,6 +79,29 @@ function NavigateDropdown({ isActive, onNavigate }) {
                     </div>
                 </div>
             )}
+        </div>
+    );
+}
+
+// The only account affordance outside the chat page — Sidebar's own identity
+// row (see Sidebar.js's UserRow) is chat-only on desktop, so every other
+// page needs its own copy here. Desktop-only (hidden lg:flex), same as the
+// Settings button right next to it: mobile already reaches this via the
+// hamburger drawer, which carries the exact same UserRow on every page.
+function AccountSlot() {
+    const { user, logout } = useAuth();
+
+    if (!user) {
+        return (
+            <div className="hidden lg:block">
+                <AnonLoginAvatar />
+            </div>
+        );
+    }
+
+    return (
+        <div className="hidden lg:flex items-center gap-2">
+            <LoggedInAccountRow user={user} logout={logout} nameClassName="max-w-[120px]" />
         </div>
     );
 }
@@ -160,13 +186,7 @@ export default function TopBar({ currentPage, setCurrentPage, onOpenMobileSideba
                                 <Settings size={18} />
                             </button>
                         )}
-                        <div
-                            className="w-8 h-8 rounded-full flex items-center justify-center"
-                            style={{ backgroundColor: 'var(--color-bg)' }}
-                            title="Account (coming soon)"
-                        >
-                            <User size={16} className="text-ink-muted" />
-                        </div>
+                        <AccountSlot />
                     </div>
                 </div>
             </div>
