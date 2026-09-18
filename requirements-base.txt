@@ -3,7 +3,7 @@
 ## Web Framework (API)
 fastapi==0.111.0             # Modern, fast web framework for building APIs
 uvicorn==0.30.1              # ASGI server for running FastAPI
-pydantic==2.8.2              # Data validation and settings management
+pydantic==2.13.5              # Data validation and settings management; floor raised by google-genai==2.24.0 (requirements-crawler.txt), which requires pydantic>=2.12.5 -- fastapi==0.111.0 only needs >=1.7.4, so this is compatible
 
 ## OpenSearch & Search
 opensearch-py==2.5.0         # Python client for OpenSearch
@@ -11,9 +11,10 @@ opensearch-py==2.5.0         # Python client for OpenSearch
 ## NLP & Embeddings
 sentence-transformers==3.3.1  # For creating sentence and text embeddings
 # transformers is pinned explicitly (not left to sentence-transformers'
-# transitive resolution) because it must simultaneously satisfy
-# sentence-transformers==3.3.1 (<5.0.0,>=4.41.0) and surya-ocr==0.20.0
-# (>=4.56.1, see requirements-crawler.txt) -- see backend/crawler/heading_detector.py.
+# transitive resolution) to satisfy sentence-transformers==3.3.1's range
+# (<5.0.0,>=4.41.0). Previously also had to straddle surya-ocr==0.20.0's floor
+# (>=4.56.1) -- surya-ocr was removed 2026-09-18 (see requirements-crawler.txt),
+# so that constraint no longer applies, but this pin hasn't been revisited.
 transformers==4.57.6
 onnxruntime==1.26.0           # Runs the ONNX reranker directly (backend/common/reranker.py);
                               # replaced optimum[onnxruntime], which pins transformers below

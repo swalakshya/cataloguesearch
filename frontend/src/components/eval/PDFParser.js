@@ -656,9 +656,9 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                                 className={`px-3 py-1 text-xs border-l border-slate-300 ${mode === 'llm' ? 'bg-sky-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
                                 LLM
                             </button>
-                            <button onClick={() => setMode('surya')}
-                                title="Tesseract text extraction, but headings come from Surya's layout model instead of density/height"
-                                className={`px-3 py-1 text-xs border-l border-slate-300 ${mode === 'surya' ? 'bg-sky-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+                            <button onClick={() => setMode('surya')} disabled
+                                title="Temporarily unavailable: the surya-ocr dependency was removed to resolve a conflict with the batch-OCR SDK"
+                                className="px-3 py-1 text-xs border-l border-slate-300 bg-slate-100 text-slate-400 opacity-50 cursor-not-allowed">
                                 Surya
                             </button>
                         </div>

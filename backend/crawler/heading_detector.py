@@ -84,6 +84,13 @@ _surya_layout_predictor = None
 def _get_surya_layout_predictor():
     global _surya_layout_predictor
     if _surya_layout_predictor is None:
+        raise RuntimeError(
+            "header_detection=surya is temporarily unsupported: the surya-ocr "
+            "dependency was removed (see requirements-crawler.txt, 2026-09-18) "
+            "because its httpx<0.28 ceiling blocked upgrading google-genai to a "
+            "version with real Developer-API batch support. This code path is "
+            "left in place for when that's revisited."
+        )
         from surya.inference import SuryaInferenceManager
         from surya.layout import LayoutPredictor
         log_handle.info("Initializing Surya layout predictor (first use, may take a while)...")

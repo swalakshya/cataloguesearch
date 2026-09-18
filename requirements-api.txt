@@ -8,6 +8,6 @@ weasyprint==69.0            # HTML/CSS -> PDF rendering with correct Devanagari/
 
 ## Auth (Google login + session JWTs)
 pyjwt==2.9.0                 # Signs/verifies the session cookie JWT
-google-auth==2.35.0          # Verifies Google Sign-In ID tokens
+google-auth==2.58.0          # Verifies Google Sign-In ID tokens; floor raised by google-genai==2.24.0 (requirements-crawler.txt), which requires google-auth>=2.56.0
 
 # This file exists to explicitly separate API dependencies from crawler dependencies
