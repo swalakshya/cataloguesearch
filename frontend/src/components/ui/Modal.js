@@ -1,4 +1,5 @@
 import React, { useEffect, useId, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useRegisterOverlay } from '../../hooks/useOverlayRegistry';
 
@@ -18,7 +19,18 @@ const overlayStack = [];
 // drawer, PdfCitationModal, the legacy hand-rolled modals in Modals.js, etc.)
 // so this behavior — including "something is covering the screen" for
 // useAnyOverlayOpen() — only lives here.
-export function useOverlayBehavior(open, onClose) {
+//
+// closeOnBack (default true) gates the history.pushState/popstate part only.
+// React Router patches window.history.pushState globally to detect
+// navigations, so this raw pushState call -- even same-URL, state-only --
+// registers as "the location changed" to it. Every current caller triggers
+// from App.js, away from anything that reacts to location changes, so this
+// has never been visibly a problem; a modal triggered from somewhere with
+// its own location-sensitive effects (e.g. the chat page's session-loading
+// logic, keyed off location.state) can have that phantom navigation trigger
+// those effects and close the modal (or worse) the instant it opens. Pass
+// closeOnBack={false} from a modal triggered in a context like that.
+export function useOverlayBehavior(open, onClose, { closeOnBack = true } = {}) {
     useRegisterOverlay(open);
 
     useEffect(() => {
@@ -43,10 +55,20 @@ export function useOverlayBehavior(open, onClose) {
     const id = useId();
 
     useEffect(() => {
-        if (!open) return;
+        if (!open || !closeOnBack) return;
         let poppedByUser = false;
         overlayStack.push(id);
-        window.history.pushState({ overlayId: id }, '');
+        // Spread the EXISTING history.state in rather than replacing it
+        // outright -- React Router keeps location.state (e.g. ChatPage's
+        // remoteSessionId, used to load a session from history) in this
+        // same history.state object. A bare `{ overlayId: id }` here used
+        // to silently wipe it out from under React Router the instant any
+        // modal opened anywhere the app has state-carrying navigation,
+        // since pushState's state argument REPLACES the entry rather than
+        // merging into it -- this was the actual root cause, not just
+        // "React Router treats pushState as a navigation" (which is
+        // unavoidable and fine on its own).
+        window.history.pushState({ ...window.history.state, overlayId: id }, '');
 
         const handlePopState = () => {
             // Several overlays can be open at once (e.g. a citation modal on
@@ -74,18 +96,29 @@ export function useOverlayBehavior(open, onClose) {
                 window.history.back();
             }
         };
-    }, [open, id]);
+    }, [open, id, closeOnBack]);
 }
 
 // Shared modal shell: overlay, escape-to-close, body-scroll lock, header+close
 // button. accentColorVar (e.g. '--color-info') lets callers keep the existing
 // per-content-type accent (verse/prose/teeka/etc.) without hardcoding a class.
-export default function Modal({ open, onClose, title, size = 'md', accentColorVar, children, footer }) {
-    useOverlayBehavior(open, onClose);
+export default function Modal({ open, onClose, title, size = 'md', accentColorVar, children, footer, closeOnBack = true }) {
+    useOverlayBehavior(open, onClose, { closeOnBack });
 
     if (!open) return null;
 
-    return (
+    // Portaled to document.body: every existing caller of this component
+    // triggers it from near the top of the tree (App.js), where escaping a
+    // plain `position: fixed` to the viewport just works. A modal triggered
+    // from deep inside the sidebar (sticky, overflow-hidden, its own
+    // z-index stacking context) is a genuinely different situation -- a
+    // descendant's z-index and fixed positioning are still evaluated within
+    // whatever paint/stacking layer its ancestors put it in, so nesting can
+    // silently swallow or misplace it even though nothing here looks wrong
+    // in isolation. Rendering outside that tree entirely removes the
+    // question instead of relying on every future caller happening to be
+    // triggered from a "safe" spot in the DOM.
+    return createPortal(
         <div
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
             style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
@@ -107,6 +140,7 @@ export default function Modal({ open, onClose, title, size = 'md', accentColorVa
                 <div className="px-5 py-4 overflow-y-auto">{children}</div>
                 {footer && <div className="px-5 py-4 border-t border-border shrink-0">{footer}</div>}
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

@@ -82,6 +82,8 @@ export default function SettingsModal({
             onClose={onClose}
             title="Settings"
             size="md"
+            // closeOnBack=false: see LogoutConfirmModal.js.
+            closeOnBack={false}
             footer={
                 <button onClick={handleSave} className="btn btn-primary">
                     Save

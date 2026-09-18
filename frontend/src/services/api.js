@@ -498,6 +498,15 @@ export const api = {
         return await response.json();
     },
 
+    // Rename and soft-delete share one PATCH endpoint server-side (see
+    // PATCH /v1/chat/sessions/:id in cataloguesearch-chat) -- "delete" only
+    // ever sets a `deleted` flag there, it never removes the row. Both go
+    // through patchChatSession below rather than each re-parsing the error
+    // response themselves.
+    renameChatSession: async (sessionId, title) => patchChatSession(sessionId, { title }), // { session_id, title }
+
+    deleteChatSession: async (sessionId) => patchChatSession(sessionId, { deleted: true }), // { session_id, deleted }
+
     // Reassigns the browser's pre-login anonymous sessions onto the account
     // that just logged in. Called once, right after googleLogin() succeeds.
     mergeAnonymousSessions: async (fromAnonymousId) => {
@@ -746,6 +755,26 @@ export const api = {
         return await response.json();
     },
 };
+
+// Shared by renameChatSession/deleteChatSession -- both PATCH the same
+// endpoint, just with a different body.
+async function patchChatSession(sessionId, body) {
+    const response = await fetch(`${LLM_API_BASE_URL}/v1/chat/sessions/${sessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+        let detail = null;
+        try { const b = await response.json(); detail = b?.detail || null; } catch { detail = null; }
+        const error = new Error(detail || `HTTP error! status: ${response.status}`);
+        error.status = response.status;
+        error.detail = detail;
+        throw error;
+    }
+    return await response.json();
+}
 
 // Streams GET /stream SSE for a submitted message job. Used by sendChatMessageStream.
 // lastEventId: resume from this event index (for reconnect); null = start from beginning.

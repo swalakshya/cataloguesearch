@@ -54,7 +54,11 @@ export default function PdfCitationModal({ citation, onClose }) {
         loadPDFFromUrl, handlePageNavigation, jumpToPage, setPreviewUrl,
     } = usePDFViewer({ setError });
 
-    useOverlayBehavior(open, onClose);
+    // closeOnBack=false: see LogoutConfirmModal.js -- the Modal.js state-merge
+    // fix alone was found insufficient by direct testing there, so every
+    // modal reachable from inside ChatPage's tree keeps this explicit
+    // opt-out as the primary fix rather than relying on that alone.
+    useOverlayBehavior(open, onClose, { closeOnBack: false });
 
     useEffect(() => {
         if (!citation) return;

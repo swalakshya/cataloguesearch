@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ChevronDown, Menu, Settings } from 'lucide-react';
 import { NAV_ITEMS, NAV_DROPDOWN_LABEL, NAV_DROPDOWN_ITEMS, NAV_TAIL_ITEMS } from './navItems';
 import { useAuth } from '../../auth/AuthContext';
+import { useOutsideClick } from '../../hooks/useOutsideClick';
 import AnonLoginAvatar from '../auth/AnonLoginAvatar';
 import LoggedInAccountRow from '../auth/LoggedInAccountRow';
 
@@ -29,17 +30,7 @@ function NavigateDropdown({ isActive, onNavigate }) {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
 
-    useEffect(() => {
-        if (!open) return undefined;
-        const onClickOutside = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-        const onKeyDown = (e) => { if (e.key === 'Escape') setOpen(false); };
-        document.addEventListener('mousedown', onClickOutside);
-        document.addEventListener('keydown', onKeyDown);
-        return () => {
-            document.removeEventListener('mousedown', onClickOutside);
-            document.removeEventListener('keydown', onKeyDown);
-        };
-    }, [open]);
+    useOutsideClick(ref, () => setOpen(false), { enabled: open });
 
     return (
         <div
@@ -83,9 +74,10 @@ function NavigateDropdown({ isActive, onNavigate }) {
     );
 }
 
-// The only account affordance outside the chat page — Sidebar's own identity
-// row (see Sidebar.js's UserRow) is chat-only on desktop, so every other
-// page needs its own copy here. Desktop-only (hidden lg:flex), same as the
+// Rendered on every page, including chat, so these controls stay in a
+// consistent spot regardless of which page you're on -- even though
+// Sidebar's own rail (see Sidebar.js's UserRow) also carries an identical
+// account row on the chat page. Desktop-only (hidden lg:flex), same as the
 // Settings button right next to it: mobile already reaches this via the
 // hamburger drawer, which carries the exact same UserRow on every page.
 function AccountSlot() {
@@ -133,7 +125,12 @@ export default function TopBar({ currentPage, setCurrentPage, onOpenMobileSideba
                 style={{ backgroundColor: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}
             />
 
-            <header className="sticky top-0 z-30 col-start-2 row-start-1">
+            {/* min-w-0: the grid column is a plain 1fr (App.js), which defaults
+                to a min-width of its content's min-content size -- without
+                this, a header wide enough to not wrap (nav links + logo) can
+                force the whole page grid wider than the viewport instead of
+                the nav row itself just running out of room. */}
+            <header className="sticky top-0 z-30 col-start-2 row-start-1 min-w-0">
             {/* Fluid (no Tailwind `container` — that snaps to fixed breakpoint
                 widths, which centered oddly within this narrower-than-viewport
                 column) + the same max-w-[1080px] mx-auto as the page content
@@ -173,9 +170,12 @@ export default function TopBar({ currentPage, setCurrentPage, onOpenMobileSideba
                     </nav>
 
                     <div className="flex items-center gap-3 ml-auto shrink-0">
-                        {/* Desktop-only: Sidebar's own gear (chat rail + mobile drawer)
-                            already covers mobile and the chat page, but there's otherwise
-                            no way to reach Settings on desktop outside chat. */}
+                        {/* Desktop-only. Shown unconditionally on every page, chat
+                            included, even though Sidebar's own rail also carries a
+                            Settings gear + account row there -- kept intentionally
+                            redundant so these controls stay in a consistent, always-
+                            visible spot rather than disappearing depending on the
+                            page. */}
                         {onOpenSettings && (
                             <button
                                 onClick={onOpenSettings}

@@ -217,7 +217,8 @@ function FeedbackModalForm({ vote, requestId, question, answer, references, foll
 
     if (succeeded) {
         return (
-            <Modal open onClose={guardedClose} size="sm">
+            // closeOnBack=false: see LogoutConfirmModal.js.
+            <Modal open onClose={guardedClose} size="sm" closeOnBack={false}>
                 <div className="flex flex-col items-center justify-center py-8 text-center">
                     {vote === 'helpful'
                         ? <ThumbsUp size={40} className="mb-4" style={{ color: 'var(--color-success)' }} />
@@ -235,6 +236,7 @@ function FeedbackModalForm({ vote, requestId, question, answer, references, foll
             onClose={guardedClose}
             title={title}
             size="md"
+            closeOnBack={false}
             footer={(
                 <>
                     {submitError && (

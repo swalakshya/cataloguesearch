@@ -27,7 +27,8 @@ export default function SignUpPromptModal({ onClose }) {
     };
 
     return (
-        <Modal open onClose={onClose} size="sm">
+        // closeOnBack=false: see LogoutConfirmModal.js.
+        <Modal open onClose={onClose} size="sm" closeOnBack={false}>
             <div className="text-center">
                 <div
                     className="mx-auto flex items-center justify-center h-12 w-12 rounded-full mb-4"

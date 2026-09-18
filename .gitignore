@@ -143,4 +143,6 @@ tessdata/
 .env.*
 !.env.example
 
+*.remote
+
 .claude
