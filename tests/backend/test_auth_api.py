@@ -20,10 +20,15 @@ def _env(monkeypatch):
     monkeypatch.setenv("SESSION_COOKIE_SECURE", "false")
 
 
+class _StubConfig:
+    ACTIVE_CATEGORIES = ["Pravachan", "Granth"]
+
+
 @pytest.fixture
 def app():
     fastapi_app = FastAPI()
     fastapi_app.state.users_store = UsersStore(":memory:")
+    fastapi_app.state.config = _StubConfig()
     fastapi_app.include_router(auth_api.router)
     return fastapi_app
 
@@ -186,3 +191,85 @@ def test_second_login_same_google_sub_reuses_user_id(client, monkeypatch):
     first = client.post("/auth/google", json={"id_token": "fake-token"}).json()["user"]
     second = client.post("/auth/google", json={"id_token": "fake-token-2"}).json()["user"]
     assert first["id"] == second["id"]
+
+
+def test_google_login_response_includes_null_settings_for_new_user(client, monkeypatch):
+    _patch_google(monkeypatch)
+    resp = client.post("/auth/google", json={"id_token": "fake-token"})
+    assert resp.json()["settings"] is None
+
+
+def test_me_response_includes_null_settings_when_unset(client, monkeypatch):
+    _patch_google(monkeypatch)
+    client.post("/auth/google", json={"id_token": "fake-token"})
+    resp = client.get("/auth/me")
+    assert resp.json()["settings"] is None
+
+
+def test_update_settings_requires_auth(client):
+    resp = client.put("/auth/settings", json={"mode": "dark"})
+    assert resp.status_code == 401
+
+
+def test_update_settings_persists_and_reflected_in_me(client, monkeypatch):
+    _patch_google(monkeypatch)
+    client.post("/auth/google", json={"id_token": "fake-token"})
+
+    put_resp = client.put("/auth/settings", json={"mode": "dark", "palette": "forest"})
+    assert put_resp.status_code == 200
+    assert put_resp.json()["settings"] == {"mode": "dark", "palette": "forest"}
+
+    me_resp = client.get("/auth/me")
+    assert me_resp.json()["settings"] == {"mode": "dark", "palette": "forest"}
+
+
+def test_update_settings_rejects_non_object_body(client, monkeypatch):
+    _patch_google(monkeypatch)
+    client.post("/auth/google", json={"id_token": "fake-token"})
+
+    resp = client.put("/auth/settings", json=["not", "an", "object"])
+    assert resp.status_code == 422
+
+
+def test_update_settings_rejects_oversized_payload(client, monkeypatch):
+    _patch_google(monkeypatch)
+    client.post("/auth/google", json={"id_token": "fake-token"})
+
+    resp = client.put("/auth/settings", json={"junk": "x" * 20_000})
+    assert resp.status_code == 422
+
+
+def test_update_settings_rejects_invalid_mode(client, monkeypatch):
+    _patch_google(monkeypatch)
+    client.post("/auth/google", json={"id_token": "fake-token"})
+
+    resp = client.put("/auth/settings", json={"mode": "not-a-real-mode"})
+    assert resp.status_code == 422
+
+
+def test_update_settings_rejects_invalid_answer_format(client, monkeypatch):
+    _patch_google(monkeypatch)
+    client.post("/auth/google", json={"id_token": "fake-token"})
+
+    resp = client.put("/auth/settings", json={"answerFormat": "not-a-real-format"})
+    assert resp.status_code == 422
+
+
+def test_update_settings_clamps_categories_to_active_list(client, monkeypatch):
+    # _StubConfig.ACTIVE_CATEGORIES is ["Pravachan", "Granth"] -- "Books"
+    # should silently fall out, not cause a rejection.
+    _patch_google(monkeypatch)
+    client.post("/auth/google", json={"id_token": "fake-token"})
+
+    resp = client.put("/auth/settings", json={"chatDefaultCategories": ["Pravachan", "Books"]})
+    assert resp.status_code == 200
+    assert resp.json()["settings"]["chatDefaultCategories"] == ["Pravachan"]
+
+
+def test_update_settings_ignores_unknown_extra_fields(client, monkeypatch):
+    _patch_google(monkeypatch)
+    client.post("/auth/google", json={"id_token": "fake-token"})
+
+    resp = client.put("/auth/settings", json={"mode": "dark", "somethingUnknown": "x"})
+    assert resp.status_code == 200
+    assert resp.json()["settings"] == {"mode": "dark"}

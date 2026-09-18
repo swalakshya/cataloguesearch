@@ -44,6 +44,7 @@ const ChatPage = forwardRef(function ChatPage(
         onPendingChatQuestionConsumed,
         onNavigateFeedback,
         answerFormat,
+        chatDefaultCategories,
         remoteSessionId,
         remoteSessionNavKey,
         onSessionActivity,
@@ -59,7 +60,7 @@ const ChatPage = forwardRef(function ChatPage(
     const [chatSessionId, setChatSessionId] = useState(null);
     const [chatMessages, setChatMessages] = useState([]);
     const [chatInput, setChatInput] = useState('');
-    const [chatContentTypes, setChatContentTypes] = useState(() => getStoredChatDefaultCategories(activeCategories || ['Pravachan', 'Granth']));
+    const [chatContentTypes, setChatContentTypes] = useState(() => chatDefaultCategories || activeCategories || ['Pravachan', 'Granth']);
     const [expandedAnswers, setExpandedAnswers] = useState({});
     const [displayedTexts, setDisplayedTexts] = useState({});
     const [chunkTextsCache, setChunkTextsCache] = useState({});
@@ -661,19 +662,30 @@ const ChatPage = forwardRef(function ChatPage(
         resetTypingState();
         clearPersistedChatSession();
         // Ending a chat (New Chat, or an Answer Format change forcing a reset)
-        // starts a new session — re-pull the Settings default fresh rather than
-        // keeping whatever filter was active in the just-ended conversation.
-        setChatContentTypes(getStoredChatDefaultCategories(activeCategories || ['Pravachan', 'Granth']));
-    }, [activeCategories, chatSessionId, clearPendingMessage, clearPersistedChatSession, clearRecoveryTimer, invalidateChatRuns, resetTypingState]);
+        // starts a new session — re-pull the Settings default fresh (this prop
+        // is always current, updated on save) rather than keeping whatever
+        // filter was active in the just-ended conversation.
+        setChatContentTypes(chatDefaultCategories || activeCategories || ['Pravachan', 'Granth']);
+    }, [activeCategories, chatDefaultCategories, chatSessionId, clearPendingMessage, clearPersistedChatSession, clearRecoveryTimer, invalidateChatRuns, resetTypingState]);
 
     // AuthContext dispatches this right after logout — reuses the same
     // local-only reset as "New Chat" (no server delete), so a currently-open
     // conversation doesn't linger on screen for whoever uses this browser next.
     useEffect(() => {
-        const onLogout = () => { handleEndChat(); };
+        const onLogout = () => {
+            handleEndChat();
+            // AuthContext dispatches this synchronously, before React has
+            // re-rendered and let App.js's settings-sync effect re-derive
+            // chatDefaultCategories from localStorage -- handleEndChat's own
+            // reset above can therefore still apply the just-logged-out
+            // account's server value for one tick. We know for certain at
+            // this exact point that we're offline, so read the true offline
+            // default directly rather than trust that prop's timing.
+            setChatContentTypes(getStoredChatDefaultCategories(activeCategories || ['Pravachan', 'Granth']));
+        };
         window.addEventListener(AUTH_LOGOUT_EVENT, onLogout);
         return () => window.removeEventListener(AUTH_LOGOUT_EVENT, onLogout);
-    }, [handleEndChat]);
+    }, [handleEndChat, activeCategories]);
 
     const handleNewChat = useCallback(async () => {
         await handleEndChat();

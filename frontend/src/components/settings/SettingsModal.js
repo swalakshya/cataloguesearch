@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Check, MessagesSquare, Moon, Search, Sun } from 'lucide-react';
 import { Modal } from '../ui';
-import { useTheme } from '../../theme/ThemeContext';
+import { useTheme, setStoredMode, setStoredPalette } from '../../theme/ThemeContext';
 import { PALETTES, PALETTE_KEYS } from '../../theme/palettes';
-import { ANSWER_FORMAT_OPTIONS } from '../../config/chatConfig';
-import { getStoredChatDefaultCategories, getStoredKhojDefaultCategories } from '../../config/filterDefaults';
+import { ANSWER_FORMAT_OPTIONS, setStoredAnswerFormat } from '../../config/chatConfig';
+import { setStoredChatDefaultCategories, setStoredKhojDefaultCategories } from '../../config/filterDefaults';
+import { useAuth } from '../../auth/AuthContext';
+import { api } from '../../services/api';
 import CategoryChips from '../CategoryChips';
 
 // Bigger, colored, icon-led product name + a divider above it is what carries
@@ -37,33 +39,41 @@ export default function SettingsModal({
     answerFormat,
     onSaveAnswerFormat,
     activeCategories = ['Pravachan', 'Granth'],
+    chatDefaultCategories,
     onSaveChatDefaultCategories,
+    khojDefaultCategories,
     onSaveKhojDefaultCategories,
 }) {
+    const { user, refreshSettings } = useAuth();
     const { mode, setMode, palette, setPalette } = useTheme();
     const [draftMode, setDraftMode] = useState(mode);
     const [draftPalette, setDraftPalette] = useState(palette);
     const [draftFormat, setDraftFormat] = useState(answerFormat);
-    const [draftChatCategories, setDraftChatCategories] = useState(() => getStoredChatDefaultCategories(activeCategories));
-    const [draftKhojCategories, setDraftKhojCategories] = useState(() => getStoredKhojDefaultCategories(activeCategories));
+    const [draftChatCategories, setDraftChatCategories] = useState(() => chatDefaultCategories || activeCategories);
+    const [draftKhojCategories, setDraftKhojCategories] = useState(() => khojDefaultCategories || activeCategories);
 
     // Re-sync every draft to whatever's actually active/saved each time the
     // modal opens — otherwise closing without saving, then reopening, would
-    // show stale drafts from the abandoned attempt instead of the real values.
+    // show stale drafts from the abandoned attempt instead of the real
+    // values. All five already live in memory (App.js/ThemeContext), kept
+    // current regardless of login state, so no fetch is needed here.
     useEffect(() => {
         if (open) {
             setDraftMode(mode);
             setDraftPalette(palette);
             setDraftFormat(answerFormat);
-            setDraftChatCategories(getStoredChatDefaultCategories(activeCategories));
-            setDraftKhojCategories(getStoredKhojDefaultCategories(activeCategories));
+            setDraftChatCategories(chatDefaultCategories || activeCategories);
+            setDraftKhojCategories(khojDefaultCategories || activeCategories);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, mode, palette, answerFormat]);
+    }, [open, mode, palette, answerFormat, chatDefaultCategories, khojDefaultCategories]);
 
     const formatChanged = draftFormat !== answerFormat;
 
     const handleSave = () => {
+        // Always apply to in-memory state — these calls never persist
+        // anything themselves anymore (see ThemeContext.js/App.js), they
+        // just update what's currently rendered/used.
         setMode(draftMode);
         setPalette(draftPalette);
         if (formatChanged) onSaveAnswerFormat(draftFormat);
@@ -73,6 +83,40 @@ export default function SettingsModal({
         // through, changed or not.
         onSaveChatDefaultCategories?.(draftChatCategories);
         onSaveKhojDefaultCategories?.(draftKhojCategories);
+
+        if (user) {
+            // Logged in: persist to the server so it follows the account
+            // across devices. Fire-and-forget — in-memory state is already
+            // updated above regardless of network outcome, so a failed sync
+            // only means it won't show up on a different device yet, not a
+            // lost local setting (mirrors AuthContext.login's best-effort
+            // mergeAnonymousSessions call).
+            api.updateSettings({
+                mode: draftMode,
+                palette: draftPalette,
+                answerFormat: draftFormat,
+                chatDefaultCategories: draftChatCategories,
+                khojDefaultCategories: draftKhojCategories,
+            })
+                // Feed the saved value back into AuthContext so a later
+                // settings-sync re-run (e.g. once admin config resolves)
+                // can't revert this save by re-applying the stale value it
+                // still had cached.
+                .then((res) => refreshSettings(res.settings))
+                .catch((err) => console.warn('Could not sync settings to server', err));
+        } else {
+            // Logged out: today's localStorage persistence, now explicit
+            // here instead of implicit inside ThemeContext's setters.
+            // Persisted unconditionally like the other four fields (writing
+            // the same value again is harmless) -- formatChanged above only
+            // gates the chat-session-ending side effect, not persistence.
+            setStoredMode(draftMode);
+            setStoredPalette(draftPalette);
+            setStoredAnswerFormat(draftFormat);
+            setStoredChatDefaultCategories(draftChatCategories);
+            setStoredKhojDefaultCategories(draftKhojCategories);
+        }
+
         onClose();
     };
 

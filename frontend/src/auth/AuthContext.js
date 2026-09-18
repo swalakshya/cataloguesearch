@@ -7,20 +7,24 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
+    const [settings, setSettings] = useState(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         let cancelled = false;
         api.getCurrentUser()
-            .then(({ user: restoredUser }) => { if (!cancelled) setUser(restoredUser); })
-            .catch(() => { if (!cancelled) setUser(null); })
+            .then(({ user: restoredUser, settings: restoredSettings }) => {
+                if (!cancelled) { setUser(restoredUser); setSettings(restoredSettings ?? null); }
+            })
+            .catch(() => { if (!cancelled) { setUser(null); setSettings(null); } })
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
     }, []);
 
     const login = useCallback(async (idToken) => {
-        const { user: loggedInUser } = await api.googleLogin(idToken);
+        const { user: loggedInUser, settings: loggedInSettings } = await api.googleLogin(idToken);
         setUser(loggedInUser);
+        setSettings(loggedInSettings ?? null);
         try {
             // Best-effort: pre-login anonymous history should carry over, but a
             // failed merge shouldn't block the login itself.
@@ -31,11 +35,21 @@ export function AuthProvider({ children }) {
         return loggedInUser;
     }, []);
 
+    // Called after a successful SettingsModal save so this context's
+    // `settings` reflects what was just persisted -- without this, the next
+    // time App.js's settings-sync effect re-fires (e.g. once the admin's
+    // active-category config resolves), it would re-apply the stale
+    // pre-save value and visibly revert the change the user just made.
+    const refreshSettings = useCallback((newSettings) => {
+        setSettings(newSettings ?? null);
+    }, []);
+
     const logout = useCallback(async () => {
         try {
             await api.logout();
         } finally {
             setUser(null);
+            setSettings(null);
             // Local-only reset: the just-signed-out browser shouldn't keep
             // showing the previous account's conversation, but nothing here
             // touches the server -- it stays in that account's History for
@@ -47,7 +61,7 @@ export function AuthProvider({ children }) {
     }, []);
 
     return (
-        <AuthContext.Provider value={{ user, loading, login, logout }}>
+        <AuthContext.Provider value={{ user, settings, loading, login, logout, refreshSettings }}>
             {children}
         </AuthContext.Provider>
     );

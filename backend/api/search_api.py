@@ -32,6 +32,7 @@ from backend.api.admin.analytics import router as analytics_router
 from backend.api.admin.metrics_store import MetricsStore, normalize_language
 from backend.api.auth.auth_api import router as auth_router
 from backend.api.auth.users_store import UsersStore
+from backend.api.db.db_manager import DbManager, MaintenanceJob
 from backend.shortener.core import ShortenerStore
 from backend.shortener.opensearch_loader import fetch_file_urls
 
@@ -195,6 +196,23 @@ async def lifespan(app: FastAPI):
     app.state.users_store = UsersStore(users_db_path)
     log_handle.info("UsersStore initialised at %s", users_db_path)
 
+    metrics_db_manager = DbManager(db_path)
+    metrics_db_manager.register_job(MaintenanceJob(
+        name="vacuumMetricsDb", cadence="weekly", low_traffic_window_only=True,
+        run=metrics_db_manager.vacuum,
+    ))
+    metrics_db_manager.start()
+    app.state.metrics_db_manager = metrics_db_manager
+
+    users_db_manager = DbManager(users_db_path)
+    users_db_manager.register_job(MaintenanceJob(
+        name="vacuumUsersDb", cadence="weekly", low_traffic_window_only=True,
+        run=users_db_manager.vacuum,
+    ))
+    users_db_manager.start()
+    app.state.users_db_manager = users_db_manager
+    log_handle.info("DbManager maintenance jobs registered for metrics/users DBs.")
+
     agent_app.state.config = config
     agent_app.state.index_searcher = app.state.index_searcher
     agent_app.state.embedding_model = app.state.embedding_model
@@ -256,6 +274,11 @@ async def lifespan(app: FastAPI):
 
     log_memory_usage()
     yield
+    log_handle.info("Shutting down -- closing DB managers and stores.")
+    await app.state.metrics_db_manager.shutdown()
+    await app.state.users_db_manager.shutdown()
+    app.state.metrics_store.close()
+    app.state.users_store.close()
 
 
 # --- FastAPI Application Setup ---

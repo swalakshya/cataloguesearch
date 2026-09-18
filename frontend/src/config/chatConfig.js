@@ -35,20 +35,29 @@ export const ANSWER_FORMAT_OPTIONS = [
     },
 ];
 
-function envDefault() {
+// Exported as the app's hardcoded default, with no localStorage involved —
+// used to seed a logged-in user who has no saved server settings yet.
+export function envDefault() {
     const raw = String(process.env.REACT_APP_CHAT_RESPONSE_FORMAT || '').trim().toLowerCase();
     return raw === 'summary' ? 'summary' : 'structured';
+}
+
+// Exported so the server-settings path in App.js's sync effect can apply
+// the same validity check this file's own localStorage read/write already
+// enforce, before trusting a settings.answerFormat value from the backend.
+export function isValidAnswerFormat(format) {
+    return format === 'summary' || format === 'structured';
 }
 
 export function getStoredAnswerFormat() {
     try {
         const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored === 'summary' || stored === 'structured') return stored;
+        if (isValidAnswerFormat(stored)) return stored;
     } catch {}
     return envDefault();
 }
 
 export function setStoredAnswerFormat(format) {
-    if (format !== 'summary' && format !== 'structured') return;
+    if (!isValidAnswerFormat(format)) return;
     try { localStorage.setItem(STORAGE_KEY, format); } catch {}
 }

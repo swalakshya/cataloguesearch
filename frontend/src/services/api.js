@@ -8,6 +8,24 @@ const CATALOGUE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 let catalogueCache = { data: null, timestamp: 0 };
 let catalogueInFlight = null;
 
+// Shared by the auth-cookie-based calls below (googleLogin, updateSettings)
+// that both need credentials:'include' + JSON body + the same
+// error.status/error.detail shape -- see patchChatSession in the sibling
+// cataloguesearch-chat repo's api.js for the same "extract once two callers
+// need it" precedent.
+async function fetchAuthJson(url, options = {}) {
+    const response = await fetch(url, { credentials: 'include', ...options });
+    if (!response.ok) {
+        let detail = null;
+        try { const b = await response.json(); detail = b?.detail || null; } catch { detail = null; }
+        const error = new Error(detail || `HTTP error! status: ${response.status}`);
+        error.status = response.status;
+        error.detail = detail;
+        throw error;
+    }
+    return await response.json();
+}
+
 export const api = {
     // Not a fetch — just builds the URL PdfCitationModal hands to pdf.js.
     // Citation file_urls point at hosts (vitragvani.com etc., or our own
@@ -533,23 +551,17 @@ export const api = {
     // These carry the session as an httpOnly cookie (credentials: 'include'),
     // not a bearer token like the admin API below -- the server sets/reads
     // it, the frontend never sees or stores the token itself.
-    googleLogin: async (idToken) => {
-        const response = await fetch(`${API_BASE_URL}/auth/google`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ id_token: idToken }),
-        });
-        if (!response.ok) {
-            let detail = null;
-            try { const b = await response.json(); detail = b?.detail || null; } catch { detail = null; }
-            const error = new Error(detail || `HTTP error! status: ${response.status}`);
-            error.status = response.status;
-            error.detail = detail;
-            throw error;
-        }
-        return await response.json(); // { user }
-    },
+    googleLogin: async (idToken) => fetchAuthJson(`${API_BASE_URL}/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id_token: idToken }),
+    }), // { user, settings }
+
+    updateSettings: async (settingsObject) => fetchAuthJson(`${API_BASE_URL}/auth/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settingsObject),
+    }), // { settings }
 
     logout: async () => {
         const response = await fetch(`${API_BASE_URL}/auth/logout`, {
@@ -569,7 +581,7 @@ export const api = {
             error.status = response.status;
             throw error;
         }
-        return await response.json(); // { user }
+        return await response.json(); // { user, settings }
     },
 
     // --- Admin API ---

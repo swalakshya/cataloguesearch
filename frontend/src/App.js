@@ -23,8 +23,10 @@ import SearchIndex from './components/SearchIndex';
 import UIEval from './components/eval/UIEval';
 import ChatPage from './components/chat/ChatPage';
 import PdfCitationModal from './components/chat/PdfCitationModal';
-import { getStoredAnswerFormat, setStoredAnswerFormat, CHAT_SESSION_STORAGE_KEY, AUTH_LOGOUT_EVENT } from './config/chatConfig';
-import { setStoredChatDefaultCategories, getStoredKhojDefaultCategories, setStoredKhojDefaultCategories } from './config/filterDefaults';
+import { getStoredAnswerFormat, envDefault, isValidAnswerFormat, CHAT_SESSION_STORAGE_KEY, AUTH_LOGOUT_EVENT } from './config/chatConfig';
+import { getStoredChatDefaultCategories, getStoredKhojDefaultCategories, clampCategories } from './config/filterDefaults';
+import { useTheme, getInitialMode, getInitialPalette, getSystemDefaultMode } from './theme/ThemeContext';
+import { DEFAULT_PALETTE } from './theme/palettes';
 import StatsStrip from './components/chat/StatsStrip';
 import { Spinner, ChevronUpIcon, ChevronDownIcon, ExpandIcon } from './components/SharedComponents';
 import ExportPdfModal from './components/ExportPdfModal';
@@ -117,7 +119,8 @@ const TipsModal = ({ onClose }) => {
 const AppContent = () => {
     const location = useLocation();
     const navigate = useNavigate();
-    const { user, loading: authLoading } = useAuth();
+    const { user, settings, loading: authLoading } = useAuth();
+    const { setMode, setPalette } = useTheme();
 
     // State to track current page selection
     const [currentPageState, setCurrentPageState] = useState(() => {
@@ -268,6 +271,13 @@ const AppContent = () => {
     const [pendingChatQuestion, setPendingChatQuestion] = useState(null);
     const chatPageRef = useRef(null);
     const [answerFormat, setAnswerFormat] = useState(() => getStoredAnswerFormat());
+    // Lifted here (rather than read fresh from localStorage at each call site)
+    // so the same live value works regardless of login state -- ChatPage
+    // consumes chatDefaultCategories as a prop, the khoj mount-effect below
+    // seeds contentTypes from khojDefaultCategories, and SettingsModal reads
+    // both as props too.
+    const [chatDefaultCategories, setChatDefaultCategoriesState] = useState(() => getStoredChatDefaultCategories(activeCategories));
+    const [khojDefaultCategories, setKhojDefaultCategoriesState] = useState(() => getStoredKhojDefaultCategories(activeCategories));
     // Bumped by ChatPage whenever a session is created or changes — the only
     // signal Sidebar's History list has that it might be stale, since it has
     // no other connection to ChatPage's own session state.
@@ -299,8 +309,10 @@ const AppContent = () => {
     // Clears the persisted session unconditionally (not just via ChatPage's own
     // ref) since Settings can be opened from any page, including ones where
     // ChatPage isn't mounted to clear it itself.
+    // Persistence (localStorage vs. server) is decided by SettingsModal
+    // itself, based on login state -- these handlers only apply the change
+    // to live/in-memory state and its side effects.
     const handleSaveAnswerFormat = (newFormat) => {
-        setStoredAnswerFormat(newFormat);
         setAnswerFormat(newFormat);
         chatPageRef.current?.endChat();
         try { localStorage.removeItem(CHAT_SESSION_STORAGE_KEY); } catch {}
@@ -308,14 +320,98 @@ const AppContent = () => {
 
     // Unlike Answer Format, these two are just the seed for the *next* new
     // session/page load — they never touch whatever's currently active, so
-    // there's nothing else to do here besides persisting the choice.
+    // there's nothing else to do here besides updating the live default.
     const handleSaveChatDefaultCategories = (categories) => {
-        setStoredChatDefaultCategories(categories);
+        setChatDefaultCategoriesState(categories);
     };
 
     const handleSaveKhojDefaultCategories = (categories) => {
-        setStoredKhojDefaultCategories(categories);
+        setKhojDefaultCategoriesState(categories);
     };
+
+    // Tracks (user.id, activeCategories) we've already reconciled with local
+    // state this session. Keying on activeCategories too (not just user.id)
+    // matters because api.getAppConfig() (below) resolves independently of
+    // login state -- if it arrives after this effect already applied
+    // defaults using the placeholder ['Pravachan','Granth'], this re-fires
+    // once with the real admin-configured list. Re-applying `settings.X`
+    // values (when settings is non-null) is harmless/idempotent either way.
+    // SettingsModal's own save never touches `user`/`settings`, so it can't
+    // re-trigger this or loop.
+    const syncedSettingsKeyRef = useRef(null);
+    // Tracks which activeCategories snapshot the offline/logged-out defaults
+    // were last derived from. Re-derives whenever it changes, not just on a
+    // login->logout transition -- activeCategories starts as a mount-time
+    // placeholder (['Pravachan','Granth']) and gets replaced by the real
+    // admin-configured list once api.getAppConfig() resolves, independently
+    // of login state, so a purely-offline session needs this to pick up the
+    // real list too, not just a session that was briefly logged in.
+    const syncedOfflineKeyRef = useRef(null);
+
+    const applyContentTypesFrom = (categories) => {
+        setContentTypes({
+            pravachans: categories.includes('Pravachan'),
+            granths: categories.includes('Granth'),
+            books: categories.includes('Books'),
+        });
+    };
+
+    useEffect(() => {
+        if (authLoading) return;
+
+        if (!user) {
+            syncedSettingsKeyRef.current = null;
+            const offlineKey = activeCategories.join(',');
+            if (syncedOfflineKeyRef.current === offlineKey) return;
+            syncedOfflineKeyRef.current = offlineKey;
+
+            setMode(getInitialMode());
+            setPalette(getInitialPalette());
+            setAnswerFormat(getStoredAnswerFormat());
+            setChatDefaultCategoriesState(getStoredChatDefaultCategories(activeCategories));
+            const khojDefault = getStoredKhojDefaultCategories(activeCategories);
+            setKhojDefaultCategoriesState(khojDefault);
+            applyContentTypesFrom(khojDefault);
+            return;
+        }
+
+        syncedOfflineKeyRef.current = null;
+        const syncKey = `${user.id}|${activeCategories.join(',')}`;
+        if (syncedSettingsKeyRef.current === syncKey) return;
+        syncedSettingsKeyRef.current = syncKey;
+
+        if (settings) {
+            // Server has saved values -- apply directly to in-memory state,
+            // validated/clamped the same way the localStorage path always
+            // was (the backend now also validates on save, but a stale
+            // client or pre-validation legacy row should still be defended
+            // against the same way an offline value already is). No
+            // localStorage read or write anywhere in this branch.
+            if (settings.mode) setMode(settings.mode);
+            if (settings.palette) setPalette(settings.palette);
+            if (isValidAnswerFormat(settings.answerFormat)) setAnswerFormat(settings.answerFormat);
+            if (settings.chatDefaultCategories) {
+                setChatDefaultCategoriesState(clampCategories(settings.chatDefaultCategories, activeCategories));
+            }
+            if (settings.khojDefaultCategories) {
+                const khojDefault = clampCategories(settings.khojDefaultCategories, activeCategories);
+                setKhojDefaultCategoriesState(khojDefault);
+                applyContentTypesFrom(khojDefault);
+            }
+        } else {
+            // No saved server settings yet (brand-new account, or one of the
+            // logins that pre-date this feature) -- use the app's normal
+            // hardcoded defaults, not a migrated copy of this browser's
+            // local values.
+            setMode(getSystemDefaultMode());
+            setPalette(DEFAULT_PALETTE);
+            setAnswerFormat(envDefault());
+            setChatDefaultCategoriesState([...activeCategories]);
+            setKhojDefaultCategoriesState([...activeCategories]);
+            applyContentTypesFrom(activeCategories);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user, settings, authLoading, activeCategories]);
 
     useEffect(() => {
         api.checkLlmHealth().then(setLlmAvailable);
@@ -377,16 +473,12 @@ const AppContent = () => {
         api.getAppConfig().then(cfg => {
             setAppName(cfg.app_name || 'swalakshya');
             setDebugMode(cfg.debug_mode);
+            // Aagam Khoj's own Settings default (contentTypes) is seeded by
+            // the settings-sync effect above, keyed in part on
+            // activeCategories -- setting it here too would race that effect
+            // and, for a logged-in user, could clobber a server-derived value
+            // with a localStorage-derived one.
             setActiveCategories(cfg.active_categories);
-            // Aagam Khoj's own Settings default (clamped to whatever's admin-enabled),
-            // applied once here on load — subsequent searches can deviate freely
-            // without touching the saved default, only the next reload re-seeds it.
-            const khojDefault = getStoredKhojDefaultCategories(cfg.active_categories);
-            setContentTypes({
-                pravachans: khojDefault.includes('Pravachan'),
-                granths: khojDefault.includes('Granth'),
-                books: khojDefault.includes('Books'),
-            });
         });
     }, []);
 
@@ -832,7 +924,9 @@ const AppContent = () => {
                 answerFormat={answerFormat}
                 onSaveAnswerFormat={handleSaveAnswerFormat}
                 activeCategories={activeCategories}
+                chatDefaultCategories={chatDefaultCategories}
                 onSaveChatDefaultCategories={handleSaveChatDefaultCategories}
+                khojDefaultCategories={khojDefaultCategories}
                 onSaveKhojDefaultCategories={handleSaveKhojDefaultCategories}
             />
 
@@ -856,6 +950,7 @@ const AppContent = () => {
                                 language={language}
                                 appName={appName}
                                 activeCategories={activeCategories}
+                                chatDefaultCategories={chatDefaultCategories}
                                 debugMode={debugMode}
                                 activeFilters={activeFilters}
                                 startYear={startYear}

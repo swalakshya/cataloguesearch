@@ -41,14 +41,16 @@ class UsersStore:
             CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
             CREATE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub);
         """)
-        # given_name was added after the table already shipped -- back-fill it
-        # on any DB file created before this column existed, rather than
-        # relying on CREATE TABLE IF NOT EXISTS (a no-op against an existing
-        # table). Same migration pattern as cataloguesearch-chat's session
-        # title column.
+        # given_name and settings_json were both added after the table already
+        # shipped -- back-fill them on any DB file created before these
+        # columns existed, rather than relying on CREATE TABLE IF NOT EXISTS
+        # (a no-op against an existing table). Same migration pattern as
+        # cataloguesearch-chat's session title column.
         existing_columns = {row["name"] for row in self._conn.execute("PRAGMA table_info(users)")}
         if "given_name" not in existing_columns:
             self._conn.execute("ALTER TABLE users ADD COLUMN given_name TEXT")
+        if "settings_json" not in existing_columns:
+            self._conn.execute("ALTER TABLE users ADD COLUMN settings_json TEXT")
         self._conn.commit()
 
     def get_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
@@ -122,6 +124,18 @@ class UsersStore:
                 "google_sub": google_sub,
                 "now": now,
             },
+        )
+        self._conn.commit()
+        return self.get_by_id(user_id)
+
+    def update_settings(self, user_id: str, settings_json: str) -> Optional[Dict[str, Any]]:
+        """Overwrite the user's settings_json. Returns the updated row, or
+        None if user_id doesn't exist (mirrors get_by_id's None-on-miss,
+        rather than raising)."""
+        if not self.get_by_id(user_id):
+            return None
+        self._conn.execute(
+            "UPDATE users SET settings_json = ? WHERE id = ?", (settings_json, user_id)
         )
         self._conn.commit()
         return self.get_by_id(user_id)
