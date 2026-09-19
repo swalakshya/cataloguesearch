@@ -198,3 +198,66 @@ def update_catalogue_row(config: Config, opensearch_client: OpenSearch, director
             opensearch_client.delete(index=catalogue_index, id=relative_path, ignore=[404])
     except Exception as e:
         log_handle.error(f"Error updating catalogue row for '{directory}': {e}", exc_info=True)
+
+
+def _as_list(value) -> list:
+    if not value:
+        return []
+    return [str(v) for v in value] if isinstance(value, list) else [str(value)]
+
+
+def remove_work_from_catalogue_and_metadata(config: Config, opensearch_client: OpenSearch, directory: str):
+    """
+    Removes a work's catalogue row and its Name/Author/Anuyog values from the
+    metadata index. Author/Anuyog/Name values are removed only if no other
+    catalogue row (same category and language) still uses them.
+
+    Args:
+        directory: Absolute path to the work's folder (must still exist on disk
+            if the catalogue row is missing, since the row is then rebuilt from config).
+    """
+    base_folder = config.BASE_PDF_PATH
+    catalogue_index = config.OPENSEARCH_CATALOGUE_INDEX_NAME
+    metadata_index = config.OPENSEARCH_METADATA_INDEX_NAME
+    relative_path = os.path.relpath(directory, base_folder)
+
+    row = None
+    try:
+        row = opensearch_client.get(index=catalogue_index, id=relative_path)["_source"]
+    except Exception:
+        row = _row_for_directory(directory, base_folder)
+    if not row:
+        log_handle.warning(f"No catalogue row found for '{relative_path}'. Skipping catalogue/metadata cleanup.")
+        return
+
+    opensearch_client.delete(index=catalogue_index, id=relative_path, ignore=[404], refresh=True)
+    log_handle.info(f"Deleted catalogue row '{relative_path}'.")
+
+    category, lang_key = row.get("category"), row.get("language")
+    metadata_content_type = category or "Pravachan"
+    remaining = [
+        r for r in get_catalogue(config, opensearch_client)
+        if r.get("category") == category and r.get("language") == lang_key
+    ]
+
+    for meta_key, row_key in (("Name", "granth"), ("Author", "author"), ("Anuyog", "anuyog")):
+        still_used = {v for r in remaining for v in _as_list(r.get(row_key))}
+        for value in _as_list(row.get(row_key)):
+            if value in still_used:
+                log_handle.info(f"Keeping metadata {meta_key}='{value}': still used by another work.")
+                continue
+            try:
+                opensearch_client.update(
+                    index=metadata_index,
+                    id=f"{metadata_content_type}_{meta_key}_{lang_key}",
+                    body={"script": {
+                        "lang": "painless",
+                        "source": "ctx._source.values.removeIf(v -> v == params.v)",
+                        "params": {"v": value},
+                    }},
+                    refresh=True,
+                    ignore=[404],
+                )
+                log_handle.info(f"Removed metadata {meta_key}='{value}' ({metadata_content_type}/{lang_key}).")
+            except Exception as e:
+                log_handle.error(f"Failed to remove metadata {meta_key}='{value}': {e}", exc_info=True)

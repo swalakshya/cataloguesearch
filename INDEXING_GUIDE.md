@@ -398,7 +398,7 @@ python scripts/discovery_cli.py discover \
 
 ### Cleanup / re-index from scratch
 
-To remove all traces of a document (OpenSearch entries, local text files, SQLite state) before re-indexing with changed settings:
+To remove a document from the search indexes before re-indexing (main-index chunks including all sub-sections, IndexState rows including all sub-sections, and — when no other PDF of that work remains indexed — its catalogue row and Name/Author/Anuyog metadata values that no other work uses). Pass a PDF to clean just that PDF, or a folder to clean every PDF in it. The local `ocr/` and `text/` folders are **never** deleted, so you won't need to re-OCR; a warning at the end lists the folders that were kept:
 
 ```bash
 python scripts/discovery_cli.py discover \
@@ -434,7 +434,7 @@ ocr/Pravachans/hindi/Dravyanuyog/My_Series/My_Book/page_0001.json
 text/Pravachans/hindi/Dravyanuyog/My_Series/My_Book/page_0001.txt
 ```
 
-These files are safe to delete and regenerate at any time — the cleanup command does this for you.
+These files are safe to delete and regenerate at any time, but the cleanup command deliberately leaves them in place to avoid re-OCR.
 
 ### OCR JSON format (Tesseract path)
 

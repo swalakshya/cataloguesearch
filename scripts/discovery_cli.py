@@ -6,7 +6,6 @@ CLI/Daemon for CatalogueSearch Discovery Module
 import argparse
 import logging
 import os
-import shutil
 import signal
 import sys
 import time
@@ -21,7 +20,7 @@ from backend.common.opensearch import get_opensearch_client, get_metadata, delet
 from backend.common.opensearch import create_indices_if_not_exists, refresh_pravachan_series_metadata
 from backend.common.opensearch import rebuild_full_metadata_index
 from backend.common import opensearch
-from backend.common.catalogue import rebuild_catalogue_index
+from backend.common.catalogue import rebuild_catalogue_index, remove_work_from_catalogue_and_metadata
 from backend.config import Config
 from backend.crawler.discovery import Discovery
 from backend.crawler.index_state import IndexState
@@ -271,12 +270,15 @@ def delete_index(config: Config):
 
 def cleanup_files(config: Config, path: str):
     """
-    Cleans up all data associated with a specific PDF file or directory of files.
+    Cleans up the indexed data for a specific PDF file or directory of files.
 
-    This involves:
-    1. Deleting corresponding documents from the OpenSearch index.
-    2. Deleting the file's tracking record from the IndexState database.
-    3. Deleting the local processed text output directory.
+    For each PDF:
+    1. Deletes its documents (all sub-sections included) from the OpenSearch index.
+    2. Deletes its IndexState rows (parent and every sub-section).
+    Then, for each work folder with no remaining indexed PDFs, deletes its catalogue
+    row and its Name/Author/Anuyog metadata values (unless another work still uses them).
+
+    The local ocr/ and text/ folders are NEVER deleted, so re-indexing needs no re-OCR.
     """
     log_handle.info(f"--- Starting Cleanup for path: {path} ---")
 
@@ -284,7 +286,6 @@ def cleanup_files(config: Config, path: str):
         log_handle.error(f"Path does not exist or was not provided: {path}")
         return
 
-    # Get a list of all PDF files to process
     pdf_files_to_clean = []
     if os.path.isdir(path):
         for root, _, files in os.walk(path):
@@ -299,10 +300,10 @@ def cleanup_files(config: Config, path: str):
         return
 
     index_state = IndexState(config.SQLITE_DB_PATH)
+    work_dirs = set()
+    kept_folders = []
 
     for pdf_file_path in pdf_files_to_clean:
-        # The 'original_filename' stored in OpenSearch and used for the document_id
-        # is the path relative to the base PDF directory.
         try:
             relative_pdf_path = os.path.relpath(pdf_file_path, config.BASE_PDF_PATH)
         except ValueError:
@@ -311,38 +312,40 @@ def cleanup_files(config: Config, path: str):
 
         log_handle.info(f"Cleaning up resources for: {relative_pdf_path}")
 
-        # --- 1. Delete from OpenSearch ---
         try:
-            # Use the relative path, which is what's stored in the 'original_filename' field.
             delete_documents_by_filename(config, relative_pdf_path)
-        except Exception as e:
+        except Exception:
             log_handle.error(f"Failed to delete OpenSearch documents for {relative_pdf_path}. Skipping OpenSearch cleanup.", exc_info=True)
 
-        # --- 2. Delete from IndexState DB ---
         try:
-            # Calculate document_id the same way Discovery does
             document_id = str(uuid.uuid5(uuid.NAMESPACE_URL, relative_pdf_path))
             index_state.delete_state(document_id)
-            log_handle.info(f"Successfully deleted IndexState record for document_id: {document_id}")
-        except Exception as e:
-            log_handle.error(f"Failed to delete IndexState record for {relative_pdf_path}.", exc_info=True)
+            deleted = index_state.delete_states_for_file(relative_pdf_path)
+            log_handle.info(f"Deleted IndexState records for {relative_pdf_path} (parent {document_id} + {deleted} row(s) by file_path).")
+        except Exception:
+            log_handle.error(f"Failed to delete IndexState records for {relative_pdf_path}.", exc_info=True)
 
-        # --- 3. Delete local processed text directory ---
+        work_dirs.add(os.path.dirname(pdf_file_path))
+        stem = os.path.splitext(relative_pdf_path)[0]
+        kept_folders.append(os.path.join(config.BASE_OCR_PATH, stem))
+        kept_folders.append(os.path.join(config.BASE_TEXT_PATH, stem))
+
+    client = get_opensearch_client(config)
+    for work_dir in sorted(work_dirs):
+        relative_dir = os.path.relpath(work_dir, config.BASE_PDF_PATH)
         try:
-            # Calculate output directory path the same way Discovery does
-            output_dir_name = os.path.splitext(relative_pdf_path)[0]
-            output_dir_path = os.path.join(config.BASE_TEXT_PATH, output_dir_name)
-
-            if os.path.isdir(output_dir_path):
-                log_handle.info(f"Deleting local processed text directory: {output_dir_path}")
-                shutil.rmtree(output_dir_path)
-                log_handle.info(f"Successfully deleted {output_dir_path}")
-            else:
-                log_handle.warning(f"Local processed text directory not found, skipping deletion: {output_dir_path}")
-        except Exception as e:
-            log_handle.error(f"Failed to delete directory {output_dir_path}.", exc_info=True)
+            if index_state.has_indexed_files_in_dir(relative_dir):
+                log_handle.info(f"Other PDFs in '{relative_dir}' are still indexed. Keeping its catalogue row and metadata.")
+                continue
+            remove_work_from_catalogue_and_metadata(config, client, work_dir)
+        except Exception:
+            log_handle.error(f"Failed to clean catalogue/metadata for '{relative_dir}'.", exc_info=True)
 
     log_handle.info("--- Cleanup process completed. ---")
+    log_handle.warning(
+        "The following ocr/text folders were NOT cleaned up (kept to avoid re-OCR): "
+        + ", ".join(kept_folders)
+    )
 
 
 def main():

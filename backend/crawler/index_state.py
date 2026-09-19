@@ -143,6 +143,29 @@ class IndexState:
         conn.commit()
         conn.close()
 
+    def delete_states_for_file(self, relative_file_path: str) -> int:
+        """Deletes the parent row and every sub-section row ("<path>#field:name") for a PDF."""
+        escaped = relative_file_path.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        conn = sqlite3.connect(self.state_db_path)
+        c = conn.cursor()
+        c.execute(
+            "DELETE FROM indexed_files_state WHERE file_path = ? OR file_path LIKE ? ESCAPE '\\'",
+            (relative_file_path, escaped + "#%"),
+        )
+        deleted = c.rowcount
+        conn.commit()
+        conn.close()
+        return deleted
+
+    def has_indexed_files_in_dir(self, relative_dir: str) -> bool:
+        """True if any PDF directly inside `relative_dir` still has a state row."""
+        conn = sqlite3.connect(self.state_db_path)
+        c = conn.cursor()
+        c.execute("SELECT file_path FROM indexed_files_state")
+        paths = [row[0] for row in c.fetchall() if row[0]]
+        conn.close()
+        return any(os.path.dirname(fp.split('#')[0]) == relative_dir for fp in paths)
+
     def garbage_collect(self, base_dir):
         """
         Deletes all the document_ids which no longer have files
