@@ -138,10 +138,14 @@ class StepCtx:
         db.update_step(self._run.id, self.step, detail=text[:200])
 
     def progress(self, label: str, done: Optional[float] = None, total: Optional[float] = None,
-                 unit: Optional[str] = None, index: Optional[int] = None, of: Optional[int] = None) -> None:
-        """Where the step is now ("folder 2 of 5"). Clears the previous phase's live detail."""
+                 unit: Optional[str] = None, index: Optional[int] = None, of: Optional[int] = None,
+                 items: Optional[list] = None) -> None:
+        """Where the step is now ("folder 2 of 5"). Clears the previous phase's live detail.
+
+        `items` is an optional checklist, [{"name", "state", "note"?}, ...], so the UI can show what each folder is doing.
+        """
         self._runner._set_progress(self._run, self.step, phase={
-            k: v for k, v in dict(label=label, done=done, total=total, unit=unit, index=index, of=of).items()
+            k: v for k, v in dict(label=label, done=done, total=total, unit=unit, index=index, of=of, items=items).items()
             if v is not None}, reset_sub=True)
 
     def summary(self, text: str) -> None:

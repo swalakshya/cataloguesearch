@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
     api, postJson, timeAgo, Card, PageShell, ErrorBanner, ConfirmModal,
     useJobs, BusyNotice, RunPanel, JobHistory,
@@ -79,7 +79,7 @@ function ActionButton({ children, onClick, disabled, title, tone = 'blue' }) {
     );
 }
 
-function FolderRow({ folder, busy, onRun, onCleanup }) {
+function FolderRow({ folder, busy, onRun, onCleanup, selected, onToggle }) {
     const [open, setOpen] = useState(folder.pending > 0 && folder.files.length <= 6); // pending includes OCRed, so folders awaiting review open up
     const name = folder.dir || '(no scan_config folder)';
     const c = folder.counts;
@@ -87,6 +87,9 @@ function FolderRow({ folder, busy, onRun, onCleanup }) {
     return (
         <div className="border border-slate-200 rounded-md">
             <div className="flex flex-wrap items-center gap-3 px-3 py-2">
+                <input type="checkbox" className="cursor-pointer" checked={selected.has(folder.dir)} disabled={!folder.runnable}
+                    onChange={() => onToggle(folder.dir)} aria-label={`Select ${name}`}
+                    title={folder.runnable ? 'Select to run OCR / index on several folders at once' : 'Not under a scan_config folder, so it cannot be targeted'} />
                 <button onClick={() => setOpen((o) => !o)} className="cursor-pointer text-slate-400 hover:text-slate-700 w-4" aria-label="toggle files">
                     {open ? '▾' : '▸'}
                 </button>
@@ -142,7 +145,7 @@ function FolderRow({ folder, busy, onRun, onCleanup }) {
 
 // A category opens by itself when something in it needs ingesting; otherwise it stays folded but one click away,
 // so already-indexed files can still be opened in Eval for a spot check.
-function CategoryCard({ cat, busy, onRun, onCleanup }) {
+function CategoryCard({ cat, busy, onRun, onCleanup, selected, onToggle }) {
     const pending = cat.counts.not_indexed + cat.counts.ocred;
     const [open, setOpen] = useState(pending > 0);
     return (
@@ -163,7 +166,7 @@ function CategoryCard({ cat, busy, onRun, onCleanup }) {
         >
             {open ? (
                 <div className="space-y-2">
-                    {cat.folders.map((f) => <FolderRow key={f.dir || '(none)'} folder={f} busy={busy} onRun={onRun} onCleanup={onCleanup} />)}
+                    {cat.folders.map((f) => <FolderRow key={f.dir || '(none)'} folder={f} busy={busy} onRun={onRun} onCleanup={onCleanup} selected={selected} onToggle={onToggle} />)}
                 </div>
             ) : (
                 <p className="text-sm text-slate-400">
@@ -175,10 +178,35 @@ function CategoryCard({ cat, busy, onRun, onCleanup }) {
     );
 }
 
+// Appears once folders are ticked: run OCR / Index / Re-index across all of them in one job (one shared wait for LLM batches).
+function SelectionBar({ folders, busy, onRun, onClear }) {
+    const n = folders.length;
+    const needOcr = folders.filter((f) => f.counts.not_indexed > 0).length;
+    const toIndex = folders.filter((f) => f.pending > 0).length;
+    const hasIndexed = folders.filter((f) => f.counts.indexed > 0).length;
+    const btn = 'cursor-pointer px-3 py-1.5 rounded text-sm font-medium border shadow-sm disabled:opacity-40 disabled:cursor-not-allowed';
+    return (
+        <div className="sticky top-2 z-10 bg-white border-2 border-blue-300 rounded-lg shadow-md px-4 py-2.5 flex flex-wrap items-center gap-3" data-testid="selection-bar">
+            <div className="flex-1 min-w-[12rem]">
+                <div className="text-sm font-semibold text-slate-800">{n} folder{n === 1 ? '' : 's'} selected</div>
+                <div className="text-xs text-slate-500">OCR needed in {needOcr} · {toIndex} to index · {hasIndexed} already indexed. Folders a step doesn't apply to are skipped.</div>
+            </div>
+            <button disabled={busy || needOcr === 0} onClick={() => onRun('ocr')} className={`${btn} border-blue-300 text-blue-700 hover:bg-blue-50`}
+                title="OCR the selected folders that still need it (no indexing)">OCR only</button>
+            <button disabled={busy || toIndex === 0} onClick={() => onRun('index')} className={`${btn} border-blue-600 bg-blue-600 text-white hover:bg-blue-700`}
+                title="OCR (if needed), wait for LLM batch jobs once, then index the selected folders">Index</button>
+            <button disabled={busy || hasIndexed === 0} onClick={() => onRun('reindex')} className={`${btn} border-slate-300 text-slate-700 hover:bg-slate-50`}
+                title="Force the index step again for the selected folders that are already indexed">Re-index</button>
+            <button onClick={onClear} className="cursor-pointer text-xs text-blue-600 hover:underline">Clear</button>
+        </div>
+    );
+}
+
 export default function DiscoverPage() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [cleanup, setCleanup] = useState(null);
+    const [selected, setSelected] = useState(() => new Set());
     const jobsRef = useRef(null);
 
     const load = useCallback(async () => {
@@ -198,8 +226,26 @@ export default function DiscoverPage() {
         try {
             const { run_id: runId } = await postJson('/discover/runs', { folders, mode });
             await jobs.started(runId);
-        } catch (e) { jobs.setError(e.message); }
+            return true;
+        } catch (e) { jobs.setError(e.message); return false; }
     };
+
+    const allFolders = useMemo(() => (data ? data.categories.flatMap((c) => c.folders) : []), [data]);
+    const selectedFolders = useMemo(() => allFolders.filter((f) => selected.has(f.dir)), [allFolders, selected]);
+    const toggleSelected = (dir) => setSelected((cur) => {
+        const next = new Set(cur);
+        if (next.has(dir)) next.delete(dir); else next.add(dir);
+        return next;
+    });
+    const selectPending = () => setSelected(new Set(allFolders.filter((f) => f.runnable && f.pending > 0).map((f) => f.dir)));
+    const runSelected = async (mode) => { if (await start(selectedFolders.map((f) => f.dir), mode)) setSelected(new Set()); };
+
+    // A rescan can remove a folder (e.g. after cleanup); never keep selecting something that is no longer listed.
+    useEffect(() => {
+        if (!data) return;
+        const known = new Set(allFolders.map((f) => f.dir));
+        setSelected((cur) => (cur.size && [...cur].some((d) => !known.has(d)) ? new Set([...cur].filter((d) => known.has(d))) : cur));
+    }, [data, allFolders]);
 
     const runCleanup = async (folder) => {
         jobs.setError('');
@@ -253,9 +299,15 @@ export default function DiscoverPage() {
             <BusyNotice jobs={jobs} />
             <RunPanel jobs={jobs} />
 
+            {selectedFolders.length > 0 && (
+                <SelectionBar folders={selectedFolders} busy={jobs.busy} onRun={runSelected} onClear={() => setSelected(new Set())} />
+            )}
+
             <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-slate-700">Files</h2>
                 <div className="flex items-center gap-4 text-xs">
+                    <button onClick={selectPending} disabled={!allFolders.some((f) => f.runnable && f.pending > 0)}
+                        className="cursor-pointer text-blue-600 hover:underline disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed">Select pending</button>
                     {data && <span className="text-slate-400">scanned {timeAgo(data.generated_at)}</span>}
                     <button onClick={load} disabled={loading} className="cursor-pointer text-blue-600 hover:underline disabled:opacity-50">
                         {loading ? 'scanning…' : 'rescan'}
@@ -266,7 +318,7 @@ export default function DiscoverPage() {
             {!data && <p className="text-sm text-slate-400">Loading…</p>}
             {data && data.categories.map((cat) => (
                 <CategoryCard key={cat.name} cat={cat} busy={jobs.busy}
-                    onRun={(d, mode) => start([d], mode)} onCleanup={(d) => setCleanup(d)} />
+                    onRun={(d, mode) => start([d], mode)} onCleanup={(d) => setCleanup(d)} selected={selected} onToggle={toggleSelected} />
             ))}
 
             <JobHistory jobs={jobs} />

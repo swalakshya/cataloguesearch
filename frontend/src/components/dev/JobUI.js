@@ -321,6 +321,38 @@ function ProgressBlock({ step }) {
     );
 }
 
+const ITEM_STATE = {
+    pending: { icon: '·', cls: 'text-slate-400', text: 'queued' },
+    running: { icon: null, cls: 'text-blue-600', text: 'running' },
+    done: { icon: '✓', cls: 'text-green-600', text: 'done' },
+    skipped: { icon: '–', cls: 'text-slate-400', text: 'skipped' },
+    submitted: { icon: '⏳', cls: 'text-amber-600', text: 'submitted' },
+    waiting: { icon: '⏳', cls: 'text-amber-600', text: 'waiting' },
+    failed: { icon: '✗', cls: 'text-red-600', text: 'failed' },
+    cancelled: { icon: '■', cls: 'text-amber-600', text: 'cancelled' },
+};
+
+// What each folder is doing in a run over several folders (queued, running, submitted, waiting, done, ...).
+export function FolderChecklist({ items }) {
+    if (!Array.isArray(items) || items.length < 2) return null;
+    return (
+        <ul className="mt-2 max-h-44 overflow-auto rounded border border-slate-100 divide-y divide-slate-50 bg-white" data-testid="folder-checklist">
+            {items.map((i) => {
+                const st = ITEM_STATE[i.state] || ITEM_STATE.pending;
+                return (
+                    <li key={i.name} data-state={i.state} className="flex items-center gap-2 px-2 py-1 text-xs">
+                        <span className={`w-4 text-center shrink-0 ${st.cls}`} aria-hidden="true">
+                            {st.icon || <span className="inline-block w-2.5 h-2.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />}
+                        </span>
+                        <span className="flex-1 min-w-0 truncate text-slate-700" title={i.name}>{i.name}</span>
+                        <span className={`shrink-0 ${st.cls}`}>{i.note || st.text}</span>
+                    </li>
+                );
+            })}
+        </ul>
+    );
+}
+
 export function RunPanel({ jobs, onRetry }) {
     const [logOpen, setLogOpen] = useState({}); // "runId:step" -> user's choice; unset = open only for failed steps
     const run = jobs.selectedRun;
@@ -357,6 +389,7 @@ export function RunPanel({ jobs, onRetry }) {
                         <div className="flex-1 min-w-0">
                             <div className="text-sm font-medium text-slate-700 truncate">{s.title || s.name}</div>
                             {s.status === 'running' && <ProgressBlock step={s} />}
+                            {s.status !== 'pending' && s.status !== 'skipped' && <FolderChecklist items={s.progress?.phase?.items} />}
                             {s.detail && s.status !== 'pending' && s.status !== 'skipped' && !(s.status === 'running' && s.progress?.sub) && (
                                 <div className={`text-xs text-slate-500 font-mono ${['waiting', 'failed'].includes(s.status) ? 'break-words' : 'truncate'}`}>{s.detail}</div>
                             )}

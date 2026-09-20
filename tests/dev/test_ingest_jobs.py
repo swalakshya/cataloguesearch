@@ -137,3 +137,72 @@ def test_commands_carry_pythonpath_and_the_right_flags(jobs_env):
     idx = jobs._index_cmd("Granth/x", force=True, skip_post_steps=True)
     assert idx.argv.count("--index") == 1 and "--force" in idx.argv and "--crawl" not in idx.argv
     assert "--cleanup" in jobs._cli("Granth/x", "--cleanup", label="cleanup").argv
+
+
+# ---- per-folder status: which folder is queued / running / submitted / waiting / done, for runs over several folders
+
+def items(run_, step):
+    """{folder: (state, note)} from a step's published checklist."""
+    s = next(x for x in run_["steps"] if x["name"] == step)
+    return {i["name"]: (i["state"], i.get("note")) for i in s["progress"]["phase"]["items"]}
+
+
+def phase(run_, step):
+    return next(x for x in run_["steps"] if x["name"] == step)["progress"]["phase"]
+
+
+def test_multi_folder_run_reports_each_folder_in_every_phase(jobs_env, monkeypatch):
+    w = World(monkeypatch, {"A": dict(kind="tesseract", ni=1, oc=0, ix=0),
+                            "B": dict(kind="batch", ni=1, oc=0, ix=0, ready_after=2),
+                            "C": dict(kind="batch", ni=1, oc=0, ix=0, ready_after=999)})
+    monkeypatch.setattr(jobs, "MAX_WAIT_SECONDS", 6)
+    result = run(jobs_env, ["A", "B", "C"])
+
+    ocr = items(result, "ocr")
+    assert ocr["A"] == ("done", "OCR complete")
+    assert ocr["B"][0] == "submitted" and ocr["C"][0] == "submitted"
+    assert (phase(result, "ocr")["done"], phase(result, "ocr")["total"]) == (3, 3)
+
+    wait = items(result, "wait")
+    assert set(wait) == {"B", "C"}                                  # A never needed waiting
+    assert wait["B"] == ("done", "collected")
+    assert wait["C"][0] == "waiting" and "batch submitted" in wait["C"][1]
+    assert (phase(result, "wait")["done"], phase(result, "wait")["total"]) == (1, 2)
+
+    index = items(result, "index")
+    assert index["A"] == ("done", "indexed") and index["B"] == ("done", "indexed")
+    assert index["C"][0] == "waiting" and "click Index again" in index["C"][1]
+    assert (phase(result, "index")["done"], phase(result, "index")["total"]) == (2, 3)
+
+
+def test_folders_with_nothing_to_do_are_shown_as_skipped(jobs_env, monkeypatch):
+    World(monkeypatch, {"Done": dict(kind="tesseract", ni=0, oc=0, ix=2), "New": dict(kind="tesseract", ni=1, oc=0, ix=0)})
+    result = run(jobs_env, ["Done", "New"])
+    assert result["status"] == "succeeded"
+    assert items(result, "ocr")["Done"] == ("skipped", "already OCRed") and items(result, "ocr")["New"][0] == "done"
+    assert items(result, "index")["Done"] == ("skipped", "already indexed") and items(result, "index")["New"][0] == "done"
+
+
+def test_a_failed_folder_is_marked_failed_and_the_others_carry_on(jobs_env, monkeypatch):
+    w = World(monkeypatch, {"D": dict(kind="dead", ni=1, oc=0, ix=0), "E": dict(kind="tesseract", ni=1, oc=0, ix=0)})
+    result = run(jobs_env, ["D", "E"])
+    assert items(result, "wait")["D"][0] == "failed"
+    assert items(result, "index")["E"][0] == "done"
+
+
+def test_cancelling_marks_the_folder_that_was_running(jobs_env, monkeypatch):
+    import time
+    w = World(monkeypatch, {"A": dict(kind="tesseract", ni=1, oc=0, ix=0), "B": dict(kind="tesseract", ni=1, oc=0, ix=0)})
+    monkeypatch.setattr(jobs, "_crawl_cmd", lambda d: r.Cmd(["sh", "-c", "sleep 60"], "slow crawl"))
+    rid = jobs.start_discover(["A", "B"], "index")
+    time.sleep(1.5)
+    jobs_env.runner.cancel(rid)
+    result = wait_done(rid, 10)
+    assert result["status"] == "cancelled"
+    assert items(result, "ocr") == {"A": ("cancelled", None), "B": ("pending", None)}   # A was running; B never started
+
+
+def test_reindex_reports_per_folder_too(jobs_env, monkeypatch):
+    World(monkeypatch, {"F": dict(kind="tesseract", ni=0, oc=0, ix=3), "G": dict(kind="tesseract", ni=0, oc=0, ix=1)})
+    result = run(jobs_env, ["F", "G"], "reindex")
+    assert items(result, "index") == {"F": ("done", "re-indexed"), "G": ("done", "re-indexed")}

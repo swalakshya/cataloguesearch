@@ -56,30 +56,72 @@ def _ago(iso: Optional[str]) -> str:
     return f"{secs // 3600}h {secs % 3600 // 60}m" if secs >= 3600 else f"{max(secs, 0) // 60}m"
 
 
+class Checklist:
+    """What each folder is doing in one phase, published as the step's progress.
+
+    States: pending, running, done, skipped, submitted (LLM batch), waiting, failed, cancelled. The UI draws them as a
+    list under the step, so a run over several folders shows which is queued, running, waiting or finished.
+    """
+    FINISHED = ("done", "skipped", "submitted", "failed", "cancelled")
+
+    def __init__(self, ctx: StepCtx, folders: List[str], label: str, unit: str = "folders",
+                 finished: tuple = FINISHED, initial: str = "pending"):
+        self.ctx, self.label, self.unit, self.finished = ctx, label, unit, finished
+        self.items = {d: {"name": d, "state": initial} for d in folders}
+
+    def set(self, folder: str, state: str, note: Optional[str] = None, label: Optional[str] = None) -> None:
+        self.items[folder] = {"name": folder, "state": state, **({"note": note} if note else {})}
+        self.publish(label)
+
+    def publish(self, label: Optional[str] = None) -> None:
+        items = list(self.items.values())
+        done = sum(1 for i in items if i["state"] in self.finished)
+        self.ctx.progress(label or self.label, done=done, total=len(items), unit=self.unit, items=items)
+
+    def cancel_running(self) -> None:
+        for d, item in self.items.items():
+            if item["state"] == "running":
+                self.items[d] = {"name": d, "state": "cancelled"}
+        self.publish()
+
+
 def ocr_phase(ctx: StepCtx, folders: List[str]) -> int:
     """One crawl pass per folder that still has un-OCRed files. Batch OCR only submits here; the wait phase collects."""
+    cl = Checklist(ctx, folders, "OCR")
+    cl.publish()
     failed, submitted, done_now = [], 0, 0
-    for i, d in enumerate(folders, 1):
+    for d in folders:
         if ctx.cancelled:
+            cl.cancel_running()
             return 130
         if status.folder_snapshot(d)["not_indexed"] == 0:
             ctx.log(f"✓ {d}: OCR already complete, nothing to do.")
+            cl.set(d, "skipped", "already OCRed")
             continue
-        ctx.progress(d, done=i - 1, total=len(folders), unit="folders")
+        cl.set(d, "running", label=f"OCR · {d}")
         code = ctx.run(_crawl_cmd(d))
+        if ctx.cancelled:
+            cl.set(d, "cancelled")
+            return 130
         if code != 0:
             failed.append(d)
+            cl.set(d, "failed", f"exit {code}")
             continue
         snap = status.folder_snapshot(d)
         if snap["not_indexed"] == 0:
             done_now += 1
+            cl.set(d, "done", "OCR complete")
         elif snap["batch_pending"] > 0:
             submitted += 1
+            cl.set(d, "submitted", "LLM batch submitted")
         else:
             ctx.log(f"❌ {d}: {snap['not_indexed']} file(s) still without OCR and no LLM batch job is running for them.")
             failed.append(d)
+            cl.set(d, "failed", "no OCR and no batch job running")
+    cl.publish("OCR")
     ctx.summary(f"OCR done in {done_now} folder(s), {submitted} submitted to LLM batch"
-                + (f", {len(failed)} failed" if failed else ""))
+                + (f", {len(failed)} failed" if failed else "")
+                + (f", {sum(1 for i in cl.items.values() if i['state'] == 'skipped')} skipped" if any(i["state"] == "skipped" for i in cl.items.values()) else ""))
     return 1 if failed else 0
 
 
@@ -100,17 +142,23 @@ def wait_phase(ctx: StepCtx, folders: List[str]) -> int:
         ctx.summary("No LLM batch jobs to wait for")
         return 0
 
+    cl = Checklist(ctx, pending, "Waiting for LLM batch jobs", unit="folders collected",
+                   finished=("done", "failed"), initial="waiting")
     while True:
         if time.monotonic() - started > MAX_WAIT_SECONDS:
             ctx.log(f"⏳ Still waiting on {len(pending)} folder(s) after {MAX_WAIT_SECONDS // 60} min:")
             for d in pending:
                 ctx.log(f"   - {d}")
             ctx.log("Come back later and click Discover again. It will collect the finished jobs and carry on.")
+            cl.publish()
             ctx.summary(f"{len(pending)} folder(s) still waiting on LLM batch. Come back later and click Discover again.")
             return EXIT_WAITING
 
-        ctx.progress("Waiting for LLM batch jobs", done=len(folders) - len(pending), total=len(folders), unit="folders OCRed")
-        oldest = min((status.folder_snapshot(d)["oldest_batch_submitted_at"] or "") for d in pending) or None
+        snaps = {d: status.folder_snapshot(d) for d in pending}
+        for d, snap in snaps.items():
+            cl.items[d] = {"name": d, "state": "waiting", "note": f"batch submitted {_ago(snap['oldest_batch_submitted_at'])} ago"}
+        cl.publish()
+        oldest = min((snap["oldest_batch_submitted_at"] or "") for snap in snaps.values()) or None
         left = MAX_WAIT_SECONDS - int(time.monotonic() - started)
         ctx.log(f"⏳ {len(pending)} folder(s) waiting on LLM batch jobs (oldest submitted {_ago(oldest)} ago); checking again in {POLL_SECONDS}s.")
         remaining = POLL_SECONDS
@@ -128,50 +176,71 @@ def wait_phase(ctx: StepCtx, folders: List[str]) -> int:
                 return 130
             ctx.detail(f"Checking batch jobs: {d}")
             code = ctx.run(_crawl_cmd(d))
+            if ctx.cancelled:
+                return 130
             if code != 0:
+                cl.set(d, "failed", f"exit {code}")
                 return code
             snap = status.folder_snapshot(d)
-            if snap["not_indexed"] > 0 and snap["batch_pending"] == 0:
+            if snap["not_indexed"] == 0:
+                cl.set(d, "done", "collected")
+            elif snap["batch_pending"] == 0:
                 ctx.log(f"❌ {d}: OCR incomplete and no batch job is running any more (job failed or expired?). "
                         f"Click Discover again to resubmit.")
+                cl.set(d, "failed", "batch job ended without complete OCR")
                 ctx.summary(f"{d}: batch job ended without complete OCR")
                 return 1
         pending = waiting()
         if not pending:
+            cl.publish()
             ctx.summary("All LLM batch jobs finished")
             return 0
 
 
 def index_phase(ctx: StepCtx, folders: List[str], force: bool = False) -> int:
     """Index folders whose OCR is complete. Others are left for the next Discover (reported as waiting)."""
+    label = "Re-index" if force else "Index"
+    cl = Checklist(ctx, folders, label)
     todo, not_ready = [], []
     for d in folders:
         s = status.folder_snapshot(d)
         if not force and s["not_indexed"] > 0:
             not_ready.append(d)
+            cl.items[d] = {"name": d, "state": "waiting", "note": "OCR not finished; click Index again later"}
         elif force or s["pending"] > 0:
             todo.append(d)
         else:
             ctx.log(f"✓ {d}: already indexed.")
+            cl.items[d] = {"name": d, "state": "skipped", "note": "already indexed"}
+    cl.publish()
 
     failed = []
-    for i, d in enumerate(todo, 1):
+    for d in todo:
         if ctx.cancelled:
+            cl.cancel_running()
             return 130
-        ctx.progress(d, done=i - 1, total=len(todo), unit="folders")
+        cl.set(d, "running", label=f"{label} · {d}")
         # series refresh + catalogue rebuild only after the last folder, not after every one
-        code = ctx.run(_index_cmd(d, force=force, skip_post_steps=i < len(todo)))
+        code = ctx.run(_index_cmd(d, force=force, skip_post_steps=d != todo[-1]))
+        if ctx.cancelled:
+            cl.set(d, "cancelled")
+            return 130
         if code != 0:
             failed.append(d)
+            cl.set(d, "failed", f"exit {code}")
         elif not force and status.folder_snapshot(d)["pending"] > 0:
             ctx.log(f"❌ {d}: some files are still not indexed after the index step; see the log above.")
             failed.append(d)
+            cl.set(d, "failed", "some files still not indexed")
+        else:
+            cl.set(d, "done", "re-indexed" if force else "indexed")
 
     parts = [f"{len(todo) - len(failed)} of {len(todo)} folder(s) {'re-indexed' if force else 'indexed'}"]
     if not_ready:
         parts.append(f"{len(not_ready)} not ready (OCR incomplete)")
         for d in not_ready:
             ctx.log(f"⏳ {d}: OCR not complete yet, skipped. Click Discover again later.")
+    cl.publish(label)
     ctx.summary(", ".join(parts))
     if failed:
         return 1
