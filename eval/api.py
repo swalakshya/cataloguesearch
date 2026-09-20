@@ -29,7 +29,7 @@ from PIL import Image
 
 from backend.config import Config
 from backend.crawler.advanced_pdf_processor import AdvancedPDFProcessor
-from backend.common.scan_config import get_scan_config, get_ignore_bookmarks
+from backend.common.scan_config import get_scan_config, get_ignore_bookmarks, effective_language
 from backend.common.utils import get_merged_config
 from backend.crawler.index_state import IndexState
 from backend.crawler.bookmark_extractor.factory import create_bookmark_extractor_by_name
@@ -331,7 +331,9 @@ async def get_file_scan_config(relative_path: str):
             raise HTTPException(status_code=404, detail=f"File not found: {relative_path}")
 
         # Get scan config using the utility function
-        scan_config = get_scan_config(file_path, base_pdf_folder)
+        scan_config = dict(get_scan_config(file_path, base_pdf_folder))
+        # "language" may live in config.json rather than scan_config.json; resolve it the way indexing does
+        scan_config["language"] = effective_language(scan_config, get_merged_config(file_path, base_pdf_folder))
 
         return scan_config
 

@@ -19,15 +19,18 @@ function Pill({ status, count }) {
     );
 }
 
-// Open the file straight in an Eval tool. Only once OCR exists (OCRed or Indexed) is there anything to check.
+// Open the file straight in an Eval tool. PDF Parser works on the PDF itself (it OCRs a page on demand and picks up
+// the file's scan_config), so it is offered for every file, including ones not OCRed yet. Paragraph Eval compares
+// against OCR output, so it only appears once that exists (OCRed or Indexed).
 function EvalLinks({ file }) {
-    if (file.status === 'not_indexed') return null;
     const q = encodeURIComponent(file.relative_path);
     const cls = 'px-1.5 py-0.5 rounded border border-slate-300 text-slate-600 hover:bg-slate-50 hover:text-blue-700 cursor-pointer';
     return (
         <span className="flex gap-1.5">
             <a className={cls} href={`/eval?tab=pdf-parser&file=${q}`} target="_blank" rel="noreferrer" title="Open in PDF Parser">PDF Parser ↗</a>
-            <a className={cls} href={`/eval?tab=paragraph-eval&file=${q}`} target="_blank" rel="noreferrer" title="Open in Paragraph Gen Eval">Paragraph Eval ↗</a>
+            {file.status !== 'not_indexed' && (
+                <a className={cls} href={`/eval?tab=paragraph-eval&file=${q}`} target="_blank" rel="noreferrer" title="Open in Paragraph Gen Eval">Paragraph Eval ↗</a>
+            )}
         </span>
     );
 }

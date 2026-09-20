@@ -252,6 +252,8 @@ The Deploy page runs three actions, individually or chained ("Deploy all"): buil
 
 Progress is shown as bars, not logs (logs are one click away and open by themselves on failure). Our scripts print `@@PROGRESS {json}` marker lines; the runner also reads docker build steps and `pv`/`tqdm` bars. A bar appears only when there is a real done/total; otherwise you see where it is plus "usually takes ~N min" from previous runs. Discover files that have OCR (OCRed or Indexed) get **PDF Parser** / **Paragraph Eval** links that open `/eval?tab=…&file=<path>` with the file loaded (server file mode only).
 
+In **PDF Parser**, opening a library file (Browse Files or a Discover link) fills the controls from its `scan_config` (crop, language, engine, model, multi-page). If the config has `sub_sections`, a **Verify sub-sections** button opens a viewer with each sub-section's start and end page side by side; step with the arrow keys, tick a few, or take a random 10. It only looks; nothing is saved.
+
 Tests for this tooling: `python -m pytest tests/dev -o log_cli=false` (no Docker or OpenSearch needed).
 
 ---

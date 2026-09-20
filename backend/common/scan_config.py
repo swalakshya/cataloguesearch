@@ -64,6 +64,14 @@ def get_ignore_bookmarks(file_path: str, base_pdf_folder: str) -> bool:
     return ignore_bookmarks
 
 
+def effective_language(scan_config: dict, merged_config: dict) -> str:
+    """
+    The language a PDF is processed in: scan_config's "language" wins over config.json's, default "hi".
+    Same rule the crawler applies (SingleFileProcessor), so the eval UI shows what indexing will use.
+    """
+    return (scan_config or {}).get("language") or (merged_config or {}).get("language") or "hi"
+
+
 def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
     """
     Loads scan_config for a given PDF file by merging scan_config.json files

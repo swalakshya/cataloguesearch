@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Loader2 } from 'lucide-react';
+import { LLM_MODELS, DEFAULT_CONTROLS, scanConfigToControls, describeControls } from './scanConfigPrefill';
+import SubSectionVerifier from './SubSectionVerifier';
 import { Spinner } from '../SharedComponents';
 import ShowBookmarksButton from '../ShowBookmarksButton';
 import BookmarksModal from '../BookmarksModal';
@@ -52,6 +54,12 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
     const [cropLeft, setCropLeft] = useState(0);
     const [cropRight, setCropRight] = useState(0);
     const [useDefaultScanConfig, setUseDefaultScanConfig] = useState(true);
+    // "LLM · Hindi · crop T9 B4": what was filled in from the opened library file's scan_config (null for uploads)
+    const [appliedNote, setAppliedNote] = useState(null);
+    const autoCropRef = useRef(false); // apply the scan_config crop to the preview as soon as page 1 renders
+    // The opened library file's raw scan_config (null for uploads); its sub_sections feed the Verify view.
+    const [libraryScanConfig, setLibraryScanConfig] = useState(null);
+    const [showVerify, setShowVerify] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     // True only while a single-page Process request is in flight (not file loading or batch jobs).
     const [isProcessing, setIsProcessing] = useState(false);
@@ -93,6 +101,14 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
 
     const { multiPagePDF, setMultiPagePDF, splitPct, setSplitPct, splitPreviewUrls, splitImageFile } =
         useMultiPageSplit({ previewUrl, croppedPreviewUrl });
+
+    useEffect(() => {
+        if (!autoCropRef.current || !previewUrl) return;
+        autoCropRef.current = false;
+        if (cropTop > 0 || cropBottom > 0 || cropLeft > 0 || cropRight > 0)
+            pdfViewer.applyCropToDataUrl(previewUrl, cropTop, cropBottom, cropLeft, cropRight);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [previewUrl]);
     const [activeHalf, setActiveHalf] = useState('left');
 
     // Reset results and tab when mode changes
@@ -117,6 +133,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                     if (baseDirectoryHandles?.pdf) {
                         resetAllState();
                         setIsLoading(true);
+                        await loadScanConfigControls(propSelectedFile.pdfFilePath || `${propSelectedFile.relativePath}.pdf`);
                         const pathParts = propSelectedFile.relativePath.split('/');
                         const pdfDirectory = pathParts.slice(0, -1).join('/');
                         let currentHandle = baseDirectoryHandles.pdf;
@@ -230,6 +247,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
     };
 
     const resetAllState = () => {
+        setShowVerify(false); // the Verify view belongs to the file that was open
         setSelectedFile(null);
         setIsPDF(false);
         setShowBookmarkModal(false);
@@ -240,9 +258,45 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
         resetBatchState();
     };
 
+    // Fill every control from the opened library file's scan_config, so the page shows what processing will use.
+    // Never throws: if the config can't be read the controls just go back to their defaults.
+    const applyControls = (ctl) => {
+        setMode(ctl.mode);
+        setLanguage(ctl.language);
+        setDhundhari(ctl.dhundhari);
+        setModelName(ctl.modelName);
+        setCropTop(ctl.crop.top);
+        setCropBottom(ctl.crop.bottom);
+        setCropLeft(ctl.crop.left);
+        setCropRight(ctl.crop.right);
+        setMultiPagePDF(ctl.multiPage);
+        setSplitPct(ctl.splitPct);
+    };
+
+    const loadScanConfigControls = async (pdfRelativePath) => {
+        try {
+            const res = await fetch(`${API_BASE_URL}/eval/ocr/scan-config?relative_path=${encodeURIComponent(pdfRelativePath)}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const cfg = await res.json();
+            const ctl = scanConfigToControls(cfg);
+            setLibraryScanConfig(cfg);
+            applyControls(ctl);
+            setAppliedNote(describeControls(ctl));
+            autoCropRef.current = Object.values(ctl.crop).some((v) => v > 0);
+        } catch (err) {
+            console.warn('Could not load scan_config for', pdfRelativePath, err);
+            applyControls(DEFAULT_CONTROLS);
+            setAppliedNote(null);
+            setLibraryScanConfig(null);
+            autoCropRef.current = false;
+        }
+    };
+
     const handleFileReady = async (file) => {
         if (onFileSelect) onFileSelect(null);
         resetAllState();
+        setAppliedNote(null);
+        setLibraryScanConfig(null);
         setSelectedFile(file);
         const isFilePDF = file.type === 'application/pdf';
         setIsPDF(isFilePDF);
@@ -595,6 +649,16 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
 
     return (
         <div>
+            {showVerify && Array.isArray(libraryScanConfig?.sub_sections) && pdfDoc && (
+                <SubSectionVerifier
+                    pdfDoc={pdfDoc}
+                    subSections={libraryScanConfig.sub_sections}
+                    crop={libraryScanConfig.crop}
+                    multiPage={!!libraryScanConfig.multi_page}
+                    fileName={propSelectedFile?.selectedPDFFile}
+                    onClose={() => setShowVerify(false)}
+                />
+            )}
             <BookmarksModal
                 isOpen={showBookmarkModal}
                 onClose={() => setShowBookmarkModal(false)}
@@ -659,6 +723,14 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                                     : 'bg-blue-50 border-blue-200 text-blue-700'
                             }`}>
                                 {propSelectedFile.selectedPDFFile || 'Unknown'}
+                                {appliedNote && <span className="ml-2 opacity-80">· settings from scan_config: {appliedNote}</span>}
+                                {Array.isArray(libraryScanConfig?.sub_sections) && libraryScanConfig.sub_sections.length > 0 && pdfDoc && (
+                                    <button onClick={() => setShowVerify(true)}
+                                        className="cursor-pointer ml-3 px-2 py-0.5 rounded border border-current bg-white/60 hover:bg-white font-medium"
+                                        title="Look at the start and end page of each sub-section in the scan_config">
+                                        Verify sub-sections ({libraryScanConfig.sub_sections.length})
+                                    </button>
+                                )}
                             </div>
                         )}
                     </div>
@@ -730,21 +802,17 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                         {mode === 'llm' && (
                             <select value={modelName} onChange={(e) => setModelName(e.target.value)}
                                 className="text-xs px-2 py-1 border border-slate-300 rounded-md focus:outline-none focus:ring-sky-500 focus:border-sky-500">
-                                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                                <option value="gemini-3-flash-preview">Gemini 3 Flash (Preview)</option>
-                                <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
-                                <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
-                                <option value="claude-opus-4-6">Claude Opus 4.6</option>
-                                <option value="gpt-4o-mini">GPT-4o Mini</option>
-                                <option value="gpt-4o">GPT-4o</option>
+                                {LLM_MODELS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                             </select>
                         )}
-                        <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-                            <input type="checkbox" checked={useDefaultScanConfig} onChange={(e) => setUseDefaultScanConfig(e.target.checked)}
-                                className="h-3.5 w-3.5 text-sky-600 border-slate-300 rounded" />
-                            Default scan config
-                        </label>
+                        {!propSelectedFile?.selectedPDFFile && (
+                            <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer"
+                                title="For uploaded/URL files: use the default scan_config of the chosen language. Library files always use their own.">
+                                <input type="checkbox" checked={useDefaultScanConfig} onChange={(e) => setUseDefaultScanConfig(e.target.checked)}
+                                    className="h-3.5 w-3.5 text-sky-600 border-slate-300 rounded" />
+                                Default scan config
+                            </label>
+                        )}
                         <button onClick={handleApply} disabled={!selectedFile}
                             className="text-xs px-3 py-1.5 bg-slate-600 text-white rounded-md hover:bg-slate-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors">
                             Apply
