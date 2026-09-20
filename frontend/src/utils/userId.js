@@ -1,8 +1,10 @@
+import { randomUUID } from './uuid';
+
 function getOrCreateUserId() {
     const key = 'swalakshya_user_id';
     let id = localStorage.getItem(key);
     if (!id) {
-        id = crypto.randomUUID();
+        id = randomUUID();
         localStorage.setItem(key, id);
     }
     return id;

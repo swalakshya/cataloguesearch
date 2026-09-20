@@ -47,6 +47,18 @@ def _setup_logging():
 
 
 # ---------------------------------------------------------------------------
+# Progress markers -- read by the dev-server Deploy page to draw real progress bars.
+# One JSON line per phase on stdout; harmless noise when run by hand.
+# ---------------------------------------------------------------------------
+
+def _progress(label: str, index: int, of: int, pct: float | None = None) -> None:
+    payload = {"label": label, "index": index, "of": of}
+    if pct is not None:
+        payload["sub"] = {"pct": round(pct, 1), "text": label}
+    print("@@PROGRESS " + json.dumps(payload), flush=True)
+
+
+# ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
@@ -280,6 +292,9 @@ def _confirm():
     print()
     print("The following steps will be executed:")
     print()
+    print("  0. Pull the latest images for cataloguesearch-api,")
+    print("     cataloguesearch-frontend and cataloguesearch-chat (runs first, so a failed pull aborts")
+    print("     before anything is deleted)")
     print("  1. Restart opensearch-node container (refresh bind mount)")
     print("  2. Fix permissions on /tmp/snapshots/ inside the container")
     print("     and VERIFY them with stat")
@@ -290,7 +305,9 @@ def _confirm():
     print("  7. Restore all snapshots")
     print("  8. Poll until all indices are fully restored, then print")
     print("     document counts")
-    print("  9. Restart cataloguesearch-api and cataloguesearch-frontend")
+    print("  9. Recreate cataloguesearch-api and cataloguesearch-frontend")
+    print("     (down + up -d, so they run the images pulled in step 0);")
+    print("     cataloguesearch-chat is recreated only if its image changed")
     print()
     print("⚠️  WARNING: Step 6 will PERMANENTLY DELETE all data in:")
     print("           • cataloguesearch_prod")
@@ -555,6 +572,24 @@ def step7_restore_snapshots():
 # Step 8: Poll until all indices are fully restored, then print counts
 # ---------------------------------------------------------------------------
 
+PHASE_INDEX, PHASE_TOTAL = 0, 0
+
+
+def _report_restore_progress() -> None:
+    """Real % restored (bytes), from the OpenSearch recovery API, averaged over the indices being restored."""
+    status, rows = _os_request("GET", "/_cat/recovery/" + ",".join(SNAPSHOTS) + "?format=json&h=index,stage,bytes_percent")
+    if status != 200 or not isinstance(rows, list) or not rows:
+        return
+    pcts = []
+    for r in rows:
+        try:
+            pcts.append(100.0 if r.get("stage") == "done" else float(str(r.get("bytes_percent", "0")).rstrip("%")))
+        except ValueError:
+            continue
+    if pcts:
+        _progress("Wait for restore to finish", PHASE_INDEX, PHASE_TOTAL, pct=sum(pcts) / len(pcts))
+
+
 def step8_wait_for_restore():
     log_handle.info(
         "🔄 Step 8: Polling until all indices are fully restored "
@@ -585,6 +620,7 @@ def step8_wait_for_restore():
 
         if not pending:
             break
+        _report_restore_progress()
         time.sleep(POLL_INTERVAL)
     else:
         still_pending = ", ".join(pending)
@@ -610,6 +646,24 @@ def step8_wait_for_restore():
 COMPOSE_FILE = "docker-compose.prod.yml"
 COMPOSE_ENV  = ".env.prod"
 SERVICES     = ["cataloguesearch-api", "cataloguesearch-frontend"]
+CHAT_SERVICE = "cataloguesearch-chat"  # not touched by the restore itself; only pulled and rolled if its image changed
+
+def step0_pull_images():
+    log_handle.info("🔄 Step 0: Pulling latest images for: %s", ", ".join(SERVICES + [CHAT_SERVICE]))
+    project_dir = Path(__file__).parent
+    result = subprocess.run(
+        ["docker-compose", "--env-file", COMPOSE_ENV, "-f", COMPOSE_FILE, "pull"] + SERVICES + [CHAT_SERVICE],
+        cwd=project_dir,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"❌ docker-compose pull failed (exit {result.returncode}):\n{result.stderr.strip()}"
+        )
+    output = (result.stdout + result.stderr).strip()
+    log_handle.info("✅ Step 0 done. Images pulled:\n%s", output)
+
 
 def step9_restart_services():
     log_handle.info("🔄 Step 9: Restarting services: %s", ", ".join(SERVICES))
@@ -647,6 +701,20 @@ def step9_restart_services():
         )
     log_handle.info("✅ Step 9 done. Services restarted:\n%s", result.stdout.strip())
 
+    # `up -d` without `down`: recreates chat only if the pulled image differs from the running one
+    log_handle.info("🔄 Rolling %s (recreated only if its image changed)...", CHAT_SERVICE)
+    result = subprocess.run(
+        base_cmd + ["up", "-d", CHAT_SERVICE],
+        cwd=project_dir,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"❌ docker-compose up {CHAT_SERVICE} failed (exit {result.returncode}):\n{result.stderr.strip()}"
+        )
+    log_handle.info("✅ %s up to date.\n%s", CHAT_SERVICE, (result.stdout + result.stderr).strip())
+
 
 # ---------------------------------------------------------------------------
 # Main
@@ -671,6 +739,11 @@ def main():
             "or in the current working directory."
         ),
     )
+    parser.add_argument(
+        "-y", "--yes",
+        action="store_true",
+        help="Skip the interactive confirmation prompt.",
+    )
     args = parser.parse_args()
 
     _setup_logging()
@@ -681,17 +754,27 @@ def main():
     try:
         _validate_snapshots_dir()
         _validate_docker_socket()
-        _confirm()
+        if not args.yes:
+            _confirm()
 
-        step1_restart_container()
-        step2_fix_permissions()
-        step3_delete_repository()
-        step4_create_repository()
-        step5_verify_snapshots()
-        step6_delete_indices()
-        step7_restore_snapshots()
-        step8_wait_for_restore()
-        step9_restart_services()
+        phases = [
+            ("Pull latest images", step0_pull_images),
+            ("Restart OpenSearch", step1_restart_container),
+            ("Fix snapshot folder permissions", step2_fix_permissions),
+            ("Reset snapshot repository", step3_delete_repository),
+            ("Register snapshot repository", step4_create_repository),
+            ("Verify snapshots", step5_verify_snapshots),
+            ("Delete old indices", step6_delete_indices),
+            ("Start restore", step7_restore_snapshots),
+            ("Wait for restore to finish", step8_wait_for_restore),
+            ("Recreate services", step9_restart_services),
+        ]
+        global PHASE_INDEX, PHASE_TOTAL
+        PHASE_TOTAL = len(phases)
+        for i, (label, fn) in enumerate(phases, 1):
+            PHASE_INDEX = i
+            _progress(label, i, PHASE_TOTAL)
+            fn()
 
         log_handle.info("✅ Script completed successfully.")
 

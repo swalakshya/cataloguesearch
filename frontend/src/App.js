@@ -21,6 +21,9 @@ import UsageGuide from './components/UsageGuide';
 import DeveloperAPI from './components/DeveloperAPI';
 import SearchIndex from './components/SearchIndex';
 import UIEval from './components/eval/UIEval';
+import DeployPage from './components/deploy/DeployPage';
+import DiscoverPage from './components/discover/DiscoverPage';
+import DevHome from './components/dev/DevHome';
 import ChatPage from './components/chat/ChatPage';
 import PdfCitationModal from './components/chat/PdfCitationModal';
 import { getStoredAnswerFormat, envDefault, isValidAnswerFormat, CHAT_SESSION_STORAGE_KEY, AUTH_LOGOUT_EVENT } from './config/chatConfig';
@@ -1259,6 +1262,12 @@ function AdminRoute() {
     return <AdminPageComponent token={token} llmToken={llmToken} onLogout={handleLogout} />;
 }
 
+// Local-only dev pages (/dev, /deploy, /discover) served by the dev server (dev.py)
+function DevRoute({ title, children }) {
+    React.useEffect(() => { document.title = `Swalakshya · ${title}`; }, [title]);
+    return children;
+}
+
 // Main App wrapper with Router
 export default function App() {
     return (
@@ -1275,6 +1284,9 @@ export default function App() {
                 <Route path="/chat" element={<AppContent />} />
                 <Route path="/aagam-khoj" element={<AppContent />} />
                 <Route path="/admin" element={<AdminRoute />} />
+                <Route path="/dev" element={<DevRoute title="Dev"><DevHome /></DevRoute>} />
+                <Route path="/deploy" element={<DevRoute title="Deploy"><DeployPage /></DevRoute>} />
+                <Route path="/discover" element={<DevRoute title="Discover"><DiscoverPage /></DevRoute>} />
             </Routes>
         </Router>
     );

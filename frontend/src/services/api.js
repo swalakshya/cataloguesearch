@@ -1,4 +1,5 @@
 // --- API SERVICE ---
+import { randomUUID } from '../utils/uuid';
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
 const LLM_API_BASE_URL = process.env.REACT_APP_LLM_API_BASE_URL || 'http://localhost:8012';
 
@@ -404,7 +405,7 @@ export const api = {
     sendChatMessageStream: async (sessionId, requestPayload, onEvent) => {
         try {
             // Generate a stable message ID so reconnects don't duplicate the LLM call
-            const clientMessageId = crypto.randomUUID();
+            const clientMessageId = randomUUID();
 
             // Step 1: Submit (returns 202 { message_id })
             const submitRes = await fetch(`${LLM_API_BASE_URL}/v1/chat/sessions/${sessionId}/messages`, {

@@ -24,6 +24,8 @@ RAW_TO_LANG_KEY = {
     "hi+gu": "hi",
     "gujarati": "gu",
     "hindi": "hi",
+    "guj": "gu",
+    "hin": "hi",
 }
 
 _TEXT_FIELD_BY_LANG_KEY = {
@@ -32,15 +34,38 @@ _TEXT_FIELD_BY_LANG_KEY = {
 }
 
 
+# Every spelling of a single language that config.json / scan_config.json /
+# the eval UI use ("hin"/"guj" are the tesseract-style codes).
+_ALIAS_TO_LANG_KEY = {
+    "hi": "hi", "hin": "hi", "hindi": "hi",
+    "gu": "gu", "guj": "gu", "gujarati": "gu",
+}
+
+
+def languages_in(raw_language: str = None) -> list:
+    """
+    Every language named by a raw value, in order and de-duplicated:
+    "hi+guj" -> ["hi", "gu"], "gu" -> ["gu"]. Defaults to ["hi"] for
+    None/empty/unrecognized values.
+    """
+    langs = []
+    for part in (raw_language or "hi").lower().replace(" ", "").split("+"):
+        lang_key = _ALIAS_TO_LANG_KEY.get(part)
+        if lang_key and lang_key not in langs:
+            langs.append(lang_key)
+    return langs or ["hi"]
+
+
 def normalize_language(raw_language: str = None) -> str:
     """
     Canonicalizes any raw language value -- a config.json "language" field,
     a document's stored `language`/`metadata.language`, a UI-detected
-    language name, etc. -- to exactly "hi" or "gu". Defaults to "hi" for
+    language name, etc. -- to exactly "hi" or "gu". For a mixed value
+    ("gu+hi", "hi+guj") the first language wins. Defaults to "hi" for
     None/empty/unrecognized values, matching every prior call site's
     fallback convention.
     """
-    return RAW_TO_LANG_KEY.get(raw_language or "hi", "hi")
+    return languages_in(raw_language)[0]
 
 
 def text_field_for_language(raw_language: str = None) -> str:

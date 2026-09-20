@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Loader2 } from 'lucide-react';
 import { Spinner } from '../SharedComponents';
 import ShowBookmarksButton from '../ShowBookmarksButton';
 import BookmarksModal from '../BookmarksModal';
@@ -32,6 +33,8 @@ const BLOCK_TYPE_STYLES = {
     prakrit_verse:   { label: 'Prakrit Verse',   bg: 'bg-cyan-50',   border: 'border-cyan-200',   text: 'text-cyan-800',   badge: 'bg-cyan-100 text-cyan-700' },
     hindi_text:      { label: 'Hindi Text',      bg: 'bg-blue-50',   border: 'border-blue-200',   text: 'text-blue-800',   badge: 'bg-blue-100 text-blue-700' },
     hindi_verse:     { label: 'Hindi Verse',     bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-800', badge: 'bg-indigo-100 text-indigo-700' },
+    gujarati_text:   { label: 'Gujarati Text',   bg: 'bg-sky-50',    border: 'border-sky-200',    text: 'text-sky-800',    badge: 'bg-sky-100 text-sky-700' },
+    gujarati_verse:  { label: 'Gujarati Verse',  bg: 'bg-lime-50',   border: 'border-lime-200',   text: 'text-lime-800',   badge: 'bg-lime-100 text-lime-700' },
     footnote:        { label: 'Footnote',        bg: 'bg-slate-50',  border: 'border-slate-300',  text: 'text-slate-700',  badge: 'bg-slate-200 text-slate-600' },
 };
 const DEFAULT_BLOCK_STYLE = { label: 'Unknown', bg: 'bg-gray-50', border: 'border-gray-200', text: 'text-gray-800', badge: 'bg-gray-100 text-gray-700' };
@@ -50,6 +53,8 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
     const [cropRight, setCropRight] = useState(0);
     const [useDefaultScanConfig, setUseDefaultScanConfig] = useState(true);
     const [isLoading, setIsLoading] = useState(false);
+    // True only while a single-page Process request is in flight (not file loading or batch jobs).
+    const [isProcessing, setIsProcessing] = useState(false);
     const [results, setResults] = useState(null);
     const [error, setError] = useState(null);
     const [showBookmarkModal, setShowBookmarkModal] = useState(false);
@@ -231,6 +236,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
         setResults(null);
         setError(null);
         setIsLoading(false);
+        setIsProcessing(false);
         resetBatchState();
     };
 
@@ -348,6 +354,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
     const handleProcess = async () => {
         if (!selectedFile) { setError('Please select a file first'); return; }
         setIsLoading(true);
+        setIsProcessing(true);
         setError(null);
         setResults(null);
         setCroppedPreviewUrl(null);
@@ -415,6 +422,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
             setError(`Processing failed: ${err.message}`);
         } finally {
             setIsLoading(false);
+            setIsProcessing(false);
         }
     };
 
@@ -518,6 +526,17 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
             );
         });
     };
+
+    // Results tabs show this instead of their empty state / stale results
+    // while a single-page Process request is in flight.
+    const renderProcessing = () => (
+        <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500">
+            <Loader2 className="h-8 w-8 animate-spin text-sky-600" />
+            <span className="text-sm">
+                {mode === 'llm' ? `Extracting text with ${modelName}…` : 'Running OCR…'}
+            </span>
+        </div>
+    );
 
     const renderBlockList = (blocks) => {
         if (!blocks?.length) return <div className="text-center py-4 text-slate-400 text-sm">No text detected.</div>;
@@ -870,7 +889,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                         {/* Tab: Raw OCR JSON (tesseract only) */}
                         {activeResultTab === 'ocr-json' && (
                             <div className="relative h-[660px] overflow-auto border border-slate-200 rounded-lg bg-slate-50 p-3">
-                                {activeData?.ocr_json ? (
+                                {isProcessing ? renderProcessing() : activeData?.ocr_json ? (
                                     <>
                                         <div className="absolute top-2 right-2 flex items-center gap-2">
                                             <button
@@ -906,7 +925,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                         {/* Tab: LLM Results */}
                         {activeResultTab === 'llm-results' && (
                             <div className="space-y-3 h-[660px] overflow-y-auto">
-                                {results ? (
+                                {isProcessing ? renderProcessing() : results ? (
                                     renderBlockList(activeData?.blocks)
                                 ) : (
                                     <div className="flex items-center justify-center h-full text-slate-400 text-sm">
@@ -919,7 +938,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                         {/* Tab: Scan Config */}
                         {activeResultTab === 'scan-config' && (
                             <div className="relative h-[660px] overflow-auto border border-slate-200 rounded-lg bg-slate-50 p-3">
-                                {scanConfig !== null ? (
+                                {isProcessing ? renderProcessing() : scanConfig !== null ? (
                                     <>
                                         <div className="absolute top-2 right-2">
                                             <CopyButton text={JSON.stringify(scanConfig, null, 2)} />
@@ -939,7 +958,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                         {/* Tab: Paragraphs (tesseract only) */}
                         {activeResultTab === 'paragraphs' && (
                             <div className="space-y-3 h-[660px] overflow-y-auto">
-                                {results ? (
+                                {isProcessing ? renderProcessing() : results ? (
                                     renderParagraphList(activeData?.paragraphs)
                                 ) : (
                                     <div className="flex items-center justify-center h-full text-slate-400 text-sm">

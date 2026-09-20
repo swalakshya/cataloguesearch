@@ -15,6 +15,7 @@ import { cleanAnswerText, preTokenizeCitations } from './answerFormatting';
 import { AUTH_LOGOUT_EVENT, CHAT_SESSION_STORAGE_KEY } from '../../config/chatConfig';
 import { getStoredChatDefaultCategories } from '../../config/filterDefaults';
 import { USER_ID } from '../../utils/userId';
+import { randomUUID } from '../../utils/uuid';
 import bulbEmoji from '../../assets/emoji/bulb.svg';
 
 const llmProvider = (process.env.REACT_APP_LLM_PROVIDER || '').trim();
@@ -487,7 +488,7 @@ const ChatPage = forwardRef(function ChatPage(
         setChatNotice(null);
         // Stable local ID for this turn — ties the user bubble and assistant bubble together
         // across re-renders, recovery, and array shifts. Never sent to the server.
-        const localId = crypto.randomUUID();
+        const localId = randomUUID();
         activeStreamLocalIdRef.current = localId; // claim ownership of this turn
         setChatMessages(prev => [
             ...prev,
@@ -546,7 +547,7 @@ const ChatPage = forwardRef(function ChatPage(
         };
 
         // Generate a stable client-side message ID for idempotency
-        const clientMsgId = crypto.randomUUID();
+        const clientMsgId = randomUUID();
 
         try {
             let data;

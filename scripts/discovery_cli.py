@@ -190,7 +190,7 @@ class DiscoveryDaemon:
 
 
 def run_discovery_once(config: Config, crawl=False, index=False, dry_run=False,
-                       reindex_metadata_only=False, force=False, folder=None):
+                       reindex_metadata_only=False, force=False, folder=None, skip_post_steps=False):
     """Run discovery once.
 
     Args:
@@ -236,6 +236,10 @@ def run_discovery_once(config: Config, crawl=False, index=False, dry_run=False,
 
         # Run discovery
         discovery.crawl(crawl, index, dry_run, reindex_metadata_only, root_folder=folder)
+
+        if skip_post_steps:
+            log_handle.info("Skipping series refresh / catalogue rebuild / metadata cache (--skip-post-steps).")
+            return
 
         # Refresh the Pravachan series cascade and rebuild the content
         # catalogue index -- same triggers, per rebuild_catalogue_index()'s
@@ -379,6 +383,10 @@ def main():
     parser.add_argument('--force', '-f', action='store_true', default=False,
                         help='Force re-processing: clears ocr_checksum if --crawl is set, '
                              'config_hash if --index is set, before running.')
+    parser.add_argument('--skip-post-steps', action='store_true', default=False,
+                        help='Skip the Pravachan series refresh, catalogue rebuild and metadata cache update '
+                             'that normally run after a crawl. Used while polling LLM batch jobs, where they '
+                             'would be repeated on every pass for nothing.')
     parser.add_argument('--refresh-metadata', action='store_true', default=False,
                         help='Refresh the Pravachan series cascade in the metadata index and '
                              'rebuild the content catalogue index, then exit.')
@@ -424,7 +432,7 @@ def main():
             run_discovery_once(
                 config, args.crawl, args.index, args.dry_run,
                 args.reindex_metadata_only, args.force,
-                folder=args.process_folder)
+                folder=args.process_folder, skip_post_steps=args.skip_post_steps)
 
 
 if __name__ == '__main__':

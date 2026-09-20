@@ -2,10 +2,10 @@
 GranthParagraphGenerator
 
 Processes LLM-extracted typed blocks from Granth (Jain scripture) JSON files
-and combines hindi_text blocks into logically complete paragraphs.
+and combines hindi_text/gujarati_text blocks into logically complete paragraphs.
 
 Phase 1 — Sentence-boundary combining:
-  - Only hindi_text blocks are processed; all others are skipped.
+  - Only hindi_text and gujarati_text blocks are processed; all others are skipped.
   - chapter_heading blocks act as hard breaks (terminate the current buffer;
     the heading itself is not added to any paragraph).
   - The running buffer is flushed when:
@@ -52,16 +52,19 @@ log_handle = logging.getLogger(__name__)
 _MIN_PARA_LENGTH = 50   # minimum words per output paragraph
 _MAX_PARA_LENGTH = 170  # maximum words per output paragraph (override via scan_config max_words_per_para)
 
+# Prose block types this generator combines into paragraphs.
+_PROSE_BLOCK_TYPES = {"hindi_text", "gujarati_text"}
+
 # Strips optional leading number markers like '(२) ', '(3) ', '3. ' before
-# QA prefix matching. Handles ASCII and Devanagari digits.
-_QA_MARKER_RE = re.compile(r'^[\s([{\'"]*[0-9०-९]+[\s.)\]}\'"]*')
+# QA prefix matching. Handles ASCII, Devanagari and Gujarati digits.
+_QA_MARKER_RE = re.compile(r'^[\s([{\'"]*[0-9०-९૦-૯]+[\s.)\]}\'"]*')
 
 
 # Matches verse-number markers at the end of a block, e.g.:
 #   ।।67।।   ।67।   ||67||   |67|   ।।68-199।।
 # Optionally followed by closing quote characters.
 _VERSE_END_RE = re.compile(
-    r'[।|]{1,2}[0-9०-९][-–—0-9०-९]*[।|]{1,2}["\'\u201c\u201d\u2018\u2019\s]*$'
+    r'[।|]{1,2}[0-9०-९૦-૯][-–—0-9०-९૦-૯]*[।|]{1,2}["\'\u201c\u201d\u2018\u2019\s]*$'
 )
 
 
@@ -143,7 +146,7 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
         hard_end_regexes: list = None,
     ) -> List[ParaInfo]:
         """
-        Combine hindi_text blocks into complete sentences.
+        Combine hindi_text/gujarati_text blocks into complete sentences.
 
         Buffer is flushed on:
           1. Punctuation suffix at end of current text.
@@ -194,7 +197,7 @@ class GranthParagraphGenerator(BaseParagraphGenerator):
                     chapter_break = True  # next paragraph starts a new chapter
                     continue
 
-                if block_type != "hindi_text":
+                if block_type not in _PROSE_BLOCK_TYPES:
                     continue
 
                 if not text:

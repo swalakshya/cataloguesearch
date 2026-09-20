@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import PDFParser from './PDFParser';
 import ParagraphGenEval from './ParagraphGenEval';
 import OCRPreview from './OCRPreview';
@@ -39,7 +39,12 @@ const FolderIcon = ({ className = 'w-4 h-4' }) => (
 );
 
 const UIEval = () => {
-    const [activeTab, setActiveTab] = useState('home');
+    const [activeTab, setActiveTab] = useState(() => {
+        // /eval?tab=load-test opens that tool directly (used by the /dev homepage)
+        const tab = new URLSearchParams(window.location.search).get('tab');
+        return ['pdf-parser', 'ocr-preview', 'paragraph-eval', 'paragraph-classifier', 'unindexed-pdfs',
+            'bookmark-backfill', 'load-test'].includes(tab) ? tab : 'home';
+    });
     const [basePaths, setBasePaths] = useState(null);
     const [selectedFile, setSelectedFile] = useState(null);
     const [showFileBrowser, setShowFileBrowser] = useState(false);
@@ -173,6 +178,29 @@ const UIEval = () => {
         setShowFileBrowser(false);
         console.log('Folder selected:', folderSelection);
     };
+
+    // /eval?tab=pdf-parser&file=<path of the PDF relative to the pdf root> opens that file straight away
+    // (used by the Discover page). Builds the same selection object the file browser would. Server mode only:
+    // in 'local' mode the browser needs a manual folder grant first, so there is nothing to auto-load.
+    const deepLinkFile = useRef(new URLSearchParams(window.location.search).get('file'));
+    useEffect(() => {
+        const pdfFilePath = deepLinkFile.current;
+        if (!pdfFilePath || fsMode !== 'server' || !basePaths || !permissionsReady) return;
+        deepLinkFile.current = null; // consume once
+        const name = pdfFilePath.split('/').pop();
+        const stem = name.replace(/\.pdf$/i, '');
+        const dir = pdfFilePath.includes('/') ? pdfFilePath.slice(0, pdfFilePath.lastIndexOf('/')) : '';
+        const relativePath = dir ? `${dir}/${stem}` : stem;
+        handleFolderSelect({
+            relativePath,
+            sourcePath: `${basePaths.base_ocr_path}/${relativePath}`,
+            targetPath: `${basePaths.base_text_path}/${relativePath}`,
+            selectedFolderName: stem,
+            selectedPDFFile: name,
+            pdfFilePath,
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [fsMode, basePaths, permissionsReady]);
 
     const handleBaseDirectoryHandlesChange = (handles) => {
         setBaseDirectoryHandles(handles);

@@ -1,6 +1,33 @@
 import { useState, useEffect, useRef } from 'react';
 import { addPageNumbersToBookmarks } from '../utils/pdfUtils';
 
+const PDFJS_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+const PDFJS_WORKER_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+let pdfJsReady = null;
+
+// Resolves once window.pdfjsLib exists, injecting the script if needed. Callers that can fire right at page
+// load (e.g. an /eval?file=... deep link) await this instead of failing because the async script is still loading.
+const ensurePdfJs = () => {
+    if (window.pdfjsLib) {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_SRC;
+        return Promise.resolve();
+    }
+    if (!pdfJsReady) {
+        pdfJsReady = new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = PDFJS_SRC;
+            script.async = true;
+            script.onload = () => {
+                window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_SRC;
+                resolve();
+            };
+            script.onerror = () => { pdfJsReady = null; reject(new Error('Failed to load PDF.js library.')); };
+            document.head.appendChild(script);
+        });
+    }
+    return pdfJsReady;
+};
+
 /**
  * Shared hook for PDF viewing, page navigation, and cropped preview.
  * Used by OCRUtils and ScriptureLLMEval.
@@ -21,20 +48,7 @@ const usePDFViewer = ({ setError }) => {
 
     // Load PDF.js once per page
     useEffect(() => {
-        if (window.pdfjsLib) {
-            window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-                'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-            return;
-        }
-        const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-        script.async = true;
-        script.onload = () => {
-            window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-                'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-        };
-        script.onerror = () => setError('Failed to load PDF.js library.');
-        document.head.appendChild(script);
+        ensurePdfJs().catch((err) => setError(err.message));
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const renderPDFPage = async (pdf, pageNum) => {
@@ -79,8 +93,10 @@ const usePDFViewer = ({ setError }) => {
     };
 
     const loadPDF = async (file) => {
-        if (!window.pdfjsLib) {
-            setError('PDF.js library not loaded. Please refresh the page.');
+        try {
+            await ensurePdfJs();
+        } catch (err) {
+            setError(`PDF.js library not loaded (${err.message}). Please refresh the page.`);
             return;
         }
         setCroppedPreviewUrl(null);
@@ -114,8 +130,10 @@ const usePDFViewer = ({ setError }) => {
     // Content-Length (see backend/api/pdf_proxy.py), otherwise it's null and
     // the caller should fall back to an indeterminate loading state.
     const loadPDFFromUrl = async (url, startPage = 1, onProgress) => {
-        if (!window.pdfjsLib) {
-            setError('PDF.js library not loaded. Please refresh the page.');
+        try {
+            await ensurePdfJs();
+        } catch (err) {
+            setError(`PDF.js library not loaded (${err.message}). Please refresh the page.`);
             return null;
         }
         setCroppedPreviewUrl(null);

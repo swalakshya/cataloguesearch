@@ -236,6 +236,24 @@ uvicorn eval.api:app --host 0.0.0.0 --port 8001 --reload
 
 Access it at http://localhost:3000/eval (via the frontend).
 
+### Dev server: `/dev` homepage, Discover and Deploy
+
+`dev.py` serves the eval, discover and deploy APIs from one process. Use it instead of `eval.api:app`. Open http://localhost:3000/dev for a homepage linking to everything: **Discover** (`/discover`), **Deploy** (`/deploy`) and each Eval tool.
+
+```bash
+uvicorn dev:app --host 127.0.0.1 --port 8001
+```
+
+Don't add `--reload` while deploying: saving any `.py` file restarts the server and kills the run in progress. (On restart, the server also kills any leftover processes from the previous run, so nothing keeps running untracked.) Start it from Terminal.app/iTerm, not a headless shell, so Docker can read its registry login from the keychain.
+
+**Discover** lists PDFs as Not indexed / OCRed / Indexed (from the SQLite index state; "stale" is counted as indexed for now). Per folder you can run **OCR only** (`--crawl`, then check the output in Eval), **Index** (OCR, then index), **Re-index** (`--force --index`) or **Cleanup** (`--cleanup`, typed confirmation). Index never starts before OCR is complete. With LLM batch OCR, all folders' batch jobs are submitted first, then one shared wait polls them (`DISCOVER_POLL_SECONDS`, default 30). After `DISCOVER_MAX_WAIT_MINUTES` (default 120) the run ends as "waiting": click Discover again later and it resumes from the batch state in SQLite. Only one job (discover or deploy) runs at a time.
+
+The Deploy page runs three actions, individually or chained ("Deploy all"): build & push images (`docker compose --env-file .env.local build --push`), create snapshots & stream them to prod (`scripts/create_snapshots.py`), and restore on prod over ssh (`restore_snapshots.py`, which now also pulls the latest images first). It needs `pv` and `zstandard` locally and an ssh alias for prod; override with `DEPLOY_PROD_HOST`, `DEPLOY_PROD_DIR`, `DEPLOY_PYTHON` if needed. Run history and logs live in `~/cataloguesearch/deploy/`.
+
+Progress is shown as bars, not logs (logs are one click away and open by themselves on failure). Our scripts print `@@PROGRESS {json}` marker lines; the runner also reads docker build steps and `pv`/`tqdm` bars. A bar appears only when there is a real done/total; otherwise you see where it is plus "usually takes ~N min" from previous runs. Discover files that have OCR (OCRed or Indexed) get **PDF Parser** / **Paragraph Eval** links that open `/eval?tab=…&file=<path>` with the file loaded (server file mode only).
+
+Tests for this tooling: `python -m pytest tests/dev -o log_cli=false` (no Docker or OpenSearch needed).
+
 ---
 
 ## Ingesting New Content

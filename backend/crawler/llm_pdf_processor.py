@@ -14,6 +14,7 @@ from tqdm import tqdm
 from google import genai
 from google.genai import types
 
+from backend.common.language import languages_in
 from backend.crawler.pdf_processor import PDFProcessor
 
 log_handle = logging.getLogger(__name__)
@@ -43,7 +44,7 @@ def extract_indic_text(image, model_name: str = "gemini-2.5-flash", language: st
     Args:
         image: PIL.Image object of the page
         model_name: Gemini model to use
-        language: scan_config-style language hint ("hi", "gu", "dhundhari", ...);
+        language: scan_config-style language hint ("hi", "gu", "hi+gu", "dhundhari");
                    selects which prompt is sent, see select_prompt()
 
     Returns:
@@ -54,53 +55,143 @@ def extract_indic_text(image, model_name: str = "gemini-2.5-flash", language: st
     return blocks
 
 # Canonical list of all block types produced by LLMPDFProcessor.
-# Used in the prompt below, in the classifier API, and in the eval UI.
+# Used in the prompts below, in the classifier API, and in the eval UI.
+# Prose/verse types are per language (hindi_*/gujarati_*); which of them a
+# given prompt offers depends on the book's language, see _build_prompt().
 BLOCK_TYPES = [
     "sanskrit_text",
     "prakrit_text",
     "hindi_text",
+    "gujarati_text",
     "sanskrit_verse",
     "prakrit_verse",
     "hindi_verse",
+    "gujarati_verse",
     "footnote",
     "chapter_heading",
 ]
 
-_BLOCK_TYPES_BULLET_LIST = "\n".join(f'- "{t}"' for t in BLOCK_TYPES)
+# Per-language wording for the prompt. Keys are normalized language keys
+# (backend.common.language.languages_in).
+_LANG_SPEC = {
+    "hi": {
+        "name": "Hindi",
+        "text_type": "hindi_text",
+        "verse_type": "hindi_verse",
+        "heading_ex": "अध्याय १",
+        "text_ex": "इसका अर्थ है...",
+        "footnote_ex": "१. यह पाठान्तर है",
+    },
+    "gu": {
+        "name": "Gujarati",
+        "text_type": "gujarati_text",
+        "verse_type": "gujarati_verse",
+        "heading_ex": "અધ્યાય ૧",
+        "text_ex": "આનો અર્થ આ છે...",
+        "footnote_ex": "૧. આ પાઠાંતર છે",
+    },
+}
 
-PROMPT = f"""
+
+def _types_for(langs: list) -> list:
+    """BLOCK_TYPES minus the prose/verse types of languages not in `langs`."""
+    excluded = {
+        t
+        for lang, spec in _LANG_SPEC.items() if lang not in langs
+        for t in (spec["text_type"], spec["verse_type"])
+    }
+    return [t for t in BLOCK_TYPES if t not in excluded]
+
+
+def _bullet_list(types: list) -> str:
+    return "\n".join(f'- "{t}"' for t in types)
+
+
+def _build_prompt(langs: list) -> str:
+    """
+    Extraction prompt for a book in the given language(s) — ["hi"], ["gu"] or
+    ["hi", "gu"]. Sanskrit/Prakrit/footnote/heading handling is identical for
+    all; only the Hindi/Gujarati prose and verse categories vary.
+    """
+    specs = [_LANG_SPEC[lang] for lang in langs]
+    names = " and ".join(sp["name"] for sp in specs)
+    verse_lines = "\n".join(f"- {sp['name']} Verses" for sp in specs)
+    text_lines = "\n".join(
+        f"- {sp['name']} text (which may contain sanskrit or prakrit words in brackets)"
+        for sp in specs
+    )
+    mixed_note = ""
+    if len(specs) > 1:
+        mixed_note = (
+            "\nThis book mixes Hindi and Gujarati. Tag each block by the language it is "
+            "actually written in (Devanagari script → Hindi, Gujarati script → Gujarati), "
+            "not by the language of the rest of the page.\n"
+        )
+    # Hindi-only books keep the original prompt wording untouched. Gujarati books
+    # need explicit script rules: the model otherwise drifts into Devanagari for
+    # Gujarati prose (and into Gujarati script for Sanskrit).
+    script_note = ""
+    if "gu" in langs:
+        devanagari_types = ", ".join(
+            f'"{t}"' for t in _types_for(langs) if t.split("_")[0] in ("sanskrit", "prakrit", "hindi")
+        )
+        script_note = f"""
+Script rules. Copy each block's script exactly as printed on the page, and never transliterate one script into the other:
+- "gujarati_text" and "gujarati_verse" must be in Gujarati script.
+- {devanagari_types} must be in Devanagari script, even when the rest of the page is in Gujarati script.
+- "footnote" and "chapter_heading": keep each word in the script it is printed in.
+- Inside a Gujarati block, Sanskrit or Prakrit terms in brackets or quotes stay in Devanagari as printed; every other word of the sentence must be in Gujarati script.
+Wrong (Gujarati words written in Devanagari): "राजाए पण कहुं, “शुं सत्यघोषने चोरी संभव छे?”"
+Right (Gujarati script): "રાજાએ પણ કહ્યું, “શું સત્યઘોષને ચોરી સંભવ છે?”"
+"""
+
+    heading = f'  {{{{"type": "chapter_heading", "text": "{specs[0]["heading_ex"]}"}}}},'
+    sanskrit = '  {{"type": "sanskrit_verse", "text": "ॐ नमो भगवते..."}},'
+    prose = [f'  {{{{"type": "{sp["text_type"]}", "text": "{sp["text_ex"]}"}}}},' for sp in specs]
+    footnote = f'  {{{{"type": "footnote", "text": "{specs[0]["footnote_ex"]}"}}}}'
+    if "gu" in langs:
+        # Gujarati example first, so the Devanagari Sanskrit example doesn't set the tone.
+        examples = [heading, *prose, sanskrit, footnote]
+    else:
+        examples = [heading, sanskrit, *prose, footnote]
+    examples_block = "\n".join(examples).replace("{{", "{").replace("}}", "}")
+
+    return f"""
 The attached image is from a Jain Scripture. It has different types of text:
 
 - Sanskrit text (often separated by lines or in blocks)
 - Prakrit Verses
 - Sanskrit Verses
-- Hindi Verses
-- Hindi text (which may contain sanskrit or prakrit words in brackets)
+{verse_lines}
+{text_lines}
 - Footnotes (usually at the bottom with smaller text or marked with small numbers)
 - Chapter headings (will be in bigger font)
-
+{mixed_note}
 Your job is to parse the image and categorise each block of text into one of the above categories.
-
+{script_note}
 Valid values for "type":
-{_BLOCK_TYPES_BULLET_LIST}
+{_bullet_list(_types_for(langs))}
 
 Output a JSON array of objects, each with "type" and "text" keys. Example:
 [
-  {{"type": "chapter_heading", "text": "अध्याय १"}},
-  {{"type": "sanskrit_verse", "text": "ॐ नमो भगवते..."}},
-  {{"type": "hindi_text", "text": "इसका अर्थ है..."}},
-  {{"type": "footnote", "text": "१. यह पाठान्तर है"}}
+{examples_block}
 ]
 
 Preserve the order in which the text appears on the page. Output ONLY the JSON array.
 """
+
+
+# Default (Hindi) prompt, kept as a module constant for callers that import it.
+PROMPT = _build_prompt(["hi"])
+
+_HINDI_BULLET_LIST = _bullet_list(_types_for(["hi"]))
 
 # Dhundhari mode — used only when scan_config.json's "language" is "dhundhari".
 # Older commentaries in this collection mix an archaic Rajasthani/Marwari-inflected
 # register of Hindi ("Dhundhari") with plain modern Hindi (e.g. the Prastavana is
 # often plain Hindi even in an otherwise-Dhundhari book) and Sanskrit/Prakrit verses.
 #
-# Deliberately reuses BLOCK_TYPES/PROMPT's exact "type" enum — a Dhundhari block is
+# Deliberately reuses the Hindi prompt's exact "type" enum — a Dhundhari block is
 # still tagged "hindi_text"/"hindi_verse", with the natural modern-Hindi rendering
 # in "text" (as always) and the archaic original in an extra "original_text" field.
 # That keeps every downstream consumer (paragraph/verse generators, indexing) able
@@ -134,7 +225,7 @@ an additional "original_text" field. For a block already in plain modern Hindi
 (or any other category), do not add "original_text".
 
 Valid values for "type":
-{_BLOCK_TYPES_BULLET_LIST}
+{_HINDI_BULLET_LIST}
 
 Output a JSON array of objects, each with "type" and "text" keys, plus an
 "original_text" key only for Dhundhari-register "hindi_text"/"hindi_verse"
@@ -150,14 +241,16 @@ blocks. Example:
 Preserve the order in which the text appears on the page. Output ONLY the JSON array.
 """
 
-_PROMPTS_BY_LANGUAGE = {
-    "dhundhari": PROMPT_DHUNDHARI,
-}
-
-
 def select_prompt(language: str | None) -> str:
-    """Picks the extraction prompt for a scan_config-style language value."""
-    return _PROMPTS_BY_LANGUAGE.get((language or "").lower(), PROMPT)
+    """
+    Picks the extraction prompt for a scan_config-style language value:
+    "hi"/"hin", "gu"/"guj", a mix such as "hi+gu" or "gu+hi", or "dhundhari"
+    (Hindi commentary in an archaic register, see PROMPT_DHUNDHARI).
+    Unrecognized values get the Hindi prompt.
+    """
+    if (language or "").lower() == "dhundhari":
+        return PROMPT_DHUNDHARI
+    return _build_prompt(languages_in(language))
 
 
 # Retry settings for Gemini API rate limiting

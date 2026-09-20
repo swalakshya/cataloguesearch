@@ -135,7 +135,7 @@ Full reference of all options:
 | `question_prefix` | array | `[]` | Line prefixes that mark a question (e.g. `["प्रश्न"]`) |
 | `answer_prefix` | array | `[]` | Line prefixes that mark an answer (e.g. `["उत्तर"]`) |
 | `stop_words` | array | `[]` | Lines starting with these trigger a paragraph flush (e.g. commentary markers) |
-| `verses` | array | `[]` | Verse block types to extract (LLM path only): `"hindi_verse"`, `"prakrit_verse"`, `"sanskrit_verse"` |
+| `verses` | array | `[]` | Verse block types to extract (LLM path only): `"hindi_verse"`, `"gujarati_verse"`, `"prakrit_verse"`, `"sanskrit_verse"` |
 | `typo_list` | array | `[]` | `[pattern, replacement]` pairs applied as regex substitutions |
 | `start_page` | int | 1 | First PDF page to process (file-specific only) |
 | `end_page` | int | last | Last PDF page to process (file-specific only) |
@@ -456,6 +456,13 @@ These files are safe to delete and regenerate at any time, but the cleanup comma
   { "type": "hindi_text",      "text": "यह सूत्र बताता है कि..." }
 ]
 ```
+
+Which prose/verse types the LLM is asked for follows the book's `language` (from `config.json`, or `scan_config.json`
+which takes priority): `hi` → `hindi_text`/`hindi_verse`; `gu` (or `guj`) → `gujarati_text`/`gujarati_verse`;
+a mix such as `hi+gu` → both sets, tagged per block by script. Sanskrit/Prakrit/footnote/heading types are the same
+for every language. Prose (`hindi_text` and `gujarati_text`) is indexed into the document's text field
+(`text_content_hindi` or `text_content_gujarati`, chosen by the document `language`); verses are indexed only if
+their type is listed in `verses`.
 
 ---
 

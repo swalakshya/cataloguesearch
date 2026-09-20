@@ -20,6 +20,7 @@ Options:
     -k / --ssh-key   Path to SSH private key
     -l / --location  Remote parent directory (default: .)
                      Snapshots land at <location>/<dir_name>/ on the remote.
+    -y / --yes       Skip the interactive confirmation prompt (used by the deploy UI)
 """
 
 import argparse
@@ -66,6 +67,18 @@ def _setup_logging():
     root.addHandler(file_handler)
 
     log_handle.info("📋 Logging to console and %s", log_path)
+
+
+# ---------------------------------------------------------------------------
+# Progress markers -- read by the dev-server Deploy page to draw real progress bars.
+# One JSON line per phase on stdout; harmless noise when run by hand.
+# ---------------------------------------------------------------------------
+
+def _progress(label: str, index: int, of: int, pct: float | None = None) -> None:
+    payload = {"label": label, "index": index, "of": of}
+    if pct is not None:
+        payload["sub"] = {"pct": round(pct, 1), "text": label}
+    print("@@PROGRESS " + json.dumps(payload), flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +144,35 @@ def _docker_request(method: str, path: str, body: dict | None = None) -> dict:
 # OpenSearch HTTP helper  (identical to restore_snapshots.py)
 # ---------------------------------------------------------------------------
 
+def _docker_logs(since: int, tail: int = 300) -> str:
+    """Container output since `since` (unix time), as text. Best effort: returns "" on any failure."""
+    try:
+        conn = _UnixSocketHTTPConnection(DOCKER_SOCKET)
+        conn.request("GET", f"/containers/{CONTAINER_NAME}/logs?stdout=1&stderr=1&since={since}&tail={tail}")
+        resp = conn.getresponse()
+        raw = resp.read()
+        conn.close()
+    except Exception:  # noqa: BLE001 -- diagnostics only, must never mask the real error
+        return ""
+    # Without a TTY the daemon multiplexes stdout/stderr as [stream, 0, 0, 0, size(4 bytes BE)] + payload frames
+    out, i = [], 0
+    while i + 8 <= len(raw) and raw[i] in (0, 1, 2) and raw[i + 1:i + 4] == b"\x00\x00\x00":
+        size = int.from_bytes(raw[i + 4:i + 8], "big")
+        out.append(raw[i + 8:i + 8 + size])
+        i += 8 + size
+    return (b"".join(out) if out and i >= len(raw) else raw).decode("utf-8", errors="replace")
+
+
+def _startup_crash(logs: str) -> str | None:
+    """If OpenSearch's JVM died while starting, the reason (root cause + last few lines), else None."""
+    lines = [l for l in logs.splitlines() if l.strip() and "Still waiting for OpenSearch" not in l]
+    for i, line in enumerate(lines):
+        if "OpenSearchUncaughtExceptionHandler" in line or "Likely root cause" in line:
+            cause = next((l.strip() for l in lines[i:] if "Likely root cause" in l or l.startswith("Caused by")), line)
+            return f"{lines[i].strip()[:300]}\n   {cause[:300]}"
+    return None
+
+
 def _os_request(method: str, path: str, body: dict | None = None) -> tuple[int, dict]:
     """
     Send an HTTP request to OpenSearch at localhost:9200.
@@ -186,6 +228,11 @@ def _parse_args():
         help="Remote parent directory where snapshots folder will be created "
              "(default: . i.e. home directory). Example: /tmp",
     )
+    parser.add_argument(
+        "-y", "--yes",
+        action="store_true",
+        help="Skip the interactive confirmation prompt.",
+    )
     args = parser.parse_args()
 
     if args.ssh_key and not args.server:
@@ -193,7 +240,7 @@ def _parse_args():
     if args.location != "." and not args.server:
         parser.error("--location / -l requires --server / -s")
 
-    return Path(args.local_dir).resolve(), args.server, args.ssh_key, args.location
+    return Path(args.local_dir).resolve(), args.server, args.ssh_key, args.location, args.yes
 
 
 def _validate_docker_socket():
@@ -293,21 +340,33 @@ def _confirm(local_dir: Path, server: str | None, ssh_key: str | None, location:
 # Step 1: Stop container, clear host dir, restart, wait for healthy cluster
 # ---------------------------------------------------------------------------
 
+def _empty_dir(local_dir: Path) -> None:
+    """Delete everything inside local_dir, keeping local_dir itself (created if missing)."""
+    local_dir.mkdir(parents=True, exist_ok=True)
+    for child in local_dir.iterdir():
+        if child.is_dir() and not child.is_symlink():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
+
+
 def step1_cycle_container(local_dir: Path):
     log_handle.info("🔄 Step 1: Stopping container '%s'...", CONTAINER_NAME)
     # stop with a 30-second timeout so OpenSearch flushes cleanly
     _docker_request("POST", f"/containers/{CONTAINER_NAME}/stop?t=30")
     log_handle.info("🔄 Container stopped.")
 
-    # Clear and recreate host snapshot directory (pure Python — no shell)
+    # Empty the host snapshot directory but KEEP the directory itself (pure Python — no shell).
+    # It is bind-mounted into the container as /tmp/snapshots; deleting and recreating it leaves
+    # the container with a stale mount and OpenSearch then crashes on startup
+    # ("Unable to access 'path.repo' (/tmp/snapshots)").
     log_handle.warning("🟠 Clearing local snapshots directory: %s", local_dir)
-    if local_dir.exists():
-        shutil.rmtree(local_dir)
-    local_dir.mkdir(parents=True)
+    _empty_dir(local_dir)
     os.chmod(local_dir, 0o755)
-    log_handle.info("✅ Local directory cleared and recreated with mode 755.")
+    log_handle.info("✅ Local directory emptied (directory kept), mode 755.")
 
     log_handle.info("🔄 Starting container '%s'...", CONTAINER_NAME)
+    started_at = int(time.time()) - 5
     _docker_request("POST", f"/containers/{CONTAINER_NAME}/start")
 
     # Wait for container to be running
@@ -349,6 +408,16 @@ def step1_cycle_container(local_dir: Path):
                 "🟠 OpenSearch not reachable yet (HTTP %s). (attempt %d)",
                 status or "unreachable", attempt,
             )
+            # The container can stay "running" (its wrapper script keeps waiting) after the JVM has died,
+            # so look for a startup crash every few attempts instead of polling for the full timeout.
+            if attempt % 5 == 0:
+                crash = _startup_crash(_docker_logs(started_at))
+                if crash:
+                    raise RuntimeError(
+                        "❌ OpenSearch crashed while starting:\n   " + crash +
+                        "\n   If this mentions /tmp/snapshots, the snapshots bind mount is stale: "
+                        f"run `docker restart {CONTAINER_NAME}` (or `orb stop && orb start`) and try again."
+                    )
         time.sleep(POLL_INTERVAL)
 
     raise RuntimeError(
@@ -614,9 +683,13 @@ def step10_stream_to_remote(local_dir: Path, server: str, ssh_key: str | None, l
         stderr=subprocess.PIPE,
         env=tar_env,
     )
-    # Stage 2: pv (progress monitor)
+    # Stage 2: pv (progress monitor).
+    # -f: pv stays silent when stderr isn't a terminal (e.g. when driven by the deploy UI) unless forced.
+    # -s: total bytes, so it can show percentage and ETA (tar adds only a few hundred bytes of headers).
+    # -i 2: refresh every 2s instead of every second, to keep piped output small.
+    total_bytes = sum(f.stat().st_size for f in local_dir.rglob("*") if f.is_file())
     pv_proc = subprocess.Popen(
-        ["pv", "-pterb"],
+        ["pv", "-pterb", "-f", "-i", "2", "-s", str(total_bytes)],
         stdin=tar_proc.stdout,
         stdout=subprocess.PIPE,
     )
@@ -733,31 +806,44 @@ def step11_verify_checksums(
 def main():
     _setup_logging()
 
-    local_dir, server, ssh_key, location = _parse_args()
+    local_dir, server, ssh_key, location, assume_yes = _parse_args()
 
     try:
         _validate_pv()
         _validate_docker_socket()
         _validate_local_dir(local_dir)
-        _confirm(local_dir, server, ssh_key, location)
+        if not assume_yes:
+            _confirm(local_dir, server, ssh_key, location)
         start_time = time.time()
 
-        step1_cycle_container(local_dir)
-        step2_delete_repository()
-        step3_create_repository()
-        step4_create_snapshot_prod()
-        step5_create_snapshot_metadata()
-        step6_create_snapshot_catalogue()
-        step7_verify_snapshots()
-        step8_verify_files_on_disk(local_dir)
-
-        tarball_path = step9_create_tarball(local_dir)
-
+        phases = [
+            ("Restart OpenSearch on a clean snapshot folder", lambda: step1_cycle_container(local_dir)),
+            ("Reset snapshot repository", step2_delete_repository),
+            ("Register snapshot repository", step3_create_repository),
+            ("Snapshot main index", step4_create_snapshot_prod),
+            ("Snapshot metadata index", step5_create_snapshot_metadata),
+            ("Snapshot catalogue index", step6_create_snapshot_catalogue),
+            ("Verify snapshots", step7_verify_snapshots),
+            ("Verify snapshot files on disk", lambda: step8_verify_files_on_disk(local_dir)),
+            ("Compress into tarball", lambda: step9_create_tarball(local_dir)),
+        ]
         if server:
-            manifest = _generate_manifest(local_dir)
-            step10_stream_to_remote(local_dir, server, ssh_key, location)
             remote_path = f"{location}/{local_dir.name}"
-            step11_verify_checksums(manifest, server, ssh_key, remote_path)
+            phases += [
+                ("Stream snapshots to prod", lambda: step10_stream_to_remote(local_dir, server, ssh_key, location)),
+                ("Verify checksums on prod", lambda: step11_verify_checksums(manifest, server, ssh_key, remote_path)),
+            ]
+        total_phases = len(phases)
+
+        manifest = None
+        tarball_path = None
+        for i, (label, fn) in enumerate(phases, 1):
+            _progress(label, i, total_phases)
+            if label.startswith("Stream snapshots"):
+                manifest = _generate_manifest(local_dir)
+            result = fn()
+            if label.startswith("Compress"):
+                tarball_path = result
 
         elapsed = time.time() - start_time
         mins, secs = divmod(int(elapsed), 60)

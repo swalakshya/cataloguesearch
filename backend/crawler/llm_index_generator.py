@@ -13,7 +13,7 @@ from backend.crawler.index_generator import IndexGenerator
 
 log_handle = logging.getLogger(__name__)
 
-_VERSE_BLOCK_TYPES = {"hindi_verse", "prakrit_verse", "sanskrit_verse"}
+_VERSE_BLOCK_TYPES = {"hindi_verse", "gujarati_verse", "prakrit_verse", "sanskrit_verse"}
 
 
 class LLMIndexGenerator(IndexGenerator):

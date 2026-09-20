@@ -20,6 +20,7 @@ from backend.crawler.llm_index_generator import LLMIndexGenerator
 from backend.crawler.index_state import IndexState
 from backend.common.utils import get_merged_config, list_directories
 from backend.crawler import heading_detector
+from backend.crawler.progress_note import emit_progress_note
 
 # Setup logging for this module
 log_handle = logging.getLogger(__name__)
@@ -40,9 +41,15 @@ class SingleFileProcessor:
         self._output_ocr_base_dir = config.BASE_OCR_PATH
         self._scan_time = scan_time
         self._pdf_processor_factory = pdf_processor_factory  # Optional: for testing
+        # "File 2/3: name.pdf", set by Discovery for the Discover UI's one-line progress
+        self.progress_label = None
 
         # Load scan_config once and cache it
         self._scan_config = get_scan_config(self._file_path, self._base_pdf_folder)
+
+    def _note_progress(self, detail: str = None):
+        if self.progress_label:
+            emit_progress_note(f"{self.progress_label} · {detail}" if detail else self.progress_label)
 
     def _get_chunk_strategy(self) -> str:
         """
@@ -251,6 +258,7 @@ class SingleFileProcessor:
         return page_to_data
 
     def process(self):
+        self._note_progress()
         relative_pdf_path = os.path.relpath(self._file_path, self._base_pdf_folder)
         document_id = str(uuid.uuid5(uuid.NAMESPACE_URL, relative_pdf_path))
 
@@ -312,6 +320,12 @@ class SingleFileProcessor:
 
                 self._save_state(document_id, current_state)
 
+                # OCR and text generation are one operation: write the text/ folder
+                # now (dry run = no embeddings, nothing sent to OpenSearch, config_hash
+                # stays empty so the file still reads "OCRed", not "Indexed"), so the
+                # paragraphs can be checked before indexing. index() regenerates it.
+                self._generate_text_files()
+
             log_handle.info(f"Generated OCR text files for {self._file_path}")
 
         except Exception as e:
@@ -320,10 +334,20 @@ class SingleFileProcessor:
             return
 
 
+    def _generate_text_files(self):
+        """Writes the text/ folder (pages_*.txt, verses_*.json) via a dry-run index().
+        Never fails the OCR step that already succeeded -- index() redoes this anyway."""
+        try:
+            self.index(dry_run=True)
+        except Exception as e:
+            traceback.print_exc()
+            log_handle.error(f"Text generation failed for {self._file_path}: {e}")
+
     def index(self, dry_run=False, reindex_metadata_only=False):
         relative_path = os.path.relpath(self._file_path, self._base_pdf_folder)
         document_id = str(uuid.uuid5(uuid.NAMESPACE_URL, relative_path))
         log_handle.info(f"Indexing PDF: {self._file_path} ID: {document_id}, reindex_metadata_only: {reindex_metadata_only}")
+        self._note_progress()
 
         output_ocr_dir = f"{self._output_ocr_base_dir}/{os.path.splitext(relative_path)[0]}"
         output_text_dir = f"{self._output_text_base_dir}/{os.path.splitext(relative_path)[0]}"
@@ -525,6 +549,7 @@ class SingleFileProcessor:
                 sub_ocr_checksum = self._index_state.calculate_ocr_checksum(
                     sub_file_path, sub_pages)
 
+                self._note_progress(f"sub-section {i+1}/{len(sub_sections)}: {sg_name}")
                 log_handle.info(
                     f"Processing sub-section [{i+1}/{len(sub_sections)}]: "
                     f"{sg_field}={sg_name}, pages {sg_start}-{sg_end}, doc_id={sub_doc_id}"
@@ -609,6 +634,10 @@ class Discovery:
         self._indexing_module = indexing_mod
         self._index_state = index_state
         self._pdf_processor_factory = pdf_processor_factory  # For testing
+        # File numbering for the Discover UI's progress line: crawl() sets the total across all
+        # the directories it walks; a direct process_directory() call numbers within its directory.
+        self._file_seq = 0
+        self._file_total = 0
 
         # Ensure required components are initialized
         if not self._indexing_module:
@@ -708,9 +737,12 @@ class Discovery:
             log_handle.warning(f"Cannot access directory {directory}: {e}")
             return
 
-        for file_name in files:
-            if not file_name.lower().endswith(".pdf"):
-                continue
+        pdf_names = [f for f in files if f.lower().endswith(".pdf")]
+        if not self._file_total:
+            self._file_seq = 0
+
+        for file_name in pdf_names:
+            self._file_seq += 1
             pdf_file_path = os.path.abspath(os.path.join(directory, file_name))
 
             single_file_processor = SingleFileProcessor(
@@ -721,6 +753,8 @@ class Discovery:
                 scan_time=scan_time,
                 pdf_processor_factory=self._pdf_processor_factory
             )
+            file_total = max(self._file_total or len(pdf_names), self._file_seq)  # downloads can add PDFs
+            single_file_processor.progress_label = f"File {self._file_seq}/{file_total}: {file_name}"
             if process:
                 log_handle.info(f"Processing PDF file {file_name}")
                 single_file_processor.process()
@@ -759,8 +793,15 @@ class Discovery:
         log_handle.info(f"Found {len(directories_to_crawl)} directories to crawl")
 
         # Second, crawl each directory for PDF files
-        for directory in directories_to_crawl:
-            self.process_directory(directory, process, index, dry_run, reindex_metadata_only, current_scan_time)
+        self._file_seq = 0
+        self._file_total = sum(
+            1 for d in directories_to_crawl if os.path.isdir(d)
+            for f in os.listdir(d) if f.lower().endswith(".pdf"))
+        try:
+            for directory in directories_to_crawl:
+                self.process_directory(directory, process, index, dry_run, reindex_metadata_only, current_scan_time)
+        finally:
+            self._file_seq = self._file_total = 0
 
         self._index_state.garbage_collect(self.base_pdf_folder)
 
