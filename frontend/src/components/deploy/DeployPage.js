@@ -5,6 +5,7 @@ import {
     useJobs, BusyNotice, RunPanel, JobHistory,
 } from '../dev/JobUI';
 import CleanupTab from './CleanupTab';
+import OpenSearchCompare, { useOpenSearchCompare } from './OpenSearchCompare';
 
 // Run steps, in order. The run keeps copy and restore as separate steps so "Retry from here" works.
 const ACTION_ORDER = ['build', 'copy_snapshots', 'restore_prod'];
@@ -38,6 +39,7 @@ export default function DeployPage() {
     const [prodLoading, setProdLoading] = useState(false);
     const [buildServices, setBuildServices] = useState([]);
     const [confirm, setConfirm] = useState(null);
+    const compare = useOpenSearchCompare();
     const jobsRef = useRef(null); // lets callbacks defined before useJobs() report errors
 
     const loadOverview = useCallback(async () => {
@@ -51,7 +53,7 @@ export default function DeployPage() {
     }, []);
 
     // Refresh registry / OpenSearch / prod status when a run ends.
-    const jobs = useJobs('deploy', () => { loadOverview(); loadProd(); });
+    const jobs = useJobs('deploy', () => { loadOverview(); loadProd(); compare.refresh(); });
     jobsRef.current = jobs;
 
     useEffect(() => {
@@ -74,11 +76,14 @@ export default function DeployPage() {
 
     const requestRun = (actions, services = buildServices) => {
         const titles = Object.fromEntries((config?.actions || []).map((a) => [a.id, a.title]));
-        if (!actions.some((a) => DANGEROUS.has(a))) { start(actions, services); return; }
+        const pushesOpenSearch = actions.some((a) => a === 'copy_snapshots' || a === 'restore_prod');
+        const alreadySynced = pushesOpenSearch && compare.report?.in_sync;
+        if (!alreadySynced && !actions.some((a) => DANGEROUS.has(a))) { start(actions, services); return; }
         setConfirm({
             title: actions.includes('build') && actions.length > 1 ? 'Run full deploy to prod?'
                 : actions.includes('copy_snapshots') ? 'Deploy OpenSearch to prod?' : 'Restore on prod?',
             lines: [
+                ...(alreadySynced ? ['Prod already matches dev, so this would push nothing new.'] : []),
                 ...actions.map((a) => titles[a] || a),
                 `Host: ${config?.prod_host}`,
                 'Restore deletes the prod indices and replaces them with the snapshots. Prod restarts briefly.',
@@ -199,6 +204,7 @@ export default function DeployPage() {
                 {CARDS.map((card, idx) => (
                     <Card key={card.id} title={`${idx + 1}. ${card.title}`}>
                         <p className="text-xs text-slate-500 mb-3">{card.hint}</p>
+                        {card.id === 'opensearch' && <OpenSearchCompare compare={compare} />}
                         {card.id === 'build' && config && (
                             <div className="mb-3 space-y-1">
                                 {config.build_services.map((s) => (

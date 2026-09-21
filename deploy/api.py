@@ -5,7 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from deploy import checks, gc, settings
+from deploy import checks, compare, gc, settings
 from deploy.actions import ACTION_ORDER, ACTION_TITLES, start_deploy
 from deploy.runner import Busy, runner
 
@@ -42,6 +42,12 @@ async def overview():
 @router.get("/prod")
 async def prod():
     return await asyncio.to_thread(checks.prod_status)
+
+
+@router.get("/compare")
+async def compare_opensearch():
+    """Dev vs prod: are the indices a snapshot would push already identical on prod? Read-only."""
+    return await asyncio.to_thread(compare.compare)
 
 
 @router.post("/runs", status_code=202)
