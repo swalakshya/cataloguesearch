@@ -29,3 +29,12 @@ OPENSEARCH_URL = os.environ.get("DEPLOY_OPENSEARCH_URL", "http://localhost:9200"
 SCRIPT_PYTHON = os.environ.get("DEPLOY_PYTHON", sys.executable)
 
 SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=30"]
+
+# Docker (OrbStack) health. `docker ps` answering within DOCKER_SLOW_SECONDS is green; slower is yellow (stuck or
+# struggling); no answer within DOCKER_TIMEOUT_SECONDS, or an error, is red. Yellow and red block starting jobs.
+DOCKER_SLOW_SECONDS = float(os.environ.get("DEPLOY_DOCKER_SLOW_SECONDS", "3"))
+DOCKER_TIMEOUT_SECONDS = float(os.environ.get("DEPLOY_DOCKER_TIMEOUT_SECONDS", "12"))
+# OrbStack's CLI, used to restart Docker. Looked up on PATH unless set.
+ORB_BIN = os.environ.get("DEPLOY_ORB_BIN", "")
+# The local OpenSearch container the restart waits for (when it exists).
+OPENSEARCH_CONTAINER = os.environ.get("DEPLOY_OPENSEARCH_CONTAINER", "opensearch-node")

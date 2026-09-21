@@ -8,6 +8,7 @@ from hierarchical scan_config.json files in the PDF directory structure.
 import os
 import json
 import logging
+from typing import Optional
 
 import fitz
 
@@ -70,6 +71,27 @@ def effective_language(scan_config: dict, merged_config: dict) -> str:
     Same rule the crawler applies (SingleFileProcessor), so the eval UI shows what indexing will use.
     """
     return (scan_config or {}).get("language") or (merged_config or {}).get("language") or "hi"
+
+
+def scan_config_source_path(file_path: str, base_pdf_folder: str) -> Optional[str]:
+    """
+    The scan_config.json that get_scan_config reads a file's own entry from: the deepest one on the way from
+    the base folder down to the PDF's folder (each folder's file replaces the one above it, so only that one
+    can hold the file's entry). None when the PDF is outside the base folder or no folder has one.
+    """
+    base = os.path.realpath(base_pdf_folder)
+    current = os.path.realpath(os.path.dirname(file_path))
+    found = None
+    while True:
+        candidate = os.path.join(current, "scan_config.json")
+        if found is None and os.path.exists(candidate):
+            found = candidate
+        if current == base:
+            return found
+        parent = os.path.dirname(current)
+        if parent == current:
+            return None  # reached the filesystem root without meeting the base folder
+        current = parent
 
 
 def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:

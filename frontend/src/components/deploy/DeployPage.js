@@ -5,6 +5,7 @@ import {
     useJobs, BusyNotice, RunPanel, JobHistory,
 } from '../dev/JobUI';
 import CleanupTab from './CleanupTab';
+import { useDevShell, DockerBlockedNotice } from '../dev/DevShell';
 import OpenSearchCompare, { useOpenSearchCompare } from './OpenSearchCompare';
 
 // Run steps, in order. The run keeps copy and restore as separate steps so "Retry from here" works.
@@ -39,6 +40,7 @@ export default function DeployPage() {
     const [prodLoading, setProdLoading] = useState(false);
     const [buildServices, setBuildServices] = useState([]);
     const [confirm, setConfirm] = useState(null);
+    const dockerBlocked = !!useDevShell().docker?.blocked;   // yellow / red / restarting: builds and snapshots need Docker
     const compare = useOpenSearchCompare();
     const jobsRef = useRef(null); // lets callbacks defined before useJobs() report errors
 
@@ -191,6 +193,8 @@ export default function DeployPage() {
                 </Card>
             </div>
 
+            {tab === 'deploy' && <DockerBlockedNotice />}
+
             {overview && overview.tooling && (!overview.tooling.zstandard || !overview.tooling.pv || !overview.tooling.docker || !overview.tooling.build_env_file) && (
                 <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded p-3">
                     Missing on this machine:{' '}
@@ -216,7 +220,8 @@ export default function DeployPage() {
                             </div>
                         )}
                         <button
-                            disabled={busy || !config || (card.id === 'build' && buildServices.length === 0)}
+                            disabled={busy || dockerBlocked || !config || (card.id === 'build' && buildServices.length === 0)}
+                            title={dockerBlocked ? 'Docker is not ready. Restart it from the Docker light at the top.' : undefined}
                             onClick={() => requestRun(card.actions)}
                             className={`cursor-pointer px-3 py-1.5 rounded text-sm font-medium border shadow-sm disabled:opacity-40 disabled:cursor-not-allowed ${card.actions.some((a) => DANGEROUS.has(a)) ? 'border-red-300 text-red-700 hover:bg-red-50' : 'border-slate-300 text-slate-700 hover:bg-slate-50'}`}
                         >

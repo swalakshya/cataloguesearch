@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
     api, postJson, timeAgo, Card, ErrorBanner, ConfirmModal, useJobs, BusyNotice, RunPanel, JobHistory,
 } from '../dev/JobUI';
+import { useDevShell, DockerBlockedNotice } from '../dev/DevShell';
 
 // Decimal units, like `docker system df`, so the numbers here match what you'd see on the machine.
 export function formatBytes(n) {
@@ -166,6 +167,10 @@ export default function CleanupTab({ prodHost }) {
     };
 
     const busy = jobs.busy;
+    // Cleaning this machine talks to Docker; cleaning prod goes over ssh and does not.
+    const dockerBlocked = !!useDevShell().docker?.blocked;
+    const dockerOff = target === 'local' && dockerBlocked;
+    const off = busy || dockerOff;
     const unusedVolumes = scan?.volumes;
 
     return (
@@ -189,6 +194,7 @@ export default function CleanupTab({ prodHost }) {
 
             <ErrorBanner message={jobs.error} onClose={() => jobs.setError('')} />
             <BusyNotice jobs={jobs} />
+            {target === 'local' && <DockerBlockedNotice />}
             {scanError && (
                 <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded p-3" role="alert">{scanError}</div>
             )}
@@ -204,9 +210,9 @@ export default function CleanupTab({ prodHost }) {
                             {scan.totals.optional > 0 && <> A further <span className="font-medium">{formatBytes(scan.totals.optional)}</span> is optional and asks for confirmation.</>}
                         </p>
                     </div>
-                    <button disabled={busy || safeCats.length === 0} onClick={() => request(safeCats)}
+                    <button disabled={off || safeCats.length === 0} onClick={() => request(safeCats)}
                         className="cursor-pointer px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-semibold shadow-md hover:shadow-lg transition disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none whitespace-nowrap">
-                        {busy ? 'A job is in progress…' : `Clean all safe (${formatBytes(safeTotal)})  ▶`}
+                        {busy ? 'A job is in progress…' : dockerOff ? 'Docker is not ready' : `Clean all safe (${formatBytes(safeTotal)})  ▶`}
                     </button>
                 </div>
             )}
@@ -214,7 +220,7 @@ export default function CleanupTab({ prodHost }) {
             {selectedCats.length > 0 && (
                 <div className="sticky top-2 z-10 bg-white border-2 border-blue-300 rounded-lg shadow-md px-4 py-2.5 flex flex-wrap items-center gap-3" data-testid="selection-bar">
                     <div className="flex-1 text-sm font-semibold text-slate-800">{selectedCats.length} selected · about {formatBytes(selectedTotal)}</div>
-                    <button disabled={busy} onClick={() => request(selectedCats)}
+                    <button disabled={off} onClick={() => request(selectedCats)}
                         className="cursor-pointer px-3 py-1.5 rounded text-sm font-medium border border-blue-600 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
                         Clean selected
                     </button>
@@ -225,7 +231,7 @@ export default function CleanupTab({ prodHost }) {
             {!scan && !scanError && <p className="text-sm text-slate-400">Scanning…</p>}
             <div className="space-y-2">
                 {cats.map((c) => (
-                    <CategoryRow key={c.id} cat={c} checked={selected.has(c.id)} onCheck={toggle} busy={busy}
+                    <CategoryRow key={c.id} cat={c} checked={selected.has(c.id)} onCheck={toggle} busy={off}
                         variant={variants[c.id]} onVariant={(id, v) => setVariants((cur) => ({ ...cur, [id]: v }))}
                         onClean={(cat) => request([byId[cat.id]])} />
                 ))}

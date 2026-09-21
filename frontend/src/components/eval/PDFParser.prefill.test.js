@@ -176,3 +176,90 @@ describe('fill layout (panes sized to the window)', () => {
         expect(cropInput('Top %').closest('div.border-b').className).toMatch(/shrink-0/);
     });
 });
+
+describe('SET in Verify sub-sections', () => {
+    const SUBS = [{ field: 'Adhikaar', name: 'Prastavana', start_page: 12, end_page: 39 }];
+    const CFG = (editable) => ({ ...LOK_VIBHAG, sub_sections: SUBS,
+        sub_sections_source: { editable, reason: editable ? '' : 'Read-only: this scan_config.json is not in the configs repo.', file: 'x/scan_config.json' } });
+    const mockServer = (cfg, save) => {
+        global.fetch = jest.fn(async (url, opts) => {
+            if (String(url).includes('/sub-section-page')) return save(JSON.parse(opts.body));
+            if (String(url).includes('/eval/ocr/scan-config')) return { ok: true, status: 200, json: async () => cfg };
+            return { ok: true, status: 200, json: async () => ({}) };
+        });
+    };
+    const openVerifier = async () => {
+        mockPdfDoc = { numPages: 300, getPage: async () => { throw new Error('no canvas in jsdom'); } };
+        renderParser();
+        fireEvent.click(await screen.findByRole('button', { name: 'Verify sub-sections (1)' }));
+        return screen.getByRole('dialog', { name: 'Verify sub-sections' });
+    };
+
+    test('SET sends the library file, the section and the page, and the list shows the new page', async () => {
+        const saves = [];
+        mockServer(CFG(true), async (body) => {
+            saves.push(body);
+            return { ok: true, status: 200, json: async () => ({ sub_sections: [{ ...SUBS[0], start_page: 13 }] }) };
+        });
+        const dialog = await openVerifier();
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Start next page' }));
+        fireEvent.click(await within(dialog).findByRole('button', { name: 'SET start = 13' }));
+        await waitFor(() => expect(saves).toHaveLength(1));
+        expect(saves[0]).toEqual({
+            relative_path: 'Granth/hindi/Karananuyog/Lok Vibhag/LokVibhag.pdf', index: 0, which: 'start', page: 13,
+            expect_name: 'Prastavana', expect_field: 'Adhikaar', expect_page: 12,
+        });
+        expect(await within(dialog).findByTestId('saved-note')).toHaveTextContent('start_page 12 → 13');
+        expect(within(dialog).getByTestId('rail')).toHaveTextContent('13–39');
+    });
+
+    test('the server refusing the save is shown, and the list keeps the old page', async () => {
+        mockServer(CFG(true), async () => ({ ok: false, status: 409, json: async () => ({ detail: 'The file changed since it was loaded (start_page is now 14). Reopen the file.' }) }));
+        const dialog = await openVerifier();
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Start next page' }));
+        fireEvent.click(await within(dialog).findByRole('button', { name: 'SET start = 13' }));
+        expect(await within(dialog).findByRole('alert')).toHaveTextContent('start_page is now 14');
+        expect(within(dialog).getByTestId('rail')).toHaveTextContent('12–39');
+    });
+
+    test('a config that is not from the configs repo can be reviewed but has no SET', async () => {
+        mockServer(CFG(false), async () => { throw new Error('must not be called'); });
+        const dialog = await openVerifier();
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Start next page' }));
+        expect(within(dialog).queryByRole('button', { name: /SET/ })).toBeNull();
+        expect(within(dialog).getByText(/not in the configs repo/)).toBeInTheDocument();
+    });
+
+    test('Remove and Merge go to their own endpoints for the opened library file, and the list follows the answer', async () => {
+        const TWO = [SUBS[0], { field: 'Adhikaar', name: 'Second', start_page: 40, end_page: 60 }];
+        const posts = [];
+        global.fetch = jest.fn(async (url, opts) => {
+            const u = String(url);
+            if (u.includes('/sub-sections/')) {
+                posts.push({ url: u.split('/sub-sections/')[1], body: JSON.parse(opts.body) });
+                const merged = u.endsWith('/merge');
+                return { ok: true, status: 200, json: async () => ({ sub_sections: merged ? [{ ...SUBS[0], name: 'Both', end_page: 60 }] : [TWO[1]] }) };
+            }
+            if (u.includes('/eval/ocr/scan-config')) return { ok: true, status: 200, json: async () => ({ ...CFG(true), sub_sections: TWO }) };
+            return { ok: true, status: 200, json: async () => ({}) };
+        });
+        mockPdfDoc = { numPages: 300, getPage: async () => { throw new Error('no canvas in jsdom'); } };
+        renderParser();
+        fireEvent.click(await screen.findByRole('button', { name: 'Verify sub-sections (2)' }));
+        const dialog = screen.getByRole('dialog', { name: 'Verify sub-sections' });
+
+        fireEvent.click(within(dialog).getByLabelText('Select Prastavana'));
+        fireEvent.click(within(dialog).getByLabelText('Select Second'));
+        fireEvent.click(within(dialog).getByRole('button', { name: /^Merge \(2\)/ }));
+        const ask = screen.getByRole('dialog', { name: 'Merge sub-sections' });
+        fireEvent.change(within(ask).getByLabelText(/Name of the merged/), { target: { value: 'Both' } });
+        fireEvent.click(within(ask).getByRole('button', { name: 'Merge' }));
+        await waitFor(() => expect(posts).toHaveLength(1));
+        expect(posts[0].url).toBe('merge');
+        expect(posts[0].body.relative_path).toBe('Granth/hindi/Karananuyog/Lok Vibhag/LokVibhag.pdf');
+        expect(posts[0].body.name).toBe('Both');
+        expect(posts[0].body.items.map((i) => i.index)).toEqual([0, 1]);
+        await waitFor(() => expect(within(dialog).getByTestId('rail')).toHaveTextContent('12–60'));
+        expect(within(dialog).getByTestId('rail')).not.toHaveTextContent('Second');
+    });
+});

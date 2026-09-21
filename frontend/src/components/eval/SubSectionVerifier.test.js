@@ -188,3 +188,242 @@ describe('helpers', () => {
         expect(neighbours([], 3)).toEqual({ prev: undefined, next: undefined });
     });
 });
+
+describe('reviewing neighbouring pages, and SET', () => {
+    const click = (name) => fireEvent.click(screen.getByRole('button', { name }));
+    const setBtn = (re) => screen.queryByRole('button', { name: re });
+
+    test('each pane steps to the neighbouring page and can reset to the config page', async () => {
+        setup();
+        await screen.findByAltText('Start page 12');
+        click('Start next page');
+        expect(await screen.findByAltText('Start page 13')).toBeInTheDocument();
+        expect(screen.getByTestId('moved-start')).toHaveTextContent('config says p.12');
+        expect(screen.queryByTestId('moved-end')).toBeNull();                       // the End pane did not move
+        click('End previous page'); click('End previous page');
+        expect(await screen.findByAltText('End page 37')).toBeInTheDocument();
+        click('Start previous page'); click('Start previous page');
+        expect(await screen.findByAltText('Start page 11')).toBeInTheDocument();
+        fireEvent.click(within(screen.getByText(/Start/, { selector: 'span' }).closest('div').parentElement).getByRole('button', { name: 'Reset' }));
+        expect(await screen.findByAltText('Start page 12')).toBeInTheDocument();
+        expect(screen.queryByTestId('moved-start')).toBeNull();
+    });
+
+    test('the keys [ ] , . step the Start and End pages', async () => {
+        setup();
+        await screen.findByAltText('End page 39');
+        key(']'); key(']');
+        expect(await screen.findByAltText('Start page 14')).toBeInTheDocument();
+        key('['); key('[');  key('[');
+        expect(await screen.findByAltText('Start page 11')).toBeInTheDocument();
+        key('.');
+        expect(await screen.findByAltText('End page 40')).toBeInTheDocument();
+        key(',');  key(',');
+        expect(await screen.findByAltText('End page 38')).toBeInTheDocument();
+    });
+
+    test('stepping stays inside the PDF', async () => {
+        setup({ subSections: [{ name: 'A', start_page: 1, end_page: 300 }] });
+        await screen.findByAltText('Start page 1');
+        expect(screen.getByRole('button', { name: 'Start previous page' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'End next page' })).toBeDisabled();
+    });
+
+    test('moving to another sub-section drops the stepped page, and stepping never touches the config values shown in the list', async () => {
+        setup();
+        await screen.findByAltText('Start page 12');
+        click('Start next page');
+        key('ArrowRight');
+        expect(await screen.findByAltText('Start page 56')).toBeInTheDocument();
+        key('ArrowLeft');
+        expect(await screen.findByAltText('Start page 12')).toBeInTheDocument();
+        expect(screen.getByTestId('rail')).toHaveTextContent('12–39');
+    });
+
+    test('there is no SET unless the sub-sections come from the configs repo, and the reason is shown', async () => {
+        setup({ editable: false, editNote: 'Read-only: this scan_config.json is not in the configs repo.', onSetPage: jest.fn() });
+        await screen.findByAltText('Start page 12');
+        click('Start next page');
+        expect(setBtn(/SET/)).toBeNull();
+        expect(screen.getByText(/not in the configs repo/)).toBeInTheDocument();
+    });
+
+    test('SET appears only once the pane is off the config page, and sends what is on screen', async () => {
+        const onSetPage = jest.fn().mockResolvedValue();
+        setup({ editable: true, onSetPage });
+        await screen.findByAltText('Start page 12');
+        expect(setBtn(/SET/)).toBeNull();
+        click('Start next page');
+        fireEvent.click(await screen.findByRole('button', { name: 'SET start = 13' }));
+        await waitFor(() => expect(onSetPage).toHaveBeenCalledWith(0, 'start', 13, SUBS[0]));
+    });
+
+    test('after a successful SET the marker clears, and Undo puts the old page back', async () => {
+        let subs = SUBS;
+        const onSetPage = jest.fn().mockImplementation(async (index, which, page) => {
+            subs = subs.map((s, i) => (i === index ? { ...s, [`${which}_page`]: page } : s));
+            view.rerender(el(subs));
+        });
+        const el = (list) => <SubSectionVerifier pdfDoc={{ numPages: 300 }} subSections={list} crop={null} multiPage={false} fileName="x.pdf"
+            onClose={() => {}} renderPageImage={async (_d, p) => `data:image/png;base64,P${p}`} editable onSetPage={onSetPage} />;
+        const view = render(el(subs));
+        await screen.findByAltText('End page 39');
+        click('End next page');
+        fireEvent.click(await screen.findByRole('button', { name: 'SET end = 40' }));
+        expect(await screen.findByTestId('saved-note')).toHaveTextContent('end_page 39 → 40');
+        expect(screen.queryByTestId('moved-end')).toBeNull();
+        expect(screen.getByTestId('rail')).toHaveTextContent('12–40');
+        fireEvent.click(within(screen.getByTestId('saved-note')).getByRole('button', { name: 'Undo' }));
+        await waitFor(() => expect(onSetPage).toHaveBeenLastCalledWith(0, 'end', 39, expect.objectContaining({ end_page: 40 })));
+        await waitFor(() => expect(screen.queryByTestId('saved-note')).toBeNull());
+    });
+
+    test('a refused save shows the reason and keeps the page you were looking at', async () => {
+        const onSetPage = jest.fn().mockRejectedValue(new Error('The file changed since it was loaded. Reopen the file.'));
+        setup({ editable: true, onSetPage });
+        await screen.findByAltText('Start page 12');
+        click('Start next page');
+        fireEvent.click(await screen.findByRole('button', { name: 'SET start = 13' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent('The file changed since it was loaded');
+        expect(screen.getByAltText('Start page 13')).toBeInTheDocument();
+        expect(screen.queryByTestId('saved-note')).toBeNull();
+    });
+
+    test('SET is blocked when start would pass end, or end would go before start', async () => {
+        setup({ editable: true, onSetPage: jest.fn(), subSections: [{ name: 'A', start_page: 10, end_page: 11 }] });
+        await screen.findByAltText('Start page 10');
+        click('Start next page'); click('Start next page');                       // start 12 > end 11
+        expect(screen.getByRole('button', { name: 'SET start = 12' })).toBeDisabled();
+        click('Start previous page');                                            // start 11 = end 11 is fine
+        expect(screen.getByRole('button', { name: 'SET start = 11' })).toBeEnabled();
+        click('End previous page'); click('End previous page');                  // end 9 < start 10
+        expect(screen.getByRole('button', { name: 'SET end = 9' })).toBeDisabled();
+    });
+});
+
+describe('removing and merging sub-sections', () => {
+    const tick = (name) => fireEvent.click(screen.getByLabelText(`Select ${name}`));
+    const btn = (re) => screen.getByRole('button', { name: re });
+    const ref = (i) => ({ index: i, name: SUBS[i].name, field: SUBS[i].field, start_page: SUBS[i].start_page, end_page: SUBS[i].end_page });
+    // The parent owns the list; this stands in for it, applying what the server would return.
+    const harness = (apply) => {
+        const onEditSections = jest.fn(async (action, payload) => { const list = apply(action, payload); view.rerender(el(list)); return list; });
+        const el = (list) => <SubSectionVerifier pdfDoc={{ numPages: 300 }} subSections={list} crop={null} multiPage={false} fileName="x.pdf"
+            onClose={onClose} renderPageImage={async (_d, p) => `data:image/png;base64,P${p}`} editable onSetPage={jest.fn()} onEditSections={onEditSections} />;
+        const onClose = jest.fn();
+        const view = render(el(SUBS));
+        return { onEditSections, onClose };
+    };
+
+    test('with nothing ticked, Remove offers the sub-section on screen and, once confirmed, removes it', async () => {
+        const { onEditSections } = harness(() => SUBS.slice(1));
+        await screen.findByAltText('Start page 12');
+        fireEvent.click(btn(/^Remove \(1\)/));
+        const dialog = screen.getByRole('dialog', { name: 'Remove sub-sections' });
+        expect(dialog).toHaveTextContent('Remove 1 sub-section?');
+        expect(dialog).toHaveTextContent('Prastavana');
+        expect(dialog).toHaveTextContent('p.12–39');
+        expect(onEditSections).not.toHaveBeenCalled();                              // nothing happens before confirming
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Remove' }));
+        await waitFor(() => expect(onEditSections).toHaveBeenCalledWith('remove', { items: [ref(0)] }));
+        expect(await screen.findByTestId('edit-note')).toHaveTextContent('Removed 1 sub-section (Prastavana)');
+        expect(screen.queryByRole('dialog', { name: 'Remove sub-sections' })).toBeNull();
+        expect(label()).toBe('Adhikaar · Pratham Vibhag - Jambudvip');              // the next one is on screen now
+        expect(screen.getByTestId('rail')).not.toHaveTextContent('Prastavana');
+    });
+
+    test('with several ticked, Remove takes exactly those', async () => {
+        const { onEditSections } = harness(() => [SUBS[1], SUBS[3]]);
+        await screen.findByAltText('Start page 12');
+        tick('Prastavana'); tick('Dwitiya Vibhag - Lavan Samudra');
+        fireEvent.click(btn(/^Remove \(2\)/));
+        fireEvent.click(within(screen.getByRole('dialog', { name: 'Remove sub-sections' })).getByRole('button', { name: 'Remove' }));
+        await waitFor(() => expect(onEditSections).toHaveBeenCalledWith('remove', { items: [ref(0), ref(2)] }));
+        await waitFor(() => expect(btn(/^Merge \(0\)/)).toBeDisabled());             // the ticks are cleared: the indexes changed
+    });
+
+    test('Cancel and Esc close the dialog without touching the file, and Esc does not close the verifier', async () => {
+        const { onEditSections, onClose } = harness(() => SUBS);
+        await screen.findByAltText('Start page 12');
+        fireEvent.click(btn(/^Remove/));
+        key('Escape');
+        expect(screen.queryByRole('dialog', { name: 'Remove sub-sections' })).toBeNull();
+        expect(onClose).not.toHaveBeenCalled();
+        fireEvent.click(btn(/^Remove/));
+        fireEvent.click(within(screen.getByRole('dialog', { name: 'Remove sub-sections' })).getByRole('button', { name: 'Cancel' }));
+        expect(screen.queryByRole('dialog', { name: 'Remove sub-sections' })).toBeNull();
+        expect(onEditSections).not.toHaveBeenCalled();
+        key('Escape');
+        expect(onClose).toHaveBeenCalled();
+    });
+
+    test('while the dialog is open the arrow and page keys do nothing', async () => {
+        harness(() => SUBS);
+        await screen.findByAltText('Start page 12');
+        fireEvent.click(btn(/^Remove/));
+        key('ArrowRight'); key(']');
+        expect(label()).toBe('Adhikaar · Prastavana');
+        expect(screen.queryByTestId('moved-start')).toBeNull();
+    });
+
+    test('Merge needs two or more neighbouring ticked sub-sections', async () => {
+        harness(() => SUBS);
+        await screen.findByAltText('Start page 12');
+        expect(btn(/^Merge/)).toBeDisabled();
+        tick('Prastavana');
+        expect(btn(/^Merge \(1\)/)).toBeDisabled();
+        tick('Dwitiya Vibhag - Lavan Samudra');                                      // skips Pratham Vibhag
+        expect(btn(/^Merge \(2\)/)).toBeDisabled();
+        tick('Pratham Vibhag - Jambudvip');
+        expect(btn(/^Merge \(3\)/)).toBeEnabled();
+    });
+
+    test('Merge asks for the name, shows the joined page range, and sends the ticked ones with that name', async () => {
+        const merged = { field: 'Adhikaar', name: 'Vibhag 1 and 2', start_page: 56, end_page: 114 };
+        const { onEditSections } = harness(() => [SUBS[0], merged, SUBS[3]]);
+        await screen.findByAltText('Start page 12');
+        tick('Pratham Vibhag - Jambudvip'); tick('Dwitiya Vibhag - Lavan Samudra');
+        fireEvent.click(btn(/^Merge \(2\)/));
+        const dialog = screen.getByRole('dialog', { name: 'Merge sub-sections' });
+        expect(dialog).toHaveTextContent('p.56');
+        expect(dialog).toHaveTextContent('p.114');                                   // first start .. last end
+        const confirm = within(dialog).getByRole('button', { name: 'Merge' });
+        expect(confirm).toBeDisabled();                                              // no name yet
+        fireEvent.change(within(dialog).getByLabelText(/Name of the merged/), { target: { value: '  Vibhag 1 and 2 ' } });
+        expect(confirm).toBeEnabled();
+        fireEvent.click(confirm);
+        await waitFor(() => expect(onEditSections).toHaveBeenCalledWith('merge', { items: [ref(1), ref(2)], name: 'Vibhag 1 and 2' }));
+        expect(await screen.findByTestId('edit-note')).toHaveTextContent('Merged 2 sub-sections into "Vibhag 1 and 2"');
+        expect(label()).toBe('Adhikaar · Vibhag 1 and 2');
+        expect(screen.getByText(/pages 56–114/)).toBeInTheDocument();
+    });
+
+    test('a refused edit keeps the dialog open with the reason', async () => {
+        const onEditSections = jest.fn().mockRejectedValue(new Error('The file changed since it was loaded. Reopen the file.'));
+        setup({ editable: true, onSetPage: jest.fn(), onEditSections });
+        await screen.findByAltText('Start page 12');
+        fireEvent.click(btn(/^Remove/));
+        const dialog = screen.getByRole('dialog', { name: 'Remove sub-sections' });
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Remove' }));
+        expect(await within(dialog).findByRole('alert')).toHaveTextContent('The file changed since it was loaded');
+        expect(screen.queryByTestId('edit-note')).toBeNull();
+    });
+
+    test('Undo asks the server to put the file back', async () => {
+        const { onEditSections } = harness((action) => (action === 'undo' ? SUBS : SUBS.slice(1)));
+        await screen.findByAltText('Start page 12');
+        fireEvent.click(btn(/^Remove/));
+        fireEvent.click(within(screen.getByRole('dialog', { name: 'Remove sub-sections' })).getByRole('button', { name: 'Remove' }));
+        fireEvent.click(await within(await screen.findByTestId('edit-note')).findByRole('button', { name: 'Undo' }));
+        await waitFor(() => expect(onEditSections).toHaveBeenLastCalledWith('undo', {}));
+        await waitFor(() => expect(screen.queryByTestId('edit-note')).toBeNull());
+        expect(screen.getByTestId('rail')).toHaveTextContent('Prastavana');
+    });
+
+    test('no Remove or Merge when the config is not from the configs repo', async () => {
+        setup({ editable: false, editNote: 'Read-only: …', onSetPage: jest.fn(), onEditSections: jest.fn() });
+        await screen.findByAltText('Start page 12');
+        expect(screen.queryByRole('button', { name: /^Remove/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^Merge/ })).toBeNull();
+    });
+});

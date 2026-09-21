@@ -5,6 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from deploy import docker_health
 from deploy.runner import Busy
 from ingest import jobs, status
 
@@ -21,6 +22,14 @@ class CleanupRequest(BaseModel):
     confirm: bool = False  # the UI asks for a typed confirmation; the server insists it was given
 
 
+async def _require_docker() -> None:
+    """Indexing and cleanup need OpenSearch, which runs in Docker: refuse while Docker is yellow or red."""
+    try:
+        await asyncio.to_thread(docker_health.require_healthy)
+    except docker_health.DockerUnhealthy as exc:
+        raise HTTPException(503, str(exc))
+
+
 @router.get("/status")
 async def get_status():
     try:
@@ -31,6 +40,8 @@ async def get_status():
 
 @router.post("/runs", status_code=202)
 async def start_run(req: StartRequest):
+    if req.mode in ("index", "reindex"):   # OCR alone does not touch OpenSearch
+        await _require_docker()
     try:
         run_id = await asyncio.to_thread(jobs.start_discover, req.folders, req.mode)
     except ValueError as exc:
@@ -44,6 +55,7 @@ async def start_run(req: StartRequest):
 async def start_cleanup(req: CleanupRequest):
     if not req.confirm:
         raise HTTPException(422, "Cleanup deletes the folder's OpenSearch documents and index state; confirm=true is required")
+    await _require_docker()
     try:
         run_id = await asyncio.to_thread(jobs.start_cleanup, req.folder)
     except ValueError as exc:

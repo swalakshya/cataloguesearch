@@ -13,6 +13,17 @@ def ensure_opensearch_running():
     yield
 
 
+@pytest.fixture(autouse=True)
+def docker_is_green(monkeypatch):
+    """Job-start endpoints ask Docker first; tests must not depend on the real one (tests that care override this)."""
+    from deploy import docker_health
+    ok = {"status": "ok", "seconds": 0.1, "message": "docker ps answers in 0.1s.", "checked_at": "2026-01-01T00:00:00+00:00"}
+    monkeypatch.setattr(docker_health, "check", lambda: dict(ok))
+    docker_health.forget()
+    yield
+    docker_health.forget()
+
+
 @pytest.fixture
 def jobs_env(tmp_path, monkeypatch):
     """A fresh job database + log folder for each test, with the runner reset."""

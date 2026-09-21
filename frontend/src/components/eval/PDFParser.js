@@ -276,7 +276,38 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
         setSplitPct(ctl.splitPct);
     };
 
+    const libraryPdfPathRef = useRef(null); // the library file whose scan_config is loaded (what SET writes to)
+
+    // SET in the sub-section verifier: the server changes that one page number in the file's scan_config.json.
+    const setSubSectionPage = async (index, which, page, sub) => {
+        const res = await fetch(`${API_BASE_URL}/eval/ocr/scan-config/sub-section-page`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                relative_path: libraryPdfPathRef.current, index, which, page,
+                expect_name: sub.name ?? null, expect_field: sub.field ?? null, expect_page: sub[`${which}_page`],
+            }),
+        });
+        const body = await res.json().catch(() => null);
+        if (!res.ok) throw new Error((body && body.detail) || `HTTP ${res.status}`);
+        setLibraryScanConfig((cfg) => ({ ...cfg, sub_sections: body.sub_sections }));
+    };
+
+    // Remove / Merge / Undo in the sub-section verifier. Resolves to the file's new sub_sections.
+    const editSubSections = async (action, payload) => {
+        const res = await fetch(`${API_BASE_URL}/eval/ocr/scan-config/sub-sections/${action}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ relative_path: libraryPdfPathRef.current, ...payload }),
+        });
+        const body = await res.json().catch(() => null);
+        if (!res.ok) throw new Error((body && body.detail) || `HTTP ${res.status}`);
+        setLibraryScanConfig((cfg) => ({ ...cfg, sub_sections: body.sub_sections }));
+        return body.sub_sections;
+    };
+
     const loadScanConfigControls = async (pdfRelativePath) => {
+        libraryPdfPathRef.current = pdfRelativePath;
         try {
             const res = await fetch(`${API_BASE_URL}/eval/ocr/scan-config?relative_path=${encodeURIComponent(pdfRelativePath)}`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -658,6 +689,10 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                     subSections={libraryScanConfig.sub_sections}
                     crop={libraryScanConfig.crop}
                     multiPage={!!libraryScanConfig.multi_page}
+                    editable={!!libraryScanConfig.sub_sections_source?.editable}
+                    editNote={libraryScanConfig.sub_sections_source?.reason || ''}
+                    onSetPage={setSubSectionPage}
+                    onEditSections={editSubSections}
                     fileName={propSelectedFile?.selectedPDFFile}
                     onClose={() => setShowVerify(false)}
                 />

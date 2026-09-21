@@ -30,6 +30,9 @@ from PIL import Image
 from backend.config import Config
 from backend.crawler.advanced_pdf_processor import AdvancedPDFProcessor
 from backend.common.scan_config import get_scan_config, get_ignore_bookmarks, effective_language
+from backend.common.scan_config_edit import (
+    EditRefused, merge_sub_sections, remove_sub_sections, set_sub_section_page, sub_sections_source, undo_last_structural_edit,
+)
 from backend.common.utils import get_merged_config
 from backend.crawler.index_state import IndexState
 from backend.crawler.bookmark_extractor.factory import create_bookmark_extractor_by_name
@@ -334,6 +337,8 @@ async def get_file_scan_config(relative_path: str):
         scan_config = dict(get_scan_config(file_path, base_pdf_folder))
         # "language" may live in config.json rather than scan_config.json; resolve it the way indexing does
         scan_config["language"] = effective_language(scan_config, get_merged_config(file_path, base_pdf_folder))
+        # Tells the sub-section verifier whether its SET buttons may write back to this file's scan_config.json.
+        scan_config["sub_sections_source"] = sub_sections_source(file_path, base_pdf_folder, _scan_config_edit_root(config))
 
         return scan_config
 
@@ -342,6 +347,103 @@ async def get_file_scan_config(relative_path: str):
     except Exception as e:
         log_handle.error(f"Error getting scan config: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error getting scan config: {str(e)}")
+
+def _scan_config_edit_root(config: Config) -> str:
+    """The configs repo checkout whose scan_config.json files the verifier may edit (default: the base PDF folder)."""
+    return os.environ.get("SCAN_CONFIG_EDIT_ROOT") or config.BASE_PDF_PATH
+
+
+class SetSubSectionPageRequest(BaseModel):
+    relative_path: str
+    index: int = Field(..., ge=0)
+    which: str
+    page: int
+    expect_name: Optional[str] = None
+    expect_field: Optional[str] = None
+    expect_page: int
+
+
+def _edit_target(relative_path: str):
+    """(config, absolute PDF path) for a scan_config edit; the path must stay inside the PDF folder and exist."""
+    config = Config("configs/config.yaml")
+    file_path = _resolve_within_root(config, "pdf", relative_path if relative_path.endswith(".pdf") else f"{relative_path}.pdf")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail=f"File not found: {relative_path}")
+    return config, file_path
+
+
+async def _run_edit(relative_path: str, what: str, fn):
+    """Runs a scan_config edit `fn(file_path, base_pdf_folder, edit_root)`; refusals become HTTP errors."""
+    config, file_path = _edit_target(relative_path)
+    try:
+        path, sub_sections = await asyncio.to_thread(fn, file_path, config.BASE_PDF_PATH, _scan_config_edit_root(config))
+    except EditRefused as refused:
+        raise HTTPException(status_code=refused.status, detail=refused.message)
+    log_handle.info(f"scan_config: {what} in {path}")
+    return {"sub_sections": sub_sections, "file": os.path.relpath(path, os.path.realpath(config.BASE_PDF_PATH))}
+
+
+@router.post("/ocr/scan-config/sub-section-page")
+async def set_sub_section_page_endpoint(req: SetSubSectionPageRequest):
+    """
+    Sets the start or end page of one sub-section in the file's own scan_config.json (configs repo only).
+    Only that number changes in the file; the result is an ordinary uncommitted change in the configs repo.
+    """
+    config, file_path = _edit_target(req.relative_path)
+    import fitz
+    with fitz.open(file_path) as doc:
+        num_pages = doc.page_count
+    expect = {"name": req.expect_name, "field": req.expect_field, "page": req.expect_page}
+    return await _run_edit(req.relative_path, f"{req.which}_page of sub-section {req.index} -> {req.page}",
+                           lambda fp, base, root: set_sub_section_page(
+                               fp, base, root, index=req.index, which=req.which, page=req.page, expect=expect, num_pages=num_pages))
+
+
+class SubSectionRef(BaseModel):
+    """A sub-section as the caller last saw it; the edit is refused if the file no longer says the same."""
+    index: int = Field(..., ge=0)
+    name: Optional[str] = None
+    field: Optional[str] = None
+    start_page: int
+    end_page: int
+
+
+class RemoveSubSectionsRequest(BaseModel):
+    relative_path: str
+    items: List[SubSectionRef] = Field(..., min_length=1, max_length=500)
+
+
+class MergeSubSectionsRequest(BaseModel):
+    relative_path: str
+    items: List[SubSectionRef] = Field(..., min_length=2, max_length=500)
+    name: str
+
+
+class UndoSubSectionsRequest(BaseModel):
+    relative_path: str
+
+
+@router.post("/ocr/scan-config/sub-sections/remove")
+async def remove_sub_sections_endpoint(req: RemoveSubSectionsRequest):
+    """Removes sub-sections from the file's own scan_config.json (configs repo only). Never removes all of them."""
+    refs = [r.model_dump() if hasattr(r, "model_dump") else r.dict() for r in req.items]
+    return await _run_edit(req.relative_path, f"removed {len(refs)} sub-section(s)",
+                           lambda fp, base, root: remove_sub_sections(fp, base, root, refs=refs))
+
+
+@router.post("/ocr/scan-config/sub-sections/merge")
+async def merge_sub_sections_endpoint(req: MergeSubSectionsRequest):
+    """Merges neighbouring sub-sections into one with the given name (configs repo only)."""
+    refs = [r.model_dump() if hasattr(r, "model_dump") else r.dict() for r in req.items]
+    return await _run_edit(req.relative_path, f"merged {len(refs)} sub-sections into '{req.name}'",
+                           lambda fp, base, root: merge_sub_sections(fp, base, root, refs=refs, name=req.name))
+
+
+@router.post("/ocr/scan-config/sub-sections/undo")
+async def undo_sub_sections_endpoint(req: UndoSubSectionsRequest):
+    """Undoes the last remove / merge of this file, if the file is still exactly as that edit left it."""
+    return await _run_edit(req.relative_path, "undid the last remove/merge", undo_last_structural_edit)
+
 
 @router.post("/ocr/classify-lines", response_model=ClassifyLinesResponse)
 async def classify_lines(request: ClassifyLinesRequest):

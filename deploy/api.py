@@ -5,9 +5,10 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from deploy import checks, compare, gc, settings
+from deploy import checks, compare, docker_health, docker_restart, gc, settings
 from deploy.actions import ACTION_ORDER, ACTION_TITLES, start_deploy
 from deploy.runner import Busy, runner
+from deploy import db
 
 router = APIRouter(prefix="/deploy", tags=["deploy"])
 
@@ -50,6 +51,34 @@ async def compare_opensearch():
     return await asyncio.to_thread(compare.compare)
 
 
+@router.get("/docker")
+async def docker_status(fresh: bool = False):
+    """Docker's health (green / yellow / red) plus what is running, so the page can offer a restart. Cached for a few seconds."""
+    result = await asyncio.to_thread(docker_health.get, fresh)
+    active = runner.active_run_id()
+    run = await asyncio.to_thread(db.get_run, active) if active else None
+    return {**result, "active_run_id": active, "active_kind": run["kind"] if run else None,
+            "restarting": bool(run and run["kind"] == "docker")}
+
+
+@router.post("/docker/restart", status_code=202)
+async def docker_restart_endpoint():
+    """Restarts OrbStack (stop, start, wait until Docker and the local OpenSearch container are back). One job at a time."""
+    try:
+        run_id = await asyncio.to_thread(docker_restart.start_restart)
+    except Busy as busy:
+        raise HTTPException(409, f"Run {busy} is in progress. Cancel it first if you want to restart Docker now.")
+    return {"run_id": run_id}
+
+
+def _require_docker() -> None:
+    """Refuses to start a job that needs Docker while Docker is yellow or red."""
+    try:
+        docker_health.require_healthy()
+    except docker_health.DockerUnhealthy as exc:
+        raise HTTPException(503, str(exc))
+
+
 @router.post("/runs", status_code=202)
 async def start_run(req: StartRunRequest):
     unknown = [a for a in req.actions if a not in ACTION_ORDER]
@@ -60,6 +89,8 @@ async def start_run(req: StartRunRequest):
         bad = [s for s in req.build_services if s not in allowed]
         if bad:
             raise HTTPException(422, f"Not a buildable service: {', '.join(bad)}")
+    if any(a in ("build", "copy_snapshots") for a in req.actions):   # restoring on prod only needs ssh
+        await asyncio.to_thread(_require_docker)
     try:
         run_id = start_deploy(req.actions, {"build_services": req.build_services})
     except Busy as busy:
@@ -91,6 +122,8 @@ async def gc_scan(target: str = "local"):
 
 @router.post("/gc/run", status_code=202)
 async def gc_run(req: GcRunRequest):
+    if req.target == "local":   # cleaning prod goes over ssh
+        await asyncio.to_thread(_require_docker)
     try:
         run_id = await asyncio.to_thread(gc.start_cleanup, req.target, [s.model_dump() for s in req.categories], req.confirm)
     except ValueError as exc:

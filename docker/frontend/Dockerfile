@@ -35,7 +35,7 @@ COPY frontend/src/ ./src/
 RUN --mount=type=cache,target=/app/node_modules/.cache npm run build
 
 # Guard: fail the build if dev-tools code ever ends up in the production bundle (e.g. someone imports it directly).
-RUN if grep -rqE "api/(deploy|discover|jobs)|Verify sub-sections|dev server offline" build/static/js; then \
+RUN if grep -rqE "api/(deploy|discover|jobs)|Verify sub-sections|dev server offline|Restart Docker" build/static/js; then \
       echo "ERROR: dev tools leaked into the production bundle" >&2; exit 1; fi
 
 # Stage 2: Serve with nginx
