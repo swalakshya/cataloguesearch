@@ -1,0 +1,23 @@
+# Build context for the FRONTEND image (docker/frontend/Dockerfile).
+# BuildKit uses this file instead of the root .dockerignore for this image.
+#
+# Whitelist: only what the Dockerfile copies. Everything else in the repo (Python, models, snapshots, ...) is not sent.
+*
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/public
+!frontend/tailwind.config.js
+!frontend/postcss.config.js
+!frontend/src
+!docker/frontend/nginx.conf
+!docker/frontend/entrypoint.sh
+
+# The local dev tools are not part of the production site. Leaving them out of the context means editing them (or any
+# test) no longer changes the `COPY frontend/src` layer, so Docker reuses the cached `npm run build`. The build itself
+# does not need them: see the REACT_APP_DEV_TOOLS flag in frontend/src/App.js.
+frontend/src/components/eval
+frontend/src/components/dev
+frontend/src/components/deploy
+frontend/src/components/discover
+**/*.test.js
+**/__tests__

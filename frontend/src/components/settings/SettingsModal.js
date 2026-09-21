@@ -171,30 +171,42 @@ export default function SettingsModal({
                                 <Moon size={13} />
                             </button>
                         </div>
+                    </div>
 
-                        <div className="flex items-center gap-2" role="radiogroup" aria-label="Theme color">
-                            {PALETTE_KEYS.map((key) => {
-                                const swatchColor = PALETTES[key][draftMode]['--color-brand'];
-                                const selected = draftPalette === key;
-                                return (
-                                    <button
-                                        key={key}
-                                        type="button"
-                                        role="radio"
-                                        aria-checked={selected}
-                                        onClick={() => setDraftPalette(key)}
-                                        title={PALETTES[key].label}
-                                        className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
-                                        style={{
-                                            backgroundColor: swatchColor,
-                                            boxShadow: selected ? `0 0 0 2px var(--color-surface), 0 0 0 4px ${swatchColor}` : 'none',
-                                        }}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3" role="radiogroup" aria-label="Theme color">
+                        {PALETTE_KEYS.map((key) => {
+                            const t = PALETTES[key][draftMode];
+                            const selected = draftPalette === key;
+                            return (
+                                <button
+                                    key={key}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={selected}
+                                    onClick={() => setDraftPalette(key)}
+                                    title={PALETTES[key].description}
+                                    className="flex items-center gap-2 rounded-lg p-2 text-left"
+                                    style={{
+                                        backgroundColor: 'var(--color-surface)',
+                                        border: `1px solid ${selected ? 'var(--color-brand)' : 'var(--color-border)'}`,
+                                        boxShadow: selected ? '0 0 0 1px var(--color-brand)' : 'none',
+                                    }}
+                                >
+                                    {/* Mini preview: the palette's own background, body ink and accent */}
+                                    <span
+                                        className="w-10 h-8 rounded-md shrink-0 flex items-center justify-center gap-1"
+                                        style={{ backgroundColor: t['--color-bg'], border: `1px solid ${t['--color-border']}` }}
                                     >
-                                        {selected && <Check size={13} color="var(--color-surface)" />}
-                                    </button>
-                                );
-                            })}
-                        </div>
+                                        <span className="text-xs font-bold leading-none" style={{ color: t['--color-ink'] }}>Aa</span>
+                                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: t['--color-brand'] }} />
+                                    </span>
+                                    <span className="text-sm leading-tight flex-1" style={{ color: 'var(--color-ink)' }}>
+                                        {PALETTES[key].label}
+                                    </span>
+                                    {selected && <Check size={14} color="var(--color-brand)" className="shrink-0" />}
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal } from './ui';
+import { Modal } from '../ui/index';
 
 /**
  * BookmarkItem - Renders individual bookmark items with nested structure

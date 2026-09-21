@@ -2,9 +2,9 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Spinner } from '../SharedComponents';
 import { api } from '../../services/api';
 import FileBrowser from './FileBrowser';
-import BookmarksModal from '../BookmarksModal';
-import ShowBookmarksButton from '../ShowBookmarksButton';
-import { CopyPathButton, CopyPathButtons } from '../CopyPathButton';
+import BookmarksModal from './BookmarksModal';
+import ShowBookmarksButton from './ShowBookmarksButton';
+import { CopyPathButton, CopyPathButtons } from './CopyPathButton';
 import {
     storeDirectoryHandles,
     getStoredDirectoryHandles,
@@ -13,9 +13,10 @@ import {
     navigateToPath,
     loadFilesFromDirectory,
     readFileContent
-} from '../../utils/directoryHandlers';
-import { usePDFJsViewer } from '../../hooks/usePDFJsViewer';
-import useArrowNavigation from '../../hooks/useArrowNavigation';
+} from './lib/directoryHandlers';
+import { usePDFJsViewer } from './lib/usePDFJsViewer';
+import useArrowNavigation from './lib/useArrowNavigation';
+import { genEvalLayout } from './genEvalLayout';
 import BlockAnnotator from './BlockAnnotator';
 import LineAnnotator from './LineAnnotator';
 import { BLOCK_TYPES } from './classifierConstants';
@@ -23,7 +24,9 @@ import { BLOCK_TYPES } from './classifierConstants';
 
 const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
 
-const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, basePaths: parentBasePaths, selectedFolder: propSelectedFolder, baseDirectoryHandles: parentBaseDirectoryHandles, onPdfParentDirChange }) => {
+const ParagraphGenEval = ({ onBrowseFiles, showFileBrowser, onCloseFileBrowser, basePaths: parentBasePaths, selectedFolder: propSelectedFolder, baseDirectoryHandles: parentBaseDirectoryHandles, onPdfParentDirChange, fill = false }) => {
+    // Fill mode: panes fill the window height (and the PDF page fits it, no scrolling) instead of 700px scroll boxes.
+    const L = genEvalLayout(fill);
     const [selectedFolder, setSelectedFolder] = useState(propSelectedFolder || null);
     const [sourceHandle, setSourceHandle] = useState(null);
     const [targetHandle, setTargetHandle] = useState(null);
@@ -720,7 +723,7 @@ Please select the SOURCE directory (${selection.sourcePath})`;
     // Show directory selection if no directories selected
     if (!sourceHandle || !targetHandle) {
         return (
-            <div className="rounded-lg shadow-sm border border-slate-200" style={{ width: '130%', maxWidth: 'none', backgroundColor: 'var(--bg-card)' }}>
+            <div className={L.card} style={{ width: L.cardWidth, maxWidth: 'none', backgroundColor: 'var(--bg-card)' }}>
                 {/* Header */}
                 <div className="p-4 border-b border-slate-200">
                     <h2 className="text-2xl font-bold text-slate-800 mb-2">Paragraph Generation Evaluation</h2>
@@ -847,10 +850,10 @@ Please select the SOURCE directory (${selection.sourcePath})`;
     }
 
     return (
-        <div className="rounded-lg shadow-sm border border-slate-200" style={{ width: '130%', maxWidth: 'none', backgroundColor: 'var(--bg-card)' }}>
+        <div className={L.card} style={{ width: L.cardWidth, maxWidth: 'none', backgroundColor: 'var(--bg-card)' }}>
                 {/* Header */}
                 <div className="p-4 border-b border-slate-200">
-                    <h2 className="text-2xl font-bold text-slate-800 mb-2">Paragraph Generation Evaluation</h2>
+                    <h2 className={L.title}>Paragraph Generation Evaluation</h2>
                     <p className="text-slate-600">
                         {selectedFolder?.selectedPDFFile
                             ? `Comparing: ${selectedFolder.pdfFilePath || `${selectedFolder.relativePath}.pdf`}`
@@ -860,7 +863,7 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                 </div>
 
             {/* Controls */}
-            <div className="p-4 border-b border-slate-200" style={{ backgroundColor: 'var(--bg-surface)' }}>
+            <div className="p-4 border-b border-slate-200 shrink-0" style={{ backgroundColor: 'var(--bg-surface)' }}>
                 <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                         {/* Navigation Controls */}
@@ -960,9 +963,9 @@ Please select the SOURCE directory (${selection.sourcePath})`;
 
             {/* Content Comparison */}
             {!isLoading && fileList.length > 0 && (
-                <div className="flex flex-col lg:flex-row">
+                <div className={L.row}>
                     {/* PDF Page Column */}
-                    <div className="flex-1 p-4 border-r border-slate-200">
+                    <div className={L.leftCol}>
                         <div className="flex justify-between items-center mb-3">
                             <div className="flex items-center gap-1 border border-slate-200 rounded-md p-0.5">
                                 <button
@@ -1025,8 +1028,8 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                                 </div>
                             );
                         })()}
-                        <div className="border border-slate-300 rounded-lg overflow-hidden mt-2" style={{ backgroundColor: 'var(--bg-surface)' }}>
-                            <div className="p-4 max-h-[700px] overflow-y-auto flex justify-center">
+                        <div className={L.leftBox} style={{ backgroundColor: 'var(--bg-surface)' }}>
+                            <div className={L.leftScroll}>
                                 {leftView === 'json' ? (
                                     tesseractPageData ? (
                                         <div className="w-full">
@@ -1056,7 +1059,7 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                                     <img
                                         src={pdfPageDataUrl}
                                         alt={`PDF Page ${jumpPageNumber}`}
-                                        className="max-w-full h-auto"
+                                        className={L.pdfImage}
                                     />
                                 ) : sourceContent ? (
                                     <pre className="text-sm font-mono whitespace-pre-wrap text-slate-800 w-full">
@@ -1073,8 +1076,8 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                     </div>
 
                     {/* Generated Paragraphs Column */}
-                    <div className="flex-1 p-4">
-                        <div className="flex items-center gap-2 mb-3">
+                    <div className={L.rightCol}>
+                        <div className="flex items-center gap-2 mb-3 shrink-0">
                             <h3 className="text-lg font-semibold text-slate-800 flex-shrink-0">Generated Paragraphs</h3>
                             {(() => {
                                 const currentPage = parseInt(jumpPageNumber, 10);
@@ -1116,8 +1119,8 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                                 />
                             </div>
                         </div>
-                        <div className="border border-slate-300 rounded-lg overflow-hidden" style={{ backgroundColor: 'var(--bg-surface)' }}>
-                            <div className="p-4 space-y-3 max-h-[700px] overflow-y-auto">
+                        <div className={L.rightBox} style={{ backgroundColor: 'var(--bg-surface)' }}>
+                            <div className={L.rightScroll}>
                                 {!targetContent && skipPdfPages.includes(parseInt(jumpPageNumber)) && (
                                     <div className="text-amber-500 text-sm text-center py-8 font-semibold">
                                         Skipped!

@@ -141,3 +141,38 @@ describe('Verify sub-sections', () => {
         expect(screen.queryByRole('button', { name: /Verify sub-sections/ })).not.toBeInTheDocument();
     });
 });
+
+describe('fill layout (panes sized to the window)', () => {
+    const boxOf = (placeholder) => screen.getByText(placeholder).parentElement;
+
+    test('default layout is unchanged: widened card and the fixed 700 / 660px boxes', () => {
+        mockScanConfig(LOK_VIBHAG);
+        const { container } = renderParser({ selectedFile: null });
+        const cardEl = container.querySelector('[style*="max-width: none"]');
+        expect(cardEl.style.width).toBe('130%');
+        expect(boxOf('Select a PDF or image to preview').className).toMatch(/h-\[700px\]/);
+        expect(boxOf('Select a file to see preview').className).toMatch(/h-\[660px\]/);
+        expect(screen.getByText('PDF Parser', { selector: 'h2' }).parentElement.className).not.toMatch(/hidden/);
+        expect(container.firstChild.className).toBe('');
+    });
+
+    test('fill mode: normal-width card, flex panes instead of fixed heights, no title block', () => {
+        mockScanConfig(LOK_VIBHAG);
+        const { container } = renderParser({ selectedFile: null, fill: true });
+        expect(container.firstChild.className).toMatch(/h-full flex flex-col/);
+        const cardEl = container.querySelector('[style*="max-width: none"]');
+        expect(cardEl.style.width).toBe('100%');
+        expect(cardEl.className).toMatch(/flex-1 min-h-0 flex flex-col/);
+        for (const placeholder of ['Select a PDF or image to preview', 'Select a file to see preview']) {
+            expect(boxOf(placeholder).className).toMatch(/flex-1 min-h-0/);
+            expect(boxOf(placeholder).className).not.toMatch(/h-\[(700|660)px\]/);
+        }
+        expect(screen.getByText('PDF Parser', { selector: 'h2' }).parentElement.className).toMatch(/hidden/);
+    });
+
+    test('the controls never shrink away in fill mode', () => {
+        mockScanConfig(LOK_VIBHAG);
+        renderParser({ selectedFile: null, fill: true });
+        expect(cropInput('Top %').closest('div.border-b').className).toMatch(/shrink-0/);
+    });
+});

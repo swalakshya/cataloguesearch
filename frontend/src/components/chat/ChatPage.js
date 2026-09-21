@@ -759,7 +759,7 @@ const ChatPage = forwardRef(function ChatPage(
                                     <div key={msg.localId ? `${msg.role}-${msg.localId}` : `${msg.role}-${idx}`}>
                                         {msg.role === 'user' ? (
                                             <div ref={isLastUser ? latestUserBubbleRef : null} className="flex justify-end">
-                                                <div className="shadow-sm rounded-lg rounded-tr-none px-4 py-2.5 max-w-[65%] text-white text-base" style={{ backgroundColor: 'var(--color-brand)' }}>
+                                                <div className="shadow-sm rounded-lg rounded-tr-none px-4 py-2.5 max-w-[65%] text-base" style={{ backgroundColor: 'var(--color-bubble)', color: 'var(--color-bubble-ink)' }}>
                                                     {msg.content}
                                                 </div>
                                             </div>
@@ -857,7 +857,7 @@ const ChatPage = forwardRef(function ChatPage(
                     {showScrollDown && (
                         <button
                             onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
-                            className="btn btn-primary fixed bottom-28 left-1/2 -translate-x-1/2 z-40 h-9 w-9 rounded-full p-0 shadow-lg"
+                            className="btn btn-primary fixed bottom-24 left-1/2 -translate-x-1/2 z-40 h-9 w-9 rounded-full p-0 shadow-lg"
                             aria-label="Scroll to bottom"
                         >
                             <ChevronDown size={16} strokeWidth={2.5} />
@@ -865,7 +865,12 @@ const ChatPage = forwardRef(function ChatPage(
                     )}
 
                     {/* Sticky bottom input */}
-                    <div className="sticky bottom-0 mt-auto pt-3 pb-4 shrink-0" style={{ backgroundColor: 'var(--color-bg)' }}>
+                    <div className="sticky bottom-0 mt-auto pt-1 pb-2 shrink-0" style={{ backgroundColor: 'var(--color-bg)' }}>
+                        <div
+                            className="absolute inset-x-0 -top-6 h-6 pointer-events-none"
+                            style={{ background: 'linear-gradient(to top, var(--color-bg), transparent)' }}
+                            aria-hidden="true"
+                        />
                         {chatNotice && (
                             <div className="flex justify-center mb-2">
                                 <span

@@ -20,10 +20,6 @@ import WhatsNew from './components/WhatsNew';
 import UsageGuide from './components/UsageGuide';
 import DeveloperAPI from './components/DeveloperAPI';
 import SearchIndex from './components/SearchIndex';
-import UIEval from './components/eval/UIEval';
-import DeployPage from './components/deploy/DeployPage';
-import DiscoverPage from './components/discover/DiscoverPage';
-import DevHome from './components/dev/DevHome';
 import ChatPage from './components/chat/ChatPage';
 import PdfCitationModal from './components/chat/PdfCitationModal';
 import { getStoredAnswerFormat, envDefault, isValidAnswerFormat, CHAT_SESSION_STORAGE_KEY, AUTH_LOGOUT_EVENT } from './config/chatConfig';
@@ -133,7 +129,6 @@ const AppContent = () => {
         if (path === '/whats-new') return 'whats-new';
         if (path === '/usage-guide') return 'usage-guide';
         if (path === '/search-index') return 'search-index';
-        if (path === '/eval') return 'eval';
         if (path === '/chat') return 'chat';
         if (path === '/aagam-khoj') return 'aagam-khoj';
         return 'home'; // Default to 'home' for root path
@@ -152,8 +147,6 @@ const AppContent = () => {
             setCurrentPageState('usage-guide');
         } else if (path === '/search-index') {
             setCurrentPageState('search-index');
-        } else if (path === '/eval') {
-            setCurrentPageState('eval');
         } else if (path === '/chat') {
             setCurrentPageState('chat');
         } else if (path === '/aagam-khoj') {
@@ -202,7 +195,6 @@ const AppContent = () => {
             'whats-new': '/whats-new',
             'usage-guide': '/usage-guide',
             'search-index': '/search-index',
-            'eval': '/eval',
             'aagam-khoj': '/aagam-khoj',
             'chat': '/chat'
         };
@@ -935,7 +927,7 @@ const AppContent = () => {
 
             <div className="flex flex-col min-w-0 col-start-2 row-start-2">
                 <div className="p-4 md:p-5">
-                <div className={`max-w-[1080px] mx-auto ${currentPage !== 'eval' ? 'pt-14' : ''}`}>
+                <div className={`max-w-[1080px] mx-auto pt-14`}>
 
                     {currentPage === 'chat' && !llmAvailable && (
                         <main>
@@ -1203,14 +1195,9 @@ const AppContent = () => {
                         </main>
                     )}
 
-                    {currentPage === 'eval' && (
-                        <main>
-                            <UIEval />
-                        </main>
-                    )}
                 </div>
                 </div>
-                {currentPage !== 'eval' && <Footer />}
+                {currentPage !== 'chat' && <Footer />}
             </div>
 
             {/* Mobile Navigation Buttons - Only visible on mobile, hidden while any overlay
@@ -1262,11 +1249,13 @@ function AdminRoute() {
     return <AdminPageComponent token={token} llmToken={llmToken} onLogout={handleLogout} />;
 }
 
-// Local-only dev pages (/dev, /deploy, /discover) served by the dev server (dev.py)
-function DevRoute({ title, children }) {
-    React.useEffect(() => { document.title = `Swalakshya · ${title}`; }, [title]);
-    return children;
-}
+// Local dev tools (Eval, Discover, Deploy and the /dev overview) are compiled in for `npm start` and left OUT of
+// production builds: in a production build this condition is a constant `false`, so the bundler never resolves the
+// require below and the dev folders don't have to exist. That is what lets the Docker image leave them out, so editing
+// them no longer invalidates the image's `npm run build` cache. Set REACT_APP_DEV_TOOLS=true to build them in anyway.
+const devRoutes = (process.env.NODE_ENV !== 'production' || process.env.REACT_APP_DEV_TOOLS === 'true')
+    ? require('./components/dev/devRoutes').default
+    : null;
 
 // Main App wrapper with Router
 export default function App() {
@@ -1279,14 +1268,12 @@ export default function App() {
                 <Route path="/whats-new" element={<AppContent />} />
                 <Route path="/usage-guide" element={<AppContent />} />
                 <Route path="/search-index" element={<AppContent />} />
-                <Route path="/eval" element={<AppContent />} />
                 <Route path="/developer" element={<AppContent />} />
                 <Route path="/chat" element={<AppContent />} />
                 <Route path="/aagam-khoj" element={<AppContent />} />
                 <Route path="/admin" element={<AdminRoute />} />
-                <Route path="/dev" element={<DevRoute title="Dev"><DevHome /></DevRoute>} />
-                <Route path="/deploy" element={<DevRoute title="Deploy"><DeployPage /></DevRoute>} />
-                <Route path="/discover" element={<DevRoute title="Discover"><DiscoverPage /></DevRoute>} />
+                {/* Local dev tools (/dev, /discover, /deploy, /eval), only when compiled in */}
+                {devRoutes}
             </Routes>
         </Router>
     );

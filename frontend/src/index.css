@@ -128,7 +128,7 @@ body {
      line — reads as a quotation card, not a selected/input UI element. */
   border: 1px solid color-mix(in srgb, var(--color-brand) 25%, var(--color-border));
   border-radius: 0.5rem;
-  background-color: color-mix(in srgb, var(--color-brand) 4%, var(--color-surface));
+  background-color: var(--color-quote-bg);
   color: var(--color-ink);
   font-style: italic;
 }

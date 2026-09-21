@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Link } from 'react-router-dom';
 
 // Shared building blocks for the local dev pages (/deploy, /discover): job status, logs, history.
 
@@ -71,17 +70,16 @@ export function Card({ title, children, right }) {
     );
 }
 
+// Page content inside the Dev shell (which supplies the bar, background and scrolling). Wider than before: the
+// old 1024px cap left half of a large window empty.
 export function PageShell({ title, subtitle, children }) {
     return (
-        <div className="min-h-screen bg-slate-50">
-            <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">
-                <div>
-                    <Link to="/dev" className="text-xs text-blue-600 hover:underline">← Dev home</Link>
-                    <h1 className="text-xl font-semibold text-slate-800 mt-1">{title}</h1>
-                    {subtitle && <p className="text-xs text-slate-500">{subtitle}</p>}
-                </div>
-                {children}
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-5 space-y-4">
+            <div>
+                <h1 className="text-xl font-semibold text-slate-800">{title}</h1>
+                {subtitle && <p className="text-xs text-slate-500">{subtitle}</p>}
             </div>
+            {children}
         </div>
     );
 }
@@ -100,7 +98,7 @@ export function ConfirmModal({ title, lines, phrase, onConfirm, onCancel, confir
     const [typed, setTyped] = useState('');
     return (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-5">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-5" role="dialog" aria-modal="true" aria-label={title}>
                 <h3 className="text-base font-semibold text-slate-800 mb-2">{title}</h3>
                 <ul className="text-sm text-slate-600 list-disc pl-5 space-y-1 mb-4">
                     {lines.map((l) => <li key={l}>{l}</li>)}

@@ -3,15 +3,15 @@ import { Loader2 } from 'lucide-react';
 import { LLM_MODELS, DEFAULT_CONTROLS, scanConfigToControls, describeControls } from './scanConfigPrefill';
 import SubSectionVerifier from './SubSectionVerifier';
 import { Spinner } from '../SharedComponents';
-import ShowBookmarksButton from '../ShowBookmarksButton';
-import BookmarksModal from '../BookmarksModal';
-import ParseBookmarksControl from '../ParseBookmarksControl';
+import ShowBookmarksButton from './ShowBookmarksButton';
+import BookmarksModal from './BookmarksModal';
+import ParseBookmarksControl from './ParseBookmarksControl';
 import { Modal } from '../ui';
 import FileOrUrlInput from './FileOrUrlInput';
 import LineAnnotator from './LineAnnotator';
 import usePDFViewer from '../../hooks/usePDFViewer';
-import useMultiPageSplit from '../../hooks/useMultiPageSplit';
-import useArrowNavigation from '../../hooks/useArrowNavigation';
+import useMultiPageSplit from './lib/useMultiPageSplit';
+import useArrowNavigation from './lib/useArrowNavigation';
 
 const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
 
@@ -41,7 +41,10 @@ const BLOCK_TYPE_STYLES = {
 };
 const DEFAULT_BLOCK_STYLE = { label: 'Unknown', bg: 'bg-gray-50', border: 'border-gray-200', text: 'text-gray-800', badge: 'bg-gray-100 text-gray-700' };
 
-const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, baseDirectoryHandles, onPdfParentDirChange }) => {
+const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, baseDirectoryHandles, onPdfParentDirChange, fill = false }) => {
+    // In fill mode (Eval's window layout) the panes fill the height (flex) instead of the fixed 700/660px boxes, and the card is not widened.
+    const leftBox = fill ? 'flex-1 min-h-0' : 'h-[700px]';
+    const rightBox = fill ? 'flex-1 min-h-0' : 'h-[660px]';
     // Mode
     const [mode, setMode] = useState('tesseract'); // 'tesseract' | 'llm' | 'surya'
 
@@ -648,7 +651,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
     // ── Render ───────────────────────────────────────────────────────────────
 
     return (
-        <div>
+        <div className={fill ? 'h-full flex flex-col' : undefined}>
             {showVerify && Array.isArray(libraryScanConfig?.sub_sections) && pdfDoc && (
                 <SubSectionVerifier
                     pdfDoc={pdfDoc}
@@ -697,15 +700,15 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                 )}
             </Modal>
 
-            <div className="rounded-lg shadow-sm border border-slate-200" style={{ width: '130%', maxWidth: 'none', backgroundColor: 'var(--bg-card)' }}>
+            <div className={`rounded-lg shadow-sm border border-slate-200${fill ? ' flex-1 min-h-0 flex flex-col' : ''}`} style={{ width: fill ? '100%' : '130%', maxWidth: 'none', backgroundColor: 'var(--bg-card)' }}>
                 {/* Header */}
-                <div className="p-4 border-b border-slate-200">
+                <div className={`p-4 border-b border-slate-200${fill ? ' hidden' : ''}`}>
                     <h2 className="text-2xl font-bold text-slate-800 mb-1">PDF Parser</h2>
                     <p className="text-slate-600 text-sm">Extract text from PDF pages using Tesseract OCR or Gemini LLM</p>
                 </div>
 
                 {/* Controls */}
-                <div className="px-4 pt-3 pb-2 border-b border-slate-200 space-y-2" style={{ backgroundColor: 'var(--bg-surface)' }}>
+                <div className="px-4 pt-3 pb-2 border-b border-slate-200 space-y-2 shrink-0" style={{ backgroundColor: 'var(--bg-surface)' }}>
 
                     {/* Line 1: File input + language */}
                     <div>
@@ -897,11 +900,11 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                 )}
 
                 {/* Content panels */}
-                <div className="flex flex-col lg:flex-row">
+                <div className={`flex flex-col lg:flex-row${fill ? ' flex-1 min-h-0' : ''}`}>
                     {/* Left: full-page preview */}
-                    <div className="flex-1 p-4">
+                    <div className={fill ? 'flex-1 min-w-0 min-h-0 p-2 flex flex-col' : 'flex-1 p-4'}>
                         <h3 className="text-lg font-semibold text-slate-800 mb-3">Preview</h3>
-                        <div className="border border-slate-300 rounded-lg overflow-hidden bg-slate-50 w-full h-[700px]">
+                        <div className={`border border-slate-300 rounded-lg overflow-hidden bg-slate-50 w-full ${leftBox}`}>
                             {previewUrl ? (
                                 <img src={previewUrl} alt="Preview" className="w-full h-full object-contain" />
                             ) : (
@@ -913,9 +916,9 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                     </div>
 
                     {/* Right: tabbed results */}
-                    <div className="flex-1 p-4 border-l border-slate-200">
+                    <div className={fill ? 'flex-1 min-w-0 min-h-0 p-2 border-l border-slate-200 flex flex-col' : 'flex-1 p-4 border-l border-slate-200'}>
                         {/* Tab bar */}
-                        <div className="flex items-center border-b border-slate-200 mb-3 gap-1">
+                        <div className="flex items-center border-b border-slate-200 mb-3 gap-1 shrink-0">
                             {tabs.map(({ id, label }) => (
                                 <button key={id} onClick={() => setActiveResultTab(id)}
                                     className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
@@ -943,7 +946,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                         {/* Tab: OCR Preview */}
                         {activeResultTab === 'preview' && (
                             <div ref={croppedImageContainerRef}
-                                className="border border-slate-300 rounded-lg overflow-hidden bg-slate-50 w-full h-[660px]">
+                                className={`border border-slate-300 rounded-lg overflow-hidden bg-slate-50 w-full ${rightBox}`}>
                                 {previewImageSrc ? (
                                     <img src={previewImageSrc} alt="Preview" className="w-full h-full object-contain" />
                                 ) : (
@@ -956,7 +959,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
 
                         {/* Tab: Raw OCR JSON (tesseract only) */}
                         {activeResultTab === 'ocr-json' && (
-                            <div className="relative h-[660px] overflow-auto border border-slate-200 rounded-lg bg-slate-50 p-3">
+                            <div className={`relative ${rightBox} overflow-auto border border-slate-200 rounded-lg bg-slate-50 p-3`}>
                                 {isProcessing ? renderProcessing() : activeData?.ocr_json ? (
                                     <>
                                         <div className="absolute top-2 right-2 flex items-center gap-2">
@@ -992,7 +995,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
 
                         {/* Tab: LLM Results */}
                         {activeResultTab === 'llm-results' && (
-                            <div className="space-y-3 h-[660px] overflow-y-auto">
+                            <div className={`space-y-3 ${rightBox} overflow-y-auto`}>
                                 {isProcessing ? renderProcessing() : results ? (
                                     renderBlockList(activeData?.blocks)
                                 ) : (
@@ -1005,7 +1008,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
 
                         {/* Tab: Scan Config */}
                         {activeResultTab === 'scan-config' && (
-                            <div className="relative h-[660px] overflow-auto border border-slate-200 rounded-lg bg-slate-50 p-3">
+                            <div className={`relative ${rightBox} overflow-auto border border-slate-200 rounded-lg bg-slate-50 p-3`}>
                                 {isProcessing ? renderProcessing() : scanConfig !== null ? (
                                     <>
                                         <div className="absolute top-2 right-2">
@@ -1025,7 +1028,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
 
                         {/* Tab: Paragraphs (tesseract only) */}
                         {activeResultTab === 'paragraphs' && (
-                            <div className="space-y-3 h-[660px] overflow-y-auto">
+                            <div className={`space-y-3 ${rightBox} overflow-y-auto`}>
                                 {isProcessing ? renderProcessing() : results ? (
                                     renderParagraphList(activeData?.paragraphs)
                                 ) : (

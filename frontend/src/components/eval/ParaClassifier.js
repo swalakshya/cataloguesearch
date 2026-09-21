@@ -9,10 +9,10 @@
  * Zero PDF.js — all logic (page mapping, image rendering, bookmarks) is on the backend.
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import BookmarksModal from '../BookmarksModal';
-import ShowBookmarksButton from '../ShowBookmarksButton';
+import BookmarksModal from './BookmarksModal';
+import ShowBookmarksButton from './ShowBookmarksButton';
 import { Spinner } from '../SharedComponents';
-import useArrowNavigation from '../../hooks/useArrowNavigation';
+import useArrowNavigation from './lib/useArrowNavigation';
 import BlockAnnotator from './BlockAnnotator';
 
 const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';

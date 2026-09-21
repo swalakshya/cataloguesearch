@@ -43,8 +43,8 @@ export default function DevHome() {
     }, []);
 
     return (
-        <div className="min-h-screen bg-slate-50">
-            <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">
+        <div>
+            <div className="max-w-7xl mx-auto px-4 md:px-6 py-5 space-y-4">
                 <div>
                     <h1 className="text-xl font-semibold text-slate-800">Dev</h1>
                     <p className="text-xs text-slate-500">Local tools: ingest, deploy and evaluation. Served by the dev server on this machine.</p>

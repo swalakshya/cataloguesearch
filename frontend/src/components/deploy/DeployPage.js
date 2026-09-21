@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
     api, postJson, timeAgo, Card, PageShell, ErrorBanner, ConfirmModal,
     useJobs, BusyNotice, RunPanel, JobHistory,
 } from '../dev/JobUI';
+import CleanupTab from './CleanupTab';
 
 // Run steps, in order. The run keeps copy and restore as separate steps so "Retry from here" works.
 const ACTION_ORDER = ['build', 'copy_snapshots', 'restore_prod'];
@@ -27,6 +29,9 @@ const CARDS = [
 const DANGEROUS = new Set(['restore_prod']);
 
 export default function DeployPage() {
+    const [params, setParams] = useSearchParams();
+    const tab = params.get('tab') === 'cleanup' ? 'cleanup' : 'deploy';
+    const setTab = (t) => setParams(t === 'deploy' ? {} : { tab: t }, { replace: true });
     const [config, setConfig] = useState(null);
     const [overview, setOverview] = useState(null);
     const [prod, setProd] = useState(null);
@@ -96,6 +101,19 @@ export default function DeployPage() {
 
     return (
         <PageShell title="Deploy" subtitle={`Local dev server → registry → ${config?.prod_host || 'prod'}`}>
+            <div className="flex border-b border-slate-200" role="tablist" aria-label="Deploy sections">
+                {[['deploy', 'Deploy'], ['cleanup', 'Clean up']].map(([id, label]) => (
+                    <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
+                        className={`cursor-pointer px-4 py-2 text-sm border-b-2 -mb-px transition-colors ${tab === id ? 'border-sky-600 text-sky-700 font-medium' : 'border-transparent text-slate-600 hover:text-slate-900'}`}>
+                        {label}
+                    </button>
+                ))}
+            </div>
+
+            {tab === 'cleanup' && <CleanupTab prodHost={config?.prod_host} />}
+
+            {/* Stays mounted (just hidden) so its polling and your selections survive a visit to the other tab. */}
+            <div className={tab === 'deploy' ? 'space-y-4' : 'hidden'}>
             <div className="bg-white border-2 border-blue-200 rounded-lg p-5 flex flex-col md:flex-row md:items-center gap-4">
                 <div className="flex-1">
                     <h2 className="text-base font-semibold text-slate-800">Full deploy</h2>
@@ -214,6 +232,7 @@ export default function DeployPage() {
                     onConfirm={() => { const { actions, services } = confirm; setConfirm(null); start(actions, services); }}
                 />
             )}
+            </div>
         </PageShell>
     );
 }

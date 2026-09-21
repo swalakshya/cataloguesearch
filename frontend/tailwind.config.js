@@ -18,6 +18,7 @@ module.exports = {
           DEFAULT: 'var(--color-brand)',
           hover: 'var(--color-brand-hover)',
         },
+        'on-brand': 'var(--color-on-brand)',
         success: 'var(--color-success)',
         warning: 'var(--color-warning)',
         danger: 'var(--color-danger)',

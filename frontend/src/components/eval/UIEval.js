@@ -7,8 +7,10 @@ import ParaClassifier from './ParaClassifier';
 import UnindexedPDFs from './UnindexedPDFs';
 import LoadTest from './LoadTest';
 import BookmarkBackfill from './BookmarkBackfill';
-import { storeDirectoryHandles, getStoredDirectoryHandles, validateDirectoryHandles, requestStoredPermissions, clearStoredDirectoryHandles } from '../../utils/directoryHandlers';
-import { createRemoteDirectoryHandle } from '../../utils/remoteFsHandles';
+import { storeDirectoryHandles, getStoredDirectoryHandles, validateDirectoryHandles, requestStoredPermissions, clearStoredDirectoryHandles } from './lib/directoryHandlers';
+import { createRemoteDirectoryHandle } from './lib/remoteFsHandles';
+import EvalBar from './EvalBar';
+import { useDevShell } from '../dev/DevShell';
 
 const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
 
@@ -18,6 +20,7 @@ const API_BASE_URL = process.env.REACT_APP_EVAL_API_BASE_URL || '/api';
 // machine the backend runs on. Flip to 'local' only in the tab where the
 // browser and backend actually share a filesystem with the backend.
 const FS_MODE_KEY = 'eval_fs_mode';
+
 
 const LocalModeIcon = ({ className = 'w-4 h-4' }) => (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -47,6 +50,7 @@ const UIEval = () => {
     });
     const [basePaths, setBasePaths] = useState(null);
     const [selectedFile, setSelectedFile] = useState(null);
+    const { focus, setFocus } = useDevShell();
     const [showFileBrowser, setShowFileBrowser] = useState(false);
     const [selectedFolder, setSelectedFolder] = useState(null);
     const [baseDirectoryHandles, setBaseDirectoryHandles] = useState(null);
@@ -262,31 +266,14 @@ const UIEval = () => {
     };
 
 
-    const NavButton = ({ id, label, isActive, onClick }) => (
-        <button
-            onClick={(e) => {
-                console.log('NavButton clicked:', id, 'Current activeTab:', activeTab);
-                e.preventDefault();
-                e.stopPropagation();
-                onClick(id);
-                console.log('After onClick, activeTab should be:', id);
-            }}
-            onMouseDown={(e) => {
-                console.log('NavButton mousedown:', id);
-            }}
-            className={`px-4 py-2 font-medium text-sm rounded-md transition-colors ${
-                isActive 
-                    ? 'bg-sky-600 text-white' 
-                    : 'text-slate-700 hover:bg-neutral-100 border border-slate-300'
-            }`}
-            style={{ pointerEvents: 'auto', zIndex: 1 }}
-        >
-            {label}
-        </button>
-    );
+
+    const canBrowse = ['pdf-parser', 'ocr-preview', 'paragraph-eval', 'paragraph-classifier'].includes(activeTab);
+    const fileLabel = selectedFile?.selectedPDFFile || selectedFile?.selectedFileName || selectedFolder?.selectedPDFFile || null;
+    // The tools that have side-by-side panes size them to the window; the rest are ordinary scrolling pages.
+    const fill = ['pdf-parser', 'ocr-preview', 'paragraph-eval', 'paragraph-classifier'].includes(activeTab);
 
     return (
-        <div className="min-h-screen">
+        <div className="h-full flex flex-col min-h-0">
             {/* File Browser Modal */}
             {showFileBrowser && (
                 <FileBrowser
@@ -300,118 +287,20 @@ const UIEval = () => {
                     fsMode={fsMode}
                 />
             )}
-            
-            <div className="container mx-auto p-4 md:p-5">
-                <div className="max-w-[1200px] mx-auto">
-                    {/* Header */}
-                    <div className="mb-6">
-                        <h1 className="text-3xl font-bold text-slate-800 mb-2">Manual Evaluation UI</h1>
-                        <p className="text-slate-600">Tools for manual evaluation of OCR and paragraph generation</p>
-                    </div>
 
-                    {/* Navigation Bar */}
-                    <div className="rounded-lg shadow-sm border border-slate-200 mb-6" style={{ backgroundColor: 'var(--bg-card)' }}>
-                        <div className="p-4">
-                            <div className="flex items-center justify-between">
-                                <div className="flex space-x-2">
-                                    <NavButton
-                                        id="home"
-                                        label="Home"
-                                        isActive={activeTab === 'home'}
-                                        onClick={setActiveTab}
-                                    />
-                                    <NavButton
-                                        id="pdf-parser"
-                                        label="PDF Parser"
-                                        isActive={activeTab === 'pdf-parser'}
-                                        onClick={setActiveTab}
-                                    />
-                                    <NavButton
-                                        id="ocr-preview"
-                                        label="OCR Preview"
-                                        isActive={activeTab === 'ocr-preview'}
-                                        onClick={setActiveTab}
-                                    />
-                                    <NavButton
-                                        id="paragraph-eval"
-                                        label="Paragraph Gen Eval"
-                                        isActive={activeTab === 'paragraph-eval'}
-                                        onClick={setActiveTab}
-                                    />
-                                    <NavButton
-                                        id="paragraph-classifier"
-                                        label="Paragraph Classifier"
-                                        isActive={activeTab === 'paragraph-classifier'}
-                                        onClick={setActiveTab}
-                                    />
-                                    <NavButton
-                                        id="unindexed-pdfs"
-                                        label="Unindexed PDFs"
-                                        isActive={activeTab === 'unindexed-pdfs'}
-                                        onClick={setActiveTab}
-                                    />
-                                    <NavButton
-                                        id="bookmark-backfill"
-                                        label="Bookmark Backfill"
-                                        isActive={activeTab === 'bookmark-backfill'}
-                                        onClick={setActiveTab}
-                                    />
-                                    <NavButton
-                                        id="load-test"
-                                        label="Load Test"
-                                        isActive={activeTab === 'load-test'}
-                                        onClick={setActiveTab}
-                                    />
-                                </div>
+            <EvalBar
+                activeTab={activeTab}
+                onTab={setActiveTab}
+                fileLabel={fileLabel}
+                canBrowse={canBrowse}
+                onBrowse={handleBrowseFiles}
+                basePaths={basePaths}
+                focus={focus}
+                onToggleFocus={() => setFocus(!focus)}
+            />
 
-                                {/* File Browser Button */}
-                                {['pdf-parser', 'ocr-preview', 'paragraph-eval', 'paragraph-classifier'].includes(activeTab) && (
-                                    <button
-                                        onClick={handleBrowseFiles}
-                                        className="bg-green-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-green-700 transition-colors inline-flex items-center gap-2 leading-none"
-                                    >
-                                        {fsMode === 'server' ? (
-                                            <ServerModeIcon className="w-4 h-4 flex-shrink-0" />
-                                        ) : (
-                                            <LocalModeIcon className="w-4 h-4 flex-shrink-0" />
-                                        )}
-                                        Browse Files
-                                    </button>
-                                )}
-                            </div>
-
-                            {/* Base Paths Info */}
-                            {basePaths && activeTab !== 'home' && activeTab !== 'load-test' && activeTab !== 'bookmark-backfill' && (
-                                <div className="mt-4 pt-4 border-t border-slate-200">
-                                    <div className="text-sm text-slate-600">
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            <div>
-                                                <span className="font-medium">Base PDF:</span>
-                                                <div className="font-mono text-xs text-slate-500 mt-1 break-all">
-                                                    {basePaths.base_pdf_path}
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <span className="font-medium">OCR Path:</span>
-                                                <div className="font-mono text-xs text-slate-500 mt-1 break-all">
-                                                    {basePaths.base_ocr_path}
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <span className="font-medium">Text Path:</span>
-                                                <div className="font-mono text-xs text-slate-500 mt-1 break-all">
-                                                    {basePaths.base_text_path}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Content Area */}
-                    <div className="mb-6">
+            <div className="flex-1 min-h-0 overflow-auto p-2 md:p-3" data-testid="eval-content">
+                <div className={activeTab === 'home' || !fill ? '' : 'h-full'}>
                         {activeTab === 'home' && (
                             <div className="space-y-6">
                                 {/* Directory Permissions Setup */}
@@ -631,6 +520,7 @@ const UIEval = () => {
 
                         {activeTab === 'pdf-parser' && (
                             <PDFParser
+                                fill
                                 selectedFile={selectedFile}
                                 onFileSelect={handleFileSelect}
                                 basePaths={basePaths}
@@ -644,6 +534,7 @@ const UIEval = () => {
 
                         {activeTab === 'paragraph-eval' && basePaths && (
                             <ParagraphGenEval
+                                fill
                                 showFileBrowser={showFileBrowser}
                                 onCloseFileBrowser={handleCloseFileBrowser}
                                 basePaths={basePaths}
@@ -658,6 +549,7 @@ const UIEval = () => {
 
                         {activeTab === 'ocr-preview' && (
                             <OCRPreview
+                                fill
                                 selectedFile={selectedFile}
                                 baseDirectoryHandles={effectiveDirectoryHandles}
                             />
@@ -665,6 +557,7 @@ const UIEval = () => {
 
                         {activeTab === 'paragraph-classifier' && (
                             <ParaClassifier
+                                fill
                                 selectedFile={selectedFile}
                                 baseDirectoryHandles={effectiveDirectoryHandles}
                                 basePaths={basePaths}
@@ -683,7 +576,6 @@ const UIEval = () => {
                             <LoadTest />
                         )}
 
-                    </div>
                 </div>
             </div>
         </div>

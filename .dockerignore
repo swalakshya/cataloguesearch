@@ -8,6 +8,7 @@
 
 # Node.js
 node_modules/
+**/node_modules
 npm-debug.log
 yarn-debug.log
 yarn-error.log
@@ -99,3 +100,15 @@ scratch/
 *.safetensors
 *.pt
 *.pth
+
+# Local artefacts and dev tooling that no image uses (every image copies only backend/, utils/, configs/, docker/*,
+# requirements*.txt, models/bge-reranker-base-onnx and frontend/). Snapshots alone are GBs.
+snapshots/
+snapshots_*.tar.zst
+tests/
+research/
+eval/
+deploy/
+ingest/
+dev.py
+scripts/

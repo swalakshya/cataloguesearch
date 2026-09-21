@@ -20,7 +20,7 @@
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.btn-primary { background-color: var(--color-brand); color: #fff; }
+.btn-primary { background-color: var(--color-brand); color: var(--color-on-brand); }
 .btn-primary:hover:not(:disabled) { background-color: var(--color-brand-hover); }
 
 .btn-secondary { background-color: var(--color-surface); color: var(--color-ink); border-color: var(--color-border); }

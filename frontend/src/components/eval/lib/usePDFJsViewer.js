@@ -7,7 +7,7 @@
  * Used by ParagraphGenEval and ParaClassifier.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { addPageNumbersToBookmarks } from '../utils/pdfUtils';
+import { addPageNumbersToBookmarks } from '../../../utils/pdfUtils';
 
 const PDFJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
 const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';

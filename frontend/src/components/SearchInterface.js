@@ -578,7 +578,7 @@ const GridToggle = ({ value, selected, onToggle }) => (
         onClick={() => onToggle(value)}
         className={`rounded text-sm py-1.5 font-medium transition-colors border ${
             selected
-                ? 'bg-brand border-brand text-white'
+                ? 'bg-brand border-brand text-on-brand'
                 : 'bg-surface border-border text-ink hover:bg-bg'
         }`}
     >
@@ -1504,7 +1504,7 @@ export const SearchOptions = ({ language, setLanguage, inline = false }) => {
                     onClick={() => setLanguage(lang.value)}
                     className={`px-3 py-1.5 text-sm font-medium rounded transition-all duration-150 ${
                         language === lang.value
-                            ? 'bg-brand text-white shadow-sm'
+                            ? 'bg-brand text-on-brand shadow-sm'
                             : 'text-ink-muted hover:text-ink'
                     }`}
                 >

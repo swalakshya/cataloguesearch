@@ -49,7 +49,7 @@ const ExportPdfModal = ({ exportParams, onClose }) => {
                         className="flex-1 py-2 rounded border text-sm font-medium transition-colors"
                         style={
                             count === option
-                                ? { borderColor: 'var(--color-brand)', backgroundColor: 'var(--color-brand)', color: '#fff' }
+                                ? { borderColor: 'var(--color-brand)', backgroundColor: 'var(--color-brand)', color: 'var(--color-on-brand)' }
                                 : { borderColor: 'var(--color-border)', color: 'var(--color-ink)' }
                         }
                     >

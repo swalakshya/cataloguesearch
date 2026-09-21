@@ -1,5 +1,5 @@
-import React from 'react';
-import { SendHorizontal } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { SendHorizontal, SlidersHorizontal } from 'lucide-react';
 import { SearchBar } from '../SearchInterface';
 import { Spinner } from '../SharedComponents';
 import { InputActionBar } from '../ui';
@@ -32,6 +32,25 @@ export default function ChatComposer({
 }) {
     const canSend = query.trim().length > 0 && !disabled;
 
+    // Compact (active-chat) mode keeps the pinned bar to a single row: the
+    // category filters live behind a button that opens a small popover, with a
+    // dot on the button whenever the selection differs from "everything on"
+    // so a narrowed search never hides silently.
+    const [filtersOpen, setFiltersOpen] = useState(false);
+    const popoverRef = useRef(null);
+    useEffect(() => {
+        if (!filtersOpen) return undefined;
+        const onDown = (e) => { if (!popoverRef.current?.contains(e.target)) setFiltersOpen(false); };
+        const onKey = (e) => { if (e.key === 'Escape') setFiltersOpen(false); };
+        document.addEventListener('mousedown', onDown);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            document.removeEventListener('mousedown', onDown);
+            document.removeEventListener('keydown', onKey);
+        };
+    }, [filtersOpen]);
+    const narrowed = chatContentTypes.length < activeCategories.length;
+
     const filters = (
         <ChatFilters
             activeCategories={activeCategories}
@@ -43,25 +62,47 @@ export default function ChatComposer({
     );
 
     return (
-        <div className="w-full">
+        <div className="w-full relative" ref={popoverRef}>
+            {compact && filtersOpen && (
+                <div
+                    className="absolute bottom-full left-0 right-0 mb-2 rounded-xl shadow-lg px-3 py-2.5 z-30"
+                    style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)' }}
+                >
+                    {filters}
+                </div>
+            )}
             <InputActionBar
                 action={
-                    <button
-                        onClick={onSend}
-                        disabled={!canSend}
-                        className="btn btn-primary h-10 w-10 rounded-full p-0 shrink-0"
-                        aria-label="Send"
-                    >
-                        {loading ? <Spinner /> : <SendHorizontal size={18} strokeWidth={2.5} />}
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                        {compact && (
+                            <button
+                                type="button"
+                                onClick={() => setFiltersOpen((o) => !o)}
+                                aria-label="Filter by category"
+                                aria-expanded={filtersOpen}
+                                title="Filter by category"
+                                className="relative h-10 w-10 rounded-full flex items-center justify-center transition-colors hover:bg-bg"
+                                style={{ color: narrowed || filtersOpen ? 'var(--color-brand)' : 'var(--color-ink-muted)' }}
+                            >
+                                <SlidersHorizontal size={18} />
+                                {narrowed && (
+                                    <span
+                                        className="absolute top-2 right-2 h-2 w-2 rounded-full"
+                                        style={{ backgroundColor: 'var(--color-brand)', boxShadow: '0 0 0 2px var(--color-surface)' }}
+                                    />
+                                )}
+                            </button>
+                        )}
+                        <button
+                            onClick={onSend}
+                            disabled={!canSend}
+                            className="btn btn-primary h-10 w-10 rounded-full p-0 shrink-0"
+                            aria-label="Send"
+                        >
+                            {loading ? <Spinner /> : <SendHorizontal size={18} strokeWidth={2.5} />}
+                        </button>
+                    </div>
                 }
-                // Compact (active-chat sticky footer) folds the filters into
-                // the same card as a divided footer, so it doesn't read as a
-                // third, unrelated floating row between the search bar and
-                // the disclaimer. The spacious empty-state hero keeps them as
-                // their own larger standalone row below the card instead —
-                // folding those bigger tiles in here would look cramped.
-                footer={compact ? filters : undefined}
             >
                 <SearchBar
                     query={query}
@@ -74,7 +115,7 @@ export default function ChatComposer({
                 />
             </InputActionBar>
             {!compact && <div className="mt-3">{filters}</div>}
-            {showDisclaimer && <AiDisclaimer className="mt-2" />}
+            {showDisclaimer && <AiDisclaimer className="mt-1.5" />}
         </div>
     );
 }

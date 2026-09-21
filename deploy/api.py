@@ -5,7 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from deploy import checks, settings
+from deploy import checks, gc, settings
 from deploy.actions import ACTION_ORDER, ACTION_TITLES, start_deploy
 from deploy.runner import Busy, runner
 
@@ -56,6 +56,39 @@ async def start_run(req: StartRunRequest):
             raise HTTPException(422, f"Not a buildable service: {', '.join(bad)}")
     try:
         run_id = start_deploy(req.actions, {"build_services": req.build_services})
+    except Busy as busy:
+        raise HTTPException(409, f"Run {busy} is already in progress")
+    return {"run_id": run_id}
+
+
+class GcSelection(BaseModel):
+    id: str
+    variant: Optional[str] = None  # build_cache only: "older" or "all"
+
+
+class GcRunRequest(BaseModel):
+    target: str = "local"
+    categories: List[GcSelection] = Field(..., min_length=1)
+    confirm: bool = False  # required on prod and for the optional (not-safe) categories; the UI asks for a typed confirmation
+
+
+@router.get("/gc/scan")
+async def gc_scan(target: str = "local"):
+    """What could be reclaimed on this machine ("local") or on prod. Read-only."""
+    if target not in gc.TARGETS:
+        raise HTTPException(422, f"Unknown target: {target}")
+    try:
+        return await asyncio.to_thread(gc.scan, target)
+    except gc.EngineError as exc:
+        raise HTTPException(503, str(exc))
+
+
+@router.post("/gc/run", status_code=202)
+async def gc_run(req: GcRunRequest):
+    try:
+        run_id = await asyncio.to_thread(gc.start_cleanup, req.target, [s.model_dump() for s in req.categories], req.confirm)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
     except Busy as busy:
         raise HTTPException(409, f"Run {busy} is already in progress")
     return {"run_id": run_id}

@@ -181,19 +181,19 @@ _FONT_FACES = (
     + _font_face("Noto Sans Gujarati", "NotoSansGujarati-gujarati", "gujarati")
 )
 
-# Colors copied from the app's active "Cobalt Slate" theme
-# (frontend/src/theme/palettes.js, PALETTES.cobalt.light — light variant only,
+# Colors copied from the app's default "Ayu" theme
+# (frontend/src/theme/palettes.js, PALETTES.ayu.light — light variant only,
 # since this is a static/printed document). Keep these in sync by hand if that
-# palette changes or DEFAULT_PALETTE switches away from 'cobalt'; see the
+# palette changes or DEFAULT_PALETTE switches away from 'ayu'; see the
 # palette-tokens.json suggestion for making this automatic instead.
 _THEME = {
-    "bg": "#F7F8FA",
+    "bg": "#FCFCFC",
     "surface": "#FFFFFF",
-    "border": "#DFE3EA",
-    "ink": "#1B2430",
-    "ink_muted": "#5B6472",
-    "brand": "#2454B8",
-    "brand_tint": "#E9EEF8",  # ~10% brand mixed into white, for the question callout background
+    "border": "#E4E6E9",
+    "ink": "#2B3036",
+    "ink_muted": "#4D555B",
+    "brand": "#B45309",
+    "brand_tint": "#F8EEE6",  # ~10% brand mixed into white, for the question callout background
 }
 
 _CSS = f"""

@@ -1,18 +1,22 @@
 /* Design tokens. Values are set at runtime by ThemeContext (theme/palettes.js)
    based on the active palette + light/dark mode. The declarations below are
-   just the light "saffron" defaults, so the app still looks correct for the
+   just the light "ayu" defaults, so the app still looks correct for the
    first paint before React mounts and ThemeProvider's effect runs. */
 :root {
-    --color-bg: #FAF8F5;
+    --color-bg: #FCFCFC;
     --color-surface: #FFFFFF;
-    --color-border: #E8E1D8;
-    --color-ink: #2A211A;
-    --color-ink-muted: #6B5D52;
-    --color-brand: #C4571C;
-    --color-brand-hover: #A84812;
+    --color-border: #E4E6E9;
+    --color-ink: #2B3036;
+    --color-ink-muted: #4D555B;
+    --color-brand: #B45309;
+    --color-brand-hover: #8F4207;
     --color-success: #4B7A51;
     --color-warning: #A6791E;
     --color-danger: #A6402E;
     --color-info: #3D6E7A;
     --color-mark: #B8860B;
+    --color-bubble: #FBEBD6;
+    --color-bubble-ink: #2B3036;
+    --color-on-brand: #FFFFFF;
+    --color-quote-bg: color-mix(in srgb, #B45309 4%, #FFFFFF);
 }

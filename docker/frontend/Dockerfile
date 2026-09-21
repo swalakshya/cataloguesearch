@@ -11,12 +11,16 @@ ENV REACT_APP_RECAPTCHA_SITE_KEY=__REACT_APP_RECAPTCHA_SITE_KEY__
 ENV REACT_APP_LLM_API_BASE_URL=__REACT_APP_LLM_API_BASE_URL__
 ENV REACT_APP_GOOGLE_CLIENT_ID=__REACT_APP_GOOGLE_CLIENT_ID__
 
+# The local dev tools (Eval, Discover, Deploy) are never part of the production site. With this set to false the
+# bundler drops them without even looking for their folders, which docker/frontend/Dockerfile.dockerignore leaves out.
+ENV REACT_APP_DEV_TOOLS=false
+
 # Copy package files first for better dependency caching
 COPY frontend/package*.json ./
 
 # Install all dependencies (including dev dependencies for build)
 # This layer will be cached unless package.json changes
-RUN npm install
+RUN --mount=type=cache,target=/root/.npm npm install
 
 # Copy static assets and config files (rarely change)
 COPY frontend/public/ ./public/
@@ -26,8 +30,13 @@ COPY frontend/postcss.config.js* ./
 # Copy source code last (most frequently changed)
 COPY frontend/src/ ./src/
 
-# Build the application
-RUN npm run build
+# Build the application. The cache mount keeps webpack/babel's cache between builds, so when something does
+# change the rebuild is much faster than a cold one.
+RUN --mount=type=cache,target=/app/node_modules/.cache npm run build
+
+# Guard: fail the build if dev-tools code ever ends up in the production bundle (e.g. someone imports it directly).
+RUN if grep -rqE "api/(deploy|discover|jobs)|Verify sub-sections|dev server offline" build/static/js; then \
+      echo "ERROR: dev tools leaked into the production bundle" >&2; exit 1; fi
 
 # Stage 2: Serve with nginx
 FROM nginx:alpine
