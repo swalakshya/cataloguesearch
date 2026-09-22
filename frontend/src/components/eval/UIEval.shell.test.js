@@ -81,31 +81,55 @@ test('switching to a tool under More works, and that page is an ordinary scrolli
     expect(within(bar()).getByRole('button', { name: /Unindexed PDFs/ })).toBeInTheDocument();
 });
 
-test('Full screen hides the Dev bar, keeps what you typed, and Exit / Esc bring it back', async () => {
-    renderEval('?tab=pdf-parser');
+// Full screen is only offered once a file is open (see the dedicated test below), so these all deep-link one in.
+const FILE_QS = '&file=Granth/hindi/Book%20One/Book.pdf';
+const openFullScreen = async (query = `?tab=pdf-parser${FILE_QS}`) => {
+    const result = renderEval(query);
+    await waitFor(() => expect(within(bar()).getByTestId('file-chip')).toHaveTextContent('Book.pdf'));
+    fireEvent.click(within(bar()).getByRole('button', { name: /Full screen/ }));
+    return result;
+};
+
+test('Full screen is only offered once a file is open', async () => {
+    const first = renderEval('?tab=pdf-parser');
     await screen.findByTestId('eval-bar');
+    expect(screen.queryByRole('button', { name: /Full screen/ })).not.toBeInTheDocument();
+    first.unmount();
+    renderEval(`?tab=pdf-parser${FILE_QS}`);
+    await waitFor(() => expect(within(bar()).getByTestId('file-chip')).toHaveTextContent('Book.pdf'));
+    expect(within(bar()).getByRole('button', { name: /Full screen/ })).toBeInTheDocument();
+});
+
+test('Full screen hides the Dev bar AND the Eval bar for more room, keeps what you typed, and only Esc brings them back', async () => {
+    renderEval(`?tab=pdf-parser${FILE_QS}`);
+    await waitFor(() => expect(within(bar()).getByTestId('file-chip')).toHaveTextContent('Book.pdf'));
     fireEvent.change(topInput(), { target: { value: '15' } });
     fireEvent.click(within(bar()).getByRole('button', { name: /Full screen/ }));
     expect(screen.queryByTestId('dev-nav')).not.toBeInTheDocument();
-    expect(topInput()).toHaveValue(15);                                       // same tool instance: nothing reloaded
-    expect(within(bar()).getByRole('button', { name: /Exit full screen/ })).toBeInTheDocument();   // the button is persistent
+    expect(screen.queryByTestId('eval-bar')).not.toBeInTheDocument();     // hidden together with the Dev bar, not just persistent
+    expect(topInput()).toHaveValue(15);                                   // same tool instance: nothing reloaded
 
-    fireEvent.click(within(bar()).getByRole('button', { name: /Exit full screen/ }));
-    expect(screen.getByTestId('dev-nav')).toBeInTheDocument();
-    fireEvent.click(within(bar()).getByRole('button', { name: /Full screen/ }));
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.getByTestId('dev-nav')).toBeInTheDocument();
+    expect(screen.getByTestId('eval-bar')).toBeInTheDocument();           // both bars return together
     expect(topInput()).toHaveValue(15);
 });
 
-test('full screen is remembered, so a link from Discover opens Eval already in it', async () => {
-    const first = renderEval('?tab=pdf-parser');
-    await screen.findByTestId('eval-bar');
-    fireEvent.click(within(bar()).getByRole('button', { name: /Full screen/ }));
+test('a small fallback button stays visible in full screen, so Esc is never the only way out', async () => {
+    await openFullScreen();
+    fireEvent.click(screen.getByRole('button', { name: 'Exit full screen' }));
+    expect(screen.getByTestId('dev-nav')).toBeInTheDocument();
+    expect(screen.getByTestId('eval-bar')).toBeInTheDocument();
+});
+
+test('full screen is remembered, so a link from Discover opens Eval already in it (both bars start hidden)', async () => {
+    const first = await openFullScreen();
+    expect(screen.queryByTestId('eval-bar')).not.toBeInTheDocument();
     first.unmount();
-    renderEval('?tab=pdf-parser');
-    await screen.findByTestId('eval-bar');
+    renderEval(`?tab=pdf-parser${FILE_QS}`);
+    await waitFor(() => expect(topInput()).toBeInTheDocument());          // eval-bar itself is hidden; wait for the tool instead
     expect(screen.queryByTestId('dev-nav')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('eval-bar')).not.toBeInTheDocument();
 });
 
 test('the file chip shows the file opened by a deep link (as from Discover) and offers to browse otherwise', async () => {

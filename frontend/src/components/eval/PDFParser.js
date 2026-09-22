@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Loader2 } from 'lucide-react';
-import { LLM_MODELS, DEFAULT_CONTROLS, scanConfigToControls, describeControls } from './scanConfigPrefill';
+import { LLM_MODELS, DEFAULT_CONTROLS, scanConfigToControls, controlsToScanConfig, describeControlsDiff, describeControls } from './scanConfigPrefill';
 import SubSectionVerifier from './SubSectionVerifier';
+import RawConfigEditor from './RawConfigEditor';
+import SaveScanConfigModal from './SaveScanConfigModal';
 import { Spinner } from '../SharedComponents';
 import ShowBookmarksButton from './ShowBookmarksButton';
 import BookmarksModal from './BookmarksModal';
@@ -63,6 +65,9 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
     // The opened library file's raw scan_config (null for uploads); its sub_sections feed the Verify view.
     const [libraryScanConfig, setLibraryScanConfig] = useState(null);
     const [showVerify, setShowVerify] = useState(false);
+    const [rawEditor, setRawEditor] = useState(null); // 'scan_config' | 'config' | null: which popup is open
+    const [showSaveControls, setShowSaveControls] = useState(false);
+    const loadedControlsRef = useRef(DEFAULT_CONTROLS); // baseline for the "Save to scan_config" diff
     const [isLoading, setIsLoading] = useState(false);
     // True only while a single-page Process request is in flight (not file loading or batch jobs).
     const [isProcessing, setIsProcessing] = useState(false);
@@ -293,6 +298,37 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
         setLibraryScanConfig((cfg) => ({ ...cfg, sub_sections: body.sub_sections }));
     };
 
+    // Verify's crop SET and the whole-book start/end SET both write top-level keys into the entry, via the
+    // generic controls endpoint. A fresh hash is read right before writing (rather than reusing one cached at
+    // load time), so it's never stale even after other edits (a sub-section SET, a remove/merge) happened first
+    // in the same Verify session.
+    const setScanConfigControls = async (values, removeKeys = []) => {
+        const hashRes = await fetch(`${API_BASE_URL}/eval/ocr/raw-config?relative_path=${encodeURIComponent(libraryPdfPathRef.current)}&kind=scan_config`);
+        const hashBody = await hashRes.json().catch(() => null);
+        if (!hashRes.ok) throw new Error((hashBody && hashBody.detail) || `HTTP ${hashRes.status}`);
+        const res = await fetch(`${API_BASE_URL}/eval/ocr/scan-config/controls`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ relative_path: libraryPdfPathRef.current, values, remove_keys: removeKeys, expected_hash: hashBody.hash }),
+        });
+        const body = await res.json().catch(() => null);
+        if (!res.ok) throw new Error((body && body.detail) || `HTTP ${res.status}`);
+        return body; // { file, entry, hash }
+    };
+
+    // Crop SET from Verify. File-level, so it applies regardless of which section is on screen there.
+    const setCrop = async (nextCrop) => {
+        const body = await setScanConfigControls({ crop: nextCrop });
+        setLibraryScanConfig((cfg) => ({ ...cfg, crop: body.entry.crop }));
+    };
+
+    // The whole-book start/end SET in Verify, used only when the file has no real sub_sections: same call
+    // signature as the sub-section SET (index/expectSub unused) so Verify doesn't need to know which mode it's in.
+    const setWholeBookPage = async (_index, which, page) => {
+        const body = await setScanConfigControls({ [`${which}_page`]: page });
+        setLibraryScanConfig((cfg) => ({ ...cfg, start_page: body.entry.start_page, end_page: body.entry.end_page }));
+    };
+
     // Remove / Merge / Undo in the sub-section verifier. Resolves to the file's new sub_sections.
     const editSubSections = async (action, payload) => {
         const res = await fetch(`${API_BASE_URL}/eval/ocr/scan-config/sub-sections/${action}`, {
@@ -317,14 +353,24 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
             applyControls(ctl);
             setAppliedNote(describeControls(ctl));
             autoCropRef.current = Object.values(ctl.crop).some((v) => v > 0);
+            loadedControlsRef.current = ctl;
         } catch (err) {
             console.warn('Could not load scan_config for', pdfRelativePath, err);
             applyControls(DEFAULT_CONTROLS);
             setAppliedNote(null);
             setLibraryScanConfig(null);
             autoCropRef.current = false;
+            loadedControlsRef.current = DEFAULT_CONTROLS;
         }
     };
+
+    // The controls exactly as PDF Parser currently shows them, in the same shape loadScanConfigControls uses --
+    // what "Save to scan_config.json" would write, and what its popup diffs against loadedControlsRef.
+    const currentControls = () => ({
+        mode, language, dhundhari, modelName,
+        crop: { top: cropTop, bottom: cropBottom, left: cropLeft, right: cropRight },
+        multiPage: multiPagePDF, splitPct,
+    });
 
     const handleFileReady = async (file) => {
         if (onFileSelect) onFileSelect(null);
@@ -683,20 +729,32 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
 
     return (
         <div className={fill ? 'h-full flex flex-col' : undefined}>
-            {showVerify && Array.isArray(libraryScanConfig?.sub_sections) && pdfDoc && (
-                <SubSectionVerifier
-                    pdfDoc={pdfDoc}
-                    subSections={libraryScanConfig.sub_sections}
-                    crop={libraryScanConfig.crop}
-                    multiPage={!!libraryScanConfig.multi_page}
-                    editable={!!libraryScanConfig.sub_sections_source?.editable}
-                    editNote={libraryScanConfig.sub_sections_source?.reason || ''}
-                    onSetPage={setSubSectionPage}
-                    onEditSections={editSubSections}
-                    fileName={propSelectedFile?.selectedPDFFile}
-                    onClose={() => setShowVerify(false)}
-                />
-            )}
+            {showVerify && libraryScanConfig && pdfDoc && (() => {
+                const hasSubSections = Array.isArray(libraryScanConfig.sub_sections) && libraryScanConfig.sub_sections.length > 0;
+                const sections = hasSubSections ? libraryScanConfig.sub_sections : [{
+                    name: 'Whole book',
+                    start_page: libraryScanConfig.start_page ?? 1,
+                    end_page: libraryScanConfig.end_page ?? pdfDoc.numPages,
+                }];
+                return (
+                    <SubSectionVerifier
+                        pdfDoc={pdfDoc}
+                        subSections={sections}
+                        crop={libraryScanConfig.crop}
+                        multiPage={!!libraryScanConfig.multi_page}
+                        wholeBookMode={!hasSubSections}
+                        editable={hasSubSections ? !!libraryScanConfig.sub_sections_source?.editable : !!libraryScanConfig.raw_scan_config?.editable}
+                        editNote={(hasSubSections ? libraryScanConfig.sub_sections_source?.reason : libraryScanConfig.raw_scan_config?.reason) || ''}
+                        onSetPage={hasSubSections ? setSubSectionPage : setWholeBookPage}
+                        onEditSections={hasSubSections ? editSubSections : undefined}
+                        cropEditable={!!libraryScanConfig.raw_scan_config?.editable}
+                        cropEditNote={libraryScanConfig.raw_scan_config?.reason || ''}
+                        onSetCrop={setCrop}
+                        fileName={propSelectedFile?.selectedPDFFile}
+                        onClose={() => setShowVerify(false)}
+                    />
+                );
+            })()}
             <BookmarksModal
                 isOpen={showBookmarkModal}
                 onClose={() => setShowBookmarkModal(false)}
@@ -762,14 +820,38 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                             }`}>
                                 {propSelectedFile.selectedPDFFile || 'Unknown'}
                                 {appliedNote && <span className="ml-2 opacity-80">· settings from scan_config: {appliedNote}</span>}
-                                {Array.isArray(libraryScanConfig?.sub_sections) && libraryScanConfig.sub_sections.length > 0 && pdfDoc && (
+                                {libraryScanConfig && pdfDoc && selectedFile?.name === propSelectedFile.selectedPDFFile && (
                                     <button onClick={() => setShowVerify(true)}
                                         className="cursor-pointer ml-3 px-2 py-0.5 rounded border border-current bg-white/60 hover:bg-white font-medium"
-                                        title="Look at the start and end page of each sub-section in the scan_config">
-                                        Verify sub-sections ({libraryScanConfig.sub_sections.length})
+                                        title="Check the page ranges and crop against the real pages, and fix them here">
+                                        {Array.isArray(libraryScanConfig.sub_sections) && libraryScanConfig.sub_sections.length > 0
+                                            ? `Verify (${libraryScanConfig.sub_sections.length})` : 'Verify'}
                                     </button>
                                 )}
+                                {selectedFile?.name === propSelectedFile.selectedPDFFile && (
+                                    <>
+                                        <button onClick={() => setRawEditor('scan_config')}
+                                            className="cursor-pointer ml-3 px-2 py-0.5 rounded border border-current bg-white/60 hover:bg-white font-medium"
+                                            title="Open this file's scan_config.json to edit it directly">
+                                            Edit scan_config.json
+                                        </button>
+                                        <button onClick={() => setRawEditor('config')}
+                                            className="cursor-pointer ml-2 px-2 py-0.5 rounded border border-current bg-white/60 hover:bg-white font-medium"
+                                            title="Open this file's config.json to edit it directly">
+                                            Edit config.json
+                                        </button>
+                                    </>
+                                )}
                             </div>
+                        )}
+                        {rawEditor && (
+                            <RawConfigEditor
+                                apiBaseUrl={API_BASE_URL}
+                                relativePath={libraryPdfPathRef.current}
+                                kind={rawEditor}
+                                onClose={() => setRawEditor(null)}
+                                onSaved={() => loadScanConfigControls(libraryPdfPathRef.current)}
+                            />
                         )}
                     </div>
 
@@ -855,7 +937,28 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                             className="text-xs px-3 py-1.5 bg-slate-600 text-white rounded-md hover:bg-slate-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors">
                             Apply
                         </button>
+                        {propSelectedFile && selectedFile?.name === propSelectedFile.selectedPDFFile && (
+                            <button onClick={() => setShowSaveControls(true)}
+                                title="Write these OCR/crop/language/multi-page settings into this file's scan_config.json"
+                                className="text-xs px-3 py-1.5 bg-sky-600 text-white rounded-md hover:bg-sky-700 transition-colors">
+                                Save to scan_config
+                            </button>
+                        )}
                     </div>
+                    {showSaveControls && (() => {
+                        const { values, removeKeys } = controlsToScanConfig(currentControls());
+                        return (
+                            <SaveScanConfigModal
+                                apiBaseUrl={API_BASE_URL}
+                                relativePath={libraryPdfPathRef.current}
+                                values={values}
+                                removeKeys={removeKeys}
+                                changes={describeControlsDiff(loadedControlsRef.current, currentControls())}
+                                onClose={() => setShowSaveControls(false)}
+                                onSaved={() => loadScanConfigControls(libraryPdfPathRef.current)}
+                            />
+                        );
+                    })()}
 
                     {/* Line 3: Page nav + bookmarks + Process + Batch */}
                     <div className="flex items-center justify-between gap-2">

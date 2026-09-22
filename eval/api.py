@@ -30,6 +30,8 @@ from PIL import Image
 from backend.config import Config
 from backend.crawler.advanced_pdf_processor import AdvancedPDFProcessor
 from backend.common.scan_config import get_scan_config, get_ignore_bookmarks, effective_language
+from backend.common.raw_config_edit import EditRefused as RawEditRefused
+from backend.common import raw_config_edit
 from backend.common.scan_config_edit import (
     EditRefused, merge_sub_sections, remove_sub_sections, set_sub_section_page, sub_sections_source, undo_last_structural_edit,
 )
@@ -339,6 +341,9 @@ async def get_file_scan_config(relative_path: str):
         scan_config["language"] = effective_language(scan_config, get_merged_config(file_path, base_pdf_folder))
         # Tells the sub-section verifier whether its SET buttons may write back to this file's scan_config.json.
         scan_config["sub_sections_source"] = sub_sections_source(file_path, base_pdf_folder, _scan_config_edit_root(config))
+        # Same question, but for the file as a whole (crop, the whole-book page range when there are no
+        # sub_sections): unlike sub_sections_source, doesn't require sub_sections to already exist.
+        scan_config["raw_scan_config"] = raw_config_edit.describe("scan_config", file_path, base_pdf_folder, _scan_config_edit_root(config))
 
         return scan_config
 
@@ -381,6 +386,77 @@ async def _run_edit(relative_path: str, what: str, fn):
         raise HTTPException(status_code=refused.status, detail=refused.message)
     log_handle.info(f"scan_config: {what} in {path}")
     return {"sub_sections": sub_sections, "file": os.path.relpath(path, os.path.realpath(config.BASE_PDF_PATH))}
+
+
+class RawConfigWriteRequest(BaseModel):
+    relative_path: str
+    kind: str
+    text: str
+    expected_hash: str
+
+
+def _raw_config_target(relative_path: str):
+    """(config, absolute PDF path), the same way every scan_config endpoint resolves the file."""
+    config = Config("configs/config.yaml")
+    base_pdf_folder = config.BASE_PDF_PATH
+    file_path = _resolve_within_root(config, "pdf", relative_path if relative_path.endswith(".pdf") else f"{relative_path}.pdf")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail=f"File not found: {relative_path}")
+    return config, base_pdf_folder, file_path
+
+
+@router.get("/ocr/raw-config")
+async def get_raw_config(relative_path: str, kind: str):
+    """
+    The raw text of the config.json or scan_config.json this PDF's own settings live in (kind: "config" or
+    "scan_config"), plus whether it may be saved back and a hash to detect changes made elsewhere in the meantime.
+    """
+    if kind not in raw_config_edit.KINDS:
+        raise HTTPException(status_code=422, detail=f"kind must be one of {raw_config_edit.KINDS}")
+    config, base_pdf_folder, file_path = _raw_config_target(relative_path)
+    info = raw_config_edit.describe(kind, file_path, base_pdf_folder, _scan_config_edit_root(config))
+    data = await asyncio.to_thread(raw_config_edit.read, kind, file_path, base_pdf_folder)
+    return {**info, **data}
+
+
+@router.post("/ocr/raw-config")
+async def set_raw_config(req: RawConfigWriteRequest):
+    """Saves the popup editor's text back to the file it came from (configs repo only). Writes it as typed."""
+    if req.kind not in raw_config_edit.KINDS:
+        raise HTTPException(status_code=422, detail=f"kind must be one of {raw_config_edit.KINDS}")
+    config, base_pdf_folder, file_path = _raw_config_target(req.relative_path)
+    try:
+        result = await asyncio.to_thread(
+            raw_config_edit.write, req.kind, file_path, base_pdf_folder, _scan_config_edit_root(config),
+            text=req.text, expected_hash=req.expected_hash)
+    except RawEditRefused as refused:
+        raise HTTPException(status_code=refused.status, detail=refused.message)
+    log_handle.info(f"{req.kind}: saved {result.get('file', req.relative_path)}")
+    return {**raw_config_edit.describe(req.kind, file_path, base_pdf_folder, _scan_config_edit_root(config)), **result}
+
+
+class SetScanConfigControlsRequest(BaseModel):
+    relative_path: str
+    values: Dict[str, Any] = Field(default_factory=dict)
+    remove_keys: List[str] = Field(default_factory=list)
+    expected_hash: str
+
+
+@router.post("/ocr/scan-config/controls")
+async def set_scan_config_controls(req: SetScanConfigControlsRequest):
+    """
+    PDF Parser's "Save" button: writes the OCR mode/crop/language/multi-page controls currently shown on screen
+    into the PDF's own scan_config.json entry (configs repo only), touching only those keys.
+    """
+    config, base_pdf_folder, file_path = _raw_config_target(req.relative_path)
+    try:
+        result = await asyncio.to_thread(
+            raw_config_edit.set_controls, file_path, base_pdf_folder, _scan_config_edit_root(config),
+            values=req.values, remove_keys=req.remove_keys, expected_hash=req.expected_hash)
+    except RawEditRefused as refused:
+        raise HTTPException(status_code=refused.status, detail=refused.message)
+    log_handle.info(f"scan_config: saved controls {sorted(req.values)} (removed {req.remove_keys}) in {result['file']}")
+    return result
 
 
 @router.post("/ocr/scan-config/sub-section-page")

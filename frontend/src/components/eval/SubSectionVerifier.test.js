@@ -427,3 +427,136 @@ describe('removing and merging sub-sections', () => {
         expect(screen.queryByRole('button', { name: /^Merge/ })).toBeNull();
     });
 });
+
+describe('whole-book mode (no real sub_sections)', () => {
+    const WHOLE = [{ name: 'Whole book', start_page: 1, end_page: 300 }];
+    const setupWhole = (props = {}) => setup({ subSections: WHOLE, wholeBookMode: true, ...props });
+
+    test('shows the whole book as the one section, with no rail or mode chips', async () => {
+        setupWhole();
+        expect(await screen.findByAltText('Start page 1')).toBeInTheDocument();
+        expect(label()).toBe('Whole book');
+        expect(screen.getByText(/pages 1–300/)).toBeInTheDocument();
+        expect(screen.queryByTestId('rail')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('position')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^All \(/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Random/ })).not.toBeInTheDocument();
+    });
+
+    test('page stepping, Reset and SET work exactly as for a real sub-section', async () => {
+        const onSetPage = jest.fn().mockResolvedValue();
+        setupWhole({ editable: true, onSetPage });
+        await screen.findByAltText('Start page 1');
+        fireEvent.click(screen.getByRole('button', { name: 'Start next page' }));
+        expect(await screen.findByAltText('Start page 2')).toBeInTheDocument();
+        fireEvent.click(await screen.findByRole('button', { name: 'SET start = 2' }));
+        await waitFor(() => expect(onSetPage).toHaveBeenCalledWith(0, 'start', 2, WHOLE[0]));
+    });
+
+    test('there is no Remove or Merge, even if onEditSections were supplied', async () => {
+        setupWhole({ editable: true, onSetPage: jest.fn(), onEditSections: jest.fn() });
+        await screen.findByAltText('Start page 1');
+        expect(screen.queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Merge/ })).not.toBeInTheDocument();
+    });
+
+    test('Esc still closes, and ← → do nothing (nothing to navigate to)', async () => {
+        const { onClose } = setupWhole();
+        await screen.findByAltText('Start page 1');
+        key('ArrowRight');
+        expect(label()).toBe('Whole book');
+        key('Escape');
+        expect(onClose).toHaveBeenCalled();
+    });
+});
+
+describe('crop editing', () => {
+    const setupCrop = (props = {}) => setup({ crop: { top: 9, bottom: 4, left: 0, right: 0 }, cropEditable: true, onSetCrop: jest.fn().mockResolvedValue(), ...props });
+    const cropInput = (side) => screen.getByLabelText(`Crop ${side} %`);
+
+    test('shows the loaded values, and there is no SET until something changes', async () => {
+        setupCrop();
+        await screen.findByAltText('Start page 12');
+        expect(cropInput('top')).toHaveValue(9);
+        expect(cropInput('bottom')).toHaveValue(4);
+        expect(screen.queryByRole('button', { name: 'SET crop' })).not.toBeInTheDocument();
+    });
+
+    test('editing a value shows SET and Reset, and the band updates live', async () => {
+        setupCrop();
+        await screen.findByAltText('Start page 12');
+        fireEvent.change(cropInput('top'), { target: { value: '20' } });
+        expect(screen.getByRole('button', { name: 'SET crop' })).toBeInTheDocument();
+        const startBand = within(screen.getByTestId('pane-start')).getAllByTestId('crop-band')[0];
+        const endBand = within(screen.getByTestId('pane-end')).getAllByTestId('crop-band')[0];
+        expect(startBand.style.height).toBe('20%');
+        expect(endBand.style.height).toBe('20%');   // both panes reflect the same file-level crop
+        fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+        expect(cropInput('top')).toHaveValue(9);
+        expect(screen.queryByRole('button', { name: 'SET crop' })).not.toBeInTheDocument();
+    });
+
+    test('SET crop sends the edited values; once the parent refreshes crop to match, it shows Saved', async () => {
+        // Mirrors what PDFParser really does: onSetCrop resolves, then the parent re-renders with the new crop
+        // prop (from its own refreshed scan_config) -- that is what actually clears "changed" and reveals Saved.
+        let cropProp = { top: 9, bottom: 4, left: 0, right: 0 };
+        const onSetCrop = jest.fn(async (next) => { cropProp = next; view.rerender(el()); });
+        const el = () => <SubSectionVerifier pdfDoc={{ numPages: 300 }} subSections={SUBS} crop={cropProp} multiPage={false}
+            fileName="LokVibhag.pdf" onClose={() => {}} renderPageImage={async (_d, p) => `data:image/png;base64,P${p}`}
+            cropEditable onSetCrop={onSetCrop} />;
+        const view = render(el());
+        await screen.findByAltText('Start page 12');
+        fireEvent.change(cropInput('top'), { target: { value: '6' } });
+        fireEvent.change(cropInput('left'), { target: { value: '3' } });
+        fireEvent.click(screen.getByRole('button', { name: 'SET crop' }));
+        await waitFor(() => expect(onSetCrop).toHaveBeenCalledWith({ top: 6, bottom: 4, left: 3, right: 0 }));
+        expect(await screen.findByTestId('crop-saved-note')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'SET crop' })).not.toBeInTheDocument();
+        expect(cropInput('top')).toHaveValue(6);   // the (now-loaded) value stays shown, not reset to the pre-edit one
+    });
+
+    test('a refused crop save shows the reason and keeps the edited values', async () => {
+        const onSetCrop = jest.fn().mockRejectedValue(new Error('The file changed on disk since you opened it.'));
+        setupCrop({ onSetCrop });
+        await screen.findByAltText('Start page 12');
+        fireEvent.change(cropInput('top'), { target: { value: '6' } });
+        fireEvent.click(screen.getByRole('button', { name: 'SET crop' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent('changed on disk');
+        expect(cropInput('top')).toHaveValue(6);
+    });
+
+    test('is entirely absent (no inputs) when not editable, but says why', async () => {
+        setupCrop({ cropEditable: false, cropEditNote: 'Read-only: this file is not in the configs repo.' });
+        await screen.findByAltText('Start page 12');
+        expect(screen.queryByTestId('crop-controls')).not.toBeInTheDocument();
+        expect(screen.getByTestId('crop-read-only')).toHaveTextContent('not in the configs repo');
+    });
+
+    test('is absent for multi-page books regardless of editability', async () => {
+        setupCrop({ multiPage: true });
+        await screen.findByAltText('Start page 12');
+        expect(screen.queryByTestId('crop-controls')).not.toBeInTheDocument();
+    });
+
+    test('re-seeds from a new loaded crop (e.g. after a save refreshed it) without keeping stale local edits', async () => {
+        const view = render(<SubSectionVerifier pdfDoc={{ numPages: 300 }} subSections={SUBS} crop={{ top: 9, bottom: 4, left: 0, right: 0 }}
+            multiPage={false} fileName="x.pdf" onClose={() => {}} renderPageImage={async (_d, p) => `data:image/png;base64,P${p}`}
+            cropEditable onSetCrop={jest.fn()} />);
+        await screen.findByAltText('Start page 12');
+        fireEvent.change(cropInput('top'), { target: { value: '15' } });   // an in-progress local edit, not yet saved
+        expect(cropInput('top')).toHaveValue(15);
+        // the parent reloads and hands back a DIFFERENT crop than either the original or the in-progress edit --
+        // e.g. someone else (or a different edit path) changed it in the meantime
+        view.rerender(<SubSectionVerifier pdfDoc={{ numPages: 300 }} subSections={SUBS} crop={{ top: 6, bottom: 4, left: 0, right: 0 }}
+            multiPage={false} fileName="x.pdf" onClose={() => {}} renderPageImage={async (_d, p) => `data:image/png;base64,P${p}`}
+            cropEditable onSetCrop={jest.fn()} />);
+        expect(cropInput('top')).toHaveValue(6);   // the stale local "15" did not survive the reload
+        expect(screen.queryByRole('button', { name: 'SET crop' })).not.toBeInTheDocument();
+    });
+
+    test('the Show crop toggle appears whenever crop is editable, even if every value is currently zero', async () => {
+        setupCrop({ crop: { top: 0, bottom: 0, left: 0, right: 0 } });
+        await screen.findByAltText('Start page 12');
+        expect(screen.getByText('Show crop')).toBeInTheDocument();
+    });
+});

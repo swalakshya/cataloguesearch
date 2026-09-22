@@ -35,8 +35,8 @@ describe('genEvalLayout', () => {
         expect(L.leftScroll).toMatch(/max-h-\[700px\] overflow-y-auto/);
         expect(L.rightScroll).toMatch(/max-h-\[700px\] overflow-y-auto/);
         expect(L.pdfImage).toBe('max-w-full h-auto');
-        expect(L.leftCol).toBe('flex-1 p-4 border-r border-slate-200');
-        expect(L.rightCol).toBe('flex-1 p-4');
+        expect(L.leftCol).toBe('flex-[2] p-4 border-r border-slate-200');
+        expect(L.rightCol).toBe('flex-[3] p-4');
         expect(L.row).toBe('flex flex-col lg:flex-row');
     });
 
@@ -55,5 +55,11 @@ describe('genEvalLayout', () => {
         expect(L.pdfImage).toMatch(/object-contain/);
         expect(L.leftCol).toMatch(/min-h-0/);
         expect(L.rightCol).toMatch(/min-h-0/);
+    });
+
+    test.each([false, true])('leftBox and rightBox carry no extra top margin (fill=%s), so the PDF page and the paragraphs line up under their equal-mb-3 headers', (fill) => {
+        const L = genEvalLayout(fill);
+        expect(L.leftBox).not.toMatch(/\bmt-/);
+        expect(L.rightBox).not.toMatch(/\bmt-/);
     });
 });

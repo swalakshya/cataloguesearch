@@ -17,7 +17,7 @@ jest.mock('../../hooks/usePDFViewer', () => ({
     }, { get: (t, p) => (p in t ? t[p] : () => {}) }),
 }));
 
-const LOK_VIBHAG = { crop: { top: 9, bottom: 4 }, ocr_engine: 'llm', language: 'hi', start_page: 12, end_page: 280 };
+const LOK_VIBHAG = { crop: { top: 9, bottom: 4 }, ocr_engine: 'llm', language: 'hi', start_page: 12, end_page: 280, raw_scan_config: { editable: true, reason: '' } };
 
 // A directory handle whose every folder is itself and whose files are tiny PDFs.
 const fakePdfRoot = () => {
@@ -101,7 +101,7 @@ test('if the scan_config cannot be read, the page still opens with the defaults 
 });
 
 
-describe('Verify sub-sections', () => {
+describe('Verify', () => {
     const SUBS = [{ field: 'Adhikaar', name: 'Prastavana', start_page: 12, end_page: 39 },
         { field: 'Adhikaar', name: 'Pratham Vibhag', start_page: 56, end_page: 102 }];
     const openPdf = () => { mockPdfDoc = { numPages: 300, getPage: async () => { throw new Error('no canvas in jsdom'); } }; };
@@ -110,35 +110,48 @@ describe('Verify sub-sections', () => {
         openPdf();
         mockScanConfig({ ...LOK_VIBHAG, sub_sections: SUBS });
         renderParser();
-        const button = await screen.findByRole('button', { name: 'Verify sub-sections (2)' });
+        const button = await screen.findByRole('button', { name: 'Verify (2)' });
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         fireEvent.click(button);
-        const dialog = screen.getByRole('dialog', { name: 'Verify sub-sections' });
+        const dialog = screen.getByRole('dialog', { name: 'Verify' });
         expect(within(dialog).getByText('Adhikaar · Prastavana')).toBeInTheDocument();
         fireEvent.keyDown(window, { key: 'Escape' });
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
-    test('no button when the scan_config has no sub-sections', async () => {
+    test('with no sub-sections, Verify still offers the whole book as one section (no count)', async () => {
         openPdf();
         mockScanConfig(LOK_VIBHAG);
         renderParser();
-        await waitFor(() => expect(cropInput('Top %').value).toBe('9'));
-        expect(screen.queryByRole('button', { name: /Verify sub-sections/ })).not.toBeInTheDocument();
+        const button = await screen.findByRole('button', { name: 'Verify' });
+        fireEvent.click(button);
+        const dialog = screen.getByRole('dialog', { name: 'Verify' });
+        expect(within(dialog).getByText('Whole book')).toBeInTheDocument();
+        expect(within(dialog).getByText(/pages 12–280/)).toBeInTheDocument();  // LOK_VIBHAG's own start_page/end_page
+        expect(within(dialog).queryByTestId('rail')).not.toBeInTheDocument();  // no rail for a single implicit section
+        expect(within(dialog).queryByRole('button', { name: /^All \(/ })).not.toBeInTheDocument();
+    });
+
+    test('with neither sub-sections nor a start/end page, the whole book defaults to page 1 through the last page', async () => {
+        openPdf();
+        mockScanConfig({ ...LOK_VIBHAG, start_page: undefined, end_page: undefined });
+        renderParser();
+        fireEvent.click(await screen.findByRole('button', { name: 'Verify' }));
+        expect(await screen.findByText(/pages 1–300/)).toBeInTheDocument();  // mockPdfDoc.numPages is 300
     });
 
     test('no button before the PDF itself is open', async () => {
         mockScanConfig({ ...LOK_VIBHAG, sub_sections: SUBS });
         renderParser();                                    // pdfDoc is still null
         await waitFor(() => expect(cropInput('Top %').value).toBe('9'));
-        expect(screen.queryByRole('button', { name: /Verify sub-sections/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Verify/ })).not.toBeInTheDocument();
     });
 
     test('no button for an uploaded file', () => {
         openPdf();
         mockScanConfig({ ...LOK_VIBHAG, sub_sections: SUBS });
         renderParser({ selectedFile: null });
-        expect(screen.queryByRole('button', { name: /Verify sub-sections/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Verify/ })).not.toBeInTheDocument();
     });
 });
 
@@ -177,7 +190,7 @@ describe('fill layout (panes sized to the window)', () => {
     });
 });
 
-describe('SET in Verify sub-sections', () => {
+describe('SET in Verify', () => {
     const SUBS = [{ field: 'Adhikaar', name: 'Prastavana', start_page: 12, end_page: 39 }];
     const CFG = (editable) => ({ ...LOK_VIBHAG, sub_sections: SUBS,
         sub_sections_source: { editable, reason: editable ? '' : 'Read-only: this scan_config.json is not in the configs repo.', file: 'x/scan_config.json' } });
@@ -191,8 +204,8 @@ describe('SET in Verify sub-sections', () => {
     const openVerifier = async () => {
         mockPdfDoc = { numPages: 300, getPage: async () => { throw new Error('no canvas in jsdom'); } };
         renderParser();
-        fireEvent.click(await screen.findByRole('button', { name: 'Verify sub-sections (1)' }));
-        return screen.getByRole('dialog', { name: 'Verify sub-sections' });
+        fireEvent.click(await screen.findByRole('button', { name: 'Verify (1)' }));
+        return screen.getByRole('dialog', { name: 'Verify' });
     };
 
     test('SET sends the library file, the section and the page, and the list shows the new page', async () => {
@@ -245,8 +258,8 @@ describe('SET in Verify sub-sections', () => {
         });
         mockPdfDoc = { numPages: 300, getPage: async () => { throw new Error('no canvas in jsdom'); } };
         renderParser();
-        fireEvent.click(await screen.findByRole('button', { name: 'Verify sub-sections (2)' }));
-        const dialog = screen.getByRole('dialog', { name: 'Verify sub-sections' });
+        fireEvent.click(await screen.findByRole('button', { name: 'Verify (2)' }));
+        const dialog = screen.getByRole('dialog', { name: 'Verify' });
 
         fireEvent.click(within(dialog).getByLabelText('Select Prastavana'));
         fireEvent.click(within(dialog).getByLabelText('Select Second'));
@@ -261,5 +274,184 @@ describe('SET in Verify sub-sections', () => {
         expect(posts[0].body.items.map((i) => i.index)).toEqual([0, 1]);
         await waitFor(() => expect(within(dialog).getByTestId('rail')).toHaveTextContent('12–60'));
         expect(within(dialog).getByTestId('rail')).not.toHaveTextContent('Second');
+    });
+});
+
+describe('Edit scan_config.json / config.json from PDF Parser', () => {
+    const RAW = { kind: 'config', file: 'Granth/hindi/Karananuyog/Lok Vibhag/config.json', exists: true, editable: true, reason: '', text: '{"Anuyog": "Karananuyog"}', hash: 'h1' };
+
+    const mockWithRaw = (getRaw) => {
+        global.fetch = jest.fn(async (url) => {
+            const u = String(url);
+            const ok = (body) => ({ ok: true, status: 200, json: async () => body });
+            if (u.includes('/eval/ocr/raw-config')) return ok(getRaw(new URL(u, 'http://x').searchParams.get('kind')));
+            if (u.includes('/eval/ocr/scan-config')) return ok(LOK_VIBHAG);
+            return ok({});
+        });
+    };
+
+    test('the buttons appear once the library file is loaded, and open the right kind', async () => {
+        mockWithRaw((kind) => ({ ...RAW, kind }));
+        renderParser();
+        const scanBtn = await screen.findByRole('button', { name: 'Edit scan_config.json' });
+        const configBtn = screen.getByRole('button', { name: 'Edit config.json' });
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+        fireEvent.click(configBtn);
+        expect(await screen.findByRole('dialog', { name: 'Edit config.json' })).toBeInTheDocument();
+        expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('kind=config'));
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+        fireEvent.click(scanBtn);
+        expect(await screen.findByRole('dialog', { name: 'Edit scan_config.json' })).toBeInTheDocument();
+        expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('kind=scan_config'));
+    });
+
+    test('there is no edit button before a library file is loaded', async () => {
+        mockWithRaw((kind) => ({ ...RAW, kind }));
+        renderParser({ selectedFile: null });
+        expect(screen.queryByRole('button', { name: /Edit (scan_)?config\.json/ })).not.toBeInTheDocument();
+    });
+
+    test('saving refreshes the scan_config controls for the same file', async () => {
+        let scanConfigCalls = 0;
+        global.fetch = jest.fn(async (url, opts) => {
+            const u = String(url);
+            const ok = (body) => ({ ok: true, status: 200, json: async () => body });
+            if (opts?.method === 'POST') return ok({ ...RAW, text: '{"Anuyog": "Charananuyog"}', hash: 'h2' });
+            if (u.includes('/eval/ocr/raw-config')) return ok(RAW);
+            if (u.includes('/eval/ocr/scan-config')) { scanConfigCalls += 1; return ok(LOK_VIBHAG); }
+            return ok({});
+        });
+        renderParser();
+        await waitFor(() => expect(scanConfigCalls).toBe(1));
+        fireEvent.click(await screen.findByRole('button', { name: 'Edit config.json' }));
+        const dialog = await screen.findByRole('dialog', { name: 'Edit config.json' });
+        fireEvent.change(await within(dialog).findByRole('textbox'), { target: { value: '{"Anuyog": "Charananuyog"}' } });
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(scanConfigCalls).toBe(2));
+    });
+});
+
+describe('Save to scan_config from PDF Parser', () => {
+    const RAW = { kind: 'scan_config', file: 'Granth/hindi/Karananuyog/Lok Vibhag/scan_config.json', exists: true, editable: true, reason: '', text: '{}', hash: 'h1' };
+
+    const mockWithControlsSave = (saveFn) => {
+        global.fetch = jest.fn(async (url, opts) => {
+            const u = String(url);
+            const ok = (body) => ({ ok: true, status: 200, json: async () => body });
+            if (opts?.method === 'POST' && u.endsWith('/eval/ocr/scan-config/controls')) return saveFn(JSON.parse(opts.body));
+            if (u.includes('/eval/ocr/raw-config')) return ok(RAW);
+            if (u.includes('/eval/ocr/scan-config')) return ok(LOK_VIBHAG);
+            return ok({});
+        });
+    };
+
+    test('the button appears once the library file is loaded, and opens with the diff pre-filled (no Crop row)', async () => {
+        mockWithControlsSave(async () => ({ ok: true, status: 200, json: async () => ({ entry: {}, hash: 'h2' }) }));
+        renderParser();
+        const btn = await screen.findByRole('button', { name: 'Save to scan_config' });
+        fireEvent.click(btn);
+        const dialog = await screen.findByRole('dialog', { name: 'Save to scan_config.json' });
+        // nothing changed yet: the Engine row shows the loaded value on both sides, not crossed out
+        const engineRow = await within(dialog).findByTestId('row-Engine');
+        expect(engineRow).toHaveAttribute('data-changed', 'false');
+        expect(engineRow).toHaveTextContent('LLM');
+        expect(within(dialog).queryByTestId('row-Crop')).not.toBeInTheDocument(); // crop is saved from Verify now, not here
+    });
+
+    test('changing the Tesseract/LLM toggle shows up in the diff, and Save does not include crop', async () => {
+        let sent;
+        mockWithControlsSave((body) => { sent = body; return { ok: true, status: 200, json: async () => ({ entry: body.values, hash: 'h2' }) }; });
+        renderParser();
+        await waitFor(() => expect(cropInput('Top %').value).toBe('9'));
+        fireEvent.click(screen.getByRole('button', { name: 'Tesseract' }));
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Save to scan_config' }));
+        const dialog = await screen.findByRole('dialog', { name: 'Save to scan_config.json' });
+        const engineRow = await within(dialog).findByTestId('row-Engine');
+        expect(engineRow).toHaveAttribute('data-changed', 'true');
+        expect(engineRow).toHaveTextContent('LLM');
+        expect(engineRow).toHaveTextContent('Tesseract');
+
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(sent).toBeDefined());
+        expect(sent.relative_path).toBe('Granth/hindi/Karananuyog/Lok Vibhag/LokVibhag.pdf');
+        expect(sent.values).toEqual({ language: 'hi', ocr_engine: 'tesseract', multi_page: false });
+        expect(sent.values.crop).toBeUndefined();
+        expect(sent.remove_keys).toEqual(['llm_model', 'split_percentage']);
+        expect(sent.expected_hash).toBe('h1');
+        expect(await within(dialog).findByTestId('saved-note')).toBeInTheDocument();
+    });
+
+    test('no Save-to-scan_config button before a library file is loaded', async () => {
+        mockWithControlsSave(async () => ({ ok: true, status: 200, json: async () => ({}) }));
+        renderParser({ selectedFile: null });
+        expect(screen.queryByRole('button', { name: 'Save to scan_config' })).not.toBeInTheDocument();
+    });
+});
+
+describe('Verify: crop SET and whole-book page SET from PDF Parser', () => {
+    const RAW = { kind: 'scan_config', file: 'Granth/hindi/Karananuyog/Lok Vibhag/scan_config.json', exists: true, editable: true, reason: '', text: '{}', hash: 'h1' };
+
+    const mockServer = (controlsFn) => {
+        global.fetch = jest.fn(async (url, opts) => {
+            const u = String(url);
+            const ok = (body) => ({ ok: true, status: 200, json: async () => body });
+            if (opts?.method === 'POST' && u.endsWith('/eval/ocr/scan-config/controls')) return controlsFn(JSON.parse(opts.body));
+            if (u.includes('/eval/ocr/raw-config')) return ok(RAW);
+            if (u.includes('/eval/ocr/scan-config')) return ok(LOK_VIBHAG);
+            return ok({});
+        });
+    };
+    const openVerify = async () => {
+        mockPdfDoc = { numPages: 300, getPage: async () => { throw new Error('no canvas in jsdom'); } };
+        renderParser();
+        fireEvent.click(await screen.findByRole('button', { name: 'Verify' }));
+        return screen.getByRole('dialog', { name: 'Verify' });
+    };
+
+    test('SET crop fetches a fresh hash first, then writes only crop, and refreshes the file-level editability', async () => {
+        const calls = [];
+        mockServer((body) => { calls.push(body); return { ok: true, status: 200, json: async () => ({ file: RAW.file, entry: { crop: body.values.crop }, hash: 'h2' } ) }; });
+        const dialog = await openVerify();
+        fireEvent.change(within(dialog).getByLabelText('Crop top %'), { target: { value: '6' } });
+        fireEvent.click(within(dialog).getByRole('button', { name: 'SET crop' }));
+        await waitFor(() => expect(calls).toHaveLength(1));
+        expect(calls[0]).toEqual({
+            relative_path: 'Granth/hindi/Karananuyog/Lok Vibhag/LokVibhag.pdf',
+            values: { crop: { top: 6, bottom: 4, left: 0, right: 0 } }, remove_keys: [], expected_hash: 'h1',
+        });
+        expect(await within(dialog).findByTestId('crop-saved-note')).toBeInTheDocument();
+    });
+
+    test('a whole-book file (no sub_sections) SETs the top-level start_page, not a sub-section', async () => {
+        const calls = [];
+        mockServer((body) => { calls.push(body); return { ok: true, status: 200, json: async () => ({ file: RAW.file, entry: { start_page: body.values.start_page }, hash: 'h2' }) }; });
+        const dialog = await openVerify();
+        expect(within(dialog).getByText('Whole book')).toBeInTheDocument();
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Start next page' }));
+        fireEvent.click(await within(dialog).findByRole('button', { name: /^SET start = /}));
+        await waitFor(() => expect(calls).toHaveLength(1));
+        expect(calls[0]).toEqual({
+            relative_path: 'Granth/hindi/Karananuyog/Lok Vibhag/LokVibhag.pdf',
+            values: { start_page: 13 }, remove_keys: [], expected_hash: 'h1',
+        });
+    });
+
+    test('crop is read-only outside the configs repo, using the file-level (not sub-section) editability', async () => {
+        mockServer(async () => { throw new Error('must not be called'); });
+        global.fetch = jest.fn(async (url) => {
+            const u = String(url);
+            const ok = (body) => ({ ok: true, status: 200, json: async () => body });
+            if (u.includes('/eval/ocr/scan-config')) {
+                return ok({ ...LOK_VIBHAG, raw_scan_config: { editable: false, reason: 'Read-only: this file is not in the configs repo.' } });
+            }
+            return ok({});
+        });
+        const dialog = await openVerify();
+        expect(within(dialog).queryByTestId('crop-controls')).not.toBeInTheDocument();
+        expect(within(dialog).getByTestId('crop-read-only')).toHaveTextContent('not in the configs repo');
     });
 });

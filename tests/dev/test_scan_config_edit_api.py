@@ -40,6 +40,19 @@ def test_the_scan_config_response_says_whether_sub_sections_are_editable(env):
     assert cfg["sub_sections_source"]["editable"] is True and cfg["sub_sections_source"]["file"].endswith("scan_config.json")
 
 
+def test_the_scan_config_response_also_says_whether_the_whole_file_is_editable(env):
+    cfg = env.client.get("/eval/ocr/scan-config", params={"relative_path": "Granth/Book.pdf"}).json()
+    assert cfg["raw_scan_config"]["editable"] is True and cfg["raw_scan_config"]["file"].endswith("scan_config.json")
+
+
+def test_the_whole_file_can_be_editable_even_with_no_sub_sections_at_all(env, tmp_path):
+    (env.root / "Granth" / "scan_config.json").write_text('{"Book": {"crop": {"top": 5}}}', encoding="utf-8")
+    cfg = env.client.get("/eval/ocr/scan-config", params={"relative_path": "Granth/Book.pdf"}).json()
+    assert cfg.get("sub_sections") in (None, [])
+    assert cfg["sub_sections_source"]["editable"] is False   # no sub_sections to edit
+    assert cfg["raw_scan_config"]["editable"] is True         # but the file itself can still be written to
+
+
 def test_set_changes_the_file_and_returns_the_new_sub_sections(env):
     r = env.client.post("/eval/ocr/scan-config/sub-section-page", json=BODY)
     assert r.status_code == 200 and r.json()["sub_sections"][0]["start_page"] == 3

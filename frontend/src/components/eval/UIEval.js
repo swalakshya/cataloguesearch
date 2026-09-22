@@ -288,16 +288,26 @@ const UIEval = () => {
                 />
             )}
 
-            <EvalBar
-                activeTab={activeTab}
-                onTab={setActiveTab}
-                fileLabel={fileLabel}
-                canBrowse={canBrowse}
-                onBrowse={handleBrowseFiles}
-                basePaths={basePaths}
-                focus={focus}
-                onToggleFocus={() => setFocus(!focus)}
-            />
+            {/* Hidden together with the Dev bar in full screen, for more room; Esc brings both back (DevShell owns that key). */}
+            {!focus ? (
+                <EvalBar
+                    activeTab={activeTab}
+                    onTab={setActiveTab}
+                    fileLabel={fileLabel}
+                    canBrowse={canBrowse}
+                    onBrowse={handleBrowseFiles}
+                    basePaths={basePaths}
+                    focus={focus}
+                    onToggleFocus={() => setFocus(!focus)}
+                />
+            ) : (
+                // Esc is the normal way back, but it's not discoverable -- without this, someone whose browser
+                // already remembered full screen from before would open Eval to bars gone and no visible way out.
+                <button onClick={() => setFocus(false)} aria-label="Exit full screen" title="Exit full screen (Esc)"
+                    className="cursor-pointer fixed top-2 right-2 z-50 h-8 w-8 flex items-center justify-center rounded-full border border-slate-300 bg-white/90 text-slate-600 shadow hover:bg-white">
+                    ⤡
+                </button>
+            )}
 
             <div className="flex-1 min-h-0 overflow-auto p-2 md:p-3" data-testid="eval-content">
                 <div className={activeTab === 'home' || !fill ? '' : 'h-full'}>

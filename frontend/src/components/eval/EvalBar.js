@@ -87,11 +87,15 @@ export default function EvalBar({ activeTab, onTab, fileLabel, canBrowse, onBrow
                     </button>
                 )}
                 <PathsPopover basePaths={basePaths} />
-                <button onClick={onToggleFocus} aria-pressed={focus}
-                    title={focus ? 'Bring the Dev bar back (Esc)' : 'Hide the Dev bar for more room'}
-                    className={`${btn} ${focus ? 'border-sky-600 bg-sky-600 text-white hover:bg-sky-700' : 'border-slate-300 text-slate-700 hover:bg-slate-50'}`}>
-                    {focus ? '⤡ Exit full screen' : '⤢ Full screen'}
-                </button>
+                {/* Only useful once there's actually a page/paragraph to look at -- an empty tool has nothing full
+                    screen would help with. */}
+                {fileLabel && (
+                    <button onClick={onToggleFocus} aria-pressed={focus}
+                        title={focus ? 'Bring the Dev bar back (Esc)' : 'Hide the Dev bar for more room'}
+                        className={`${btn} ${focus ? 'border-sky-600 bg-sky-600 text-white hover:bg-sky-700' : 'border-slate-300 text-slate-700 hover:bg-slate-50'}`}>
+                        {focus ? '⤡ Exit full screen' : '⤢ Full screen'}
+                    </button>
+                )}
             </div>
         </div>
     );

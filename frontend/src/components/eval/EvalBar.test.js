@@ -88,14 +88,21 @@ test('no paths button until the paths are known', () => {
     expect(screen.queryByRole('button', { name: 'Paths' })).not.toBeInTheDocument();
 });
 
-test('the persistent Full screen button toggles, and says what it will do', () => {
-    const { onToggleFocus } = setup({ focus: false });
+test('the Full screen button toggles, and says what it will do', () => {
+    const { onToggleFocus } = setup({ focus: false, fileLabel: 'Book.pdf' });
     fireEvent.click(screen.getByRole('button', { name: /Full screen/ }));
     expect(onToggleFocus).toHaveBeenCalledTimes(1);
 });
 
 test('in full screen the same button reads Exit and is pressed', () => {
-    setup({ focus: true });
+    setup({ focus: true, fileLabel: 'Book.pdf' });
     const button = screen.getByRole('button', { name: /Exit full screen/ });
     expect(button).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('there is no Full screen button until a file is open -- an empty tool has nothing it would help with', () => {
+    setup({ fileLabel: null });
+    expect(screen.queryByRole('button', { name: /Full screen/ })).not.toBeInTheDocument();
+    setup({ fileLabel: 'Book.pdf' });
+    expect(screen.getByRole('button', { name: /Full screen/ })).toBeInTheDocument();
 });

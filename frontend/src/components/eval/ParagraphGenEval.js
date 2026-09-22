@@ -852,9 +852,9 @@ Please select the SOURCE directory (${selection.sourcePath})`;
     return (
         <div className={L.card} style={{ width: L.cardWidth, maxWidth: 'none', backgroundColor: 'var(--bg-card)' }}>
                 {/* Header */}
-                <div className="p-4 border-b border-slate-200">
+                <div className="px-4 py-2 border-b border-slate-200">
                     <h2 className={L.title}>Paragraph Generation Evaluation</h2>
-                    <p className="text-slate-600">
+                    <p className="text-sm text-slate-600">
                         {selectedFolder?.selectedPDFFile
                             ? `Comparing: ${selectedFolder.pdfFilePath || `${selectedFolder.relativePath}.pdf`}`
                             : `Comparing: ${sourceHandle?.name} vs ${targetHandle?.name}`
@@ -863,14 +863,14 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                 </div>
 
             {/* Controls */}
-            <div className="p-4 border-b border-slate-200 shrink-0" style={{ backgroundColor: 'var(--bg-surface)' }}>
-                <div className="flex items-center justify-between">
+            <div className="px-4 py-2 border-b border-slate-200 shrink-0" style={{ backgroundColor: 'var(--bg-surface)' }}>
+                <div className="flex items-center flex-wrap gap-x-8 gap-y-2">
                     <div className="flex items-center space-x-4">
                         {/* Navigation Controls */}
                         <button
                             onClick={() => navigate(-1)}
                             disabled={currentIndex <= 0 || isLoading}
-                            className="px-3 py-2 bg-slate-200 text-slate-700 rounded disabled:opacity-50 hover:bg-slate-300 transition-colors"
+                            className="px-2.5 py-1 text-sm bg-slate-200 text-slate-700 rounded disabled:opacity-50 hover:bg-slate-300 transition-colors"
                         >
                             ← Previous
                         </button>
@@ -884,7 +884,7 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                         <button
                             onClick={() => navigate(1)}
                             disabled={currentIndex >= fileList.length - 1 || isLoading}
-                            className="px-3 py-2 bg-slate-200 text-slate-700 rounded disabled:opacity-50 hover:bg-slate-300 transition-colors"
+                            className="px-2.5 py-1 text-sm bg-slate-200 text-slate-700 rounded disabled:opacity-50 hover:bg-slate-300 transition-colors"
                         >
                             Next →
                         </button>
@@ -939,7 +939,7 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                             pageMappingRef.current = null;
                             setParsedBookmarks([]);
                         }}
-                        className="px-4 py-2 text-sm bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors"
+                        className="ml-auto px-3 py-1.5 text-sm bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors"
                     >
                         Reset Directories
                     </button>
@@ -966,7 +966,7 @@ Please select the SOURCE directory (${selection.sourcePath})`;
                 <div className={L.row}>
                     {/* PDF Page Column */}
                     <div className={L.leftCol}>
-                        <div className="flex justify-between items-center mb-3">
+                        <div className="flex justify-between items-center mb-2">
                             <div className="flex items-center gap-1 border border-slate-200 rounded-md p-0.5">
                                 <button
                                     onClick={() => setLeftView('pdf')}
@@ -1077,8 +1077,8 @@ Please select the SOURCE directory (${selection.sourcePath})`;
 
                     {/* Generated Paragraphs Column */}
                     <div className={L.rightCol}>
-                        <div className="flex items-center gap-2 mb-3 shrink-0">
-                            <h3 className="text-lg font-semibold text-slate-800 flex-shrink-0">Generated Paragraphs</h3>
+                        <div className="flex items-center gap-2 mb-2 shrink-0">
+                            <h3 className="text-base font-semibold text-slate-800 flex-shrink-0">Generated Paragraphs</h3>
                             {(() => {
                                 const currentPage = parseInt(jumpPageNumber, 10);
                                 const activeBookmark = parsedBookmarks.length && !isNaN(currentPage)

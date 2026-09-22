@@ -58,6 +58,49 @@ export function scanConfigToControls(cfg) {
     };
 }
 
+// The reverse of languageControls: toggle value + Dhundhari checkbox -> the scan_config "language" string.
+// Dhundhari wins over the toggle (matching languageControls' forward read), and a mix is written "gu+hi",
+// the only order seen in the configs repo today.
+export function controlsToLanguage(language, dhundhari) {
+    if (dhundhari) return 'dhundhari';
+    return { hin: 'hi', guj: 'gu', 'guj+hin': 'gu+hi' }[language] || 'hi';
+}
+
+// The reverse of scanConfigToControls: the controls PDF Parser currently shows -> what to write into the PDF's
+// own scan_config.json entry (`values`), and which keys to drop if they were set before (`remove_keys`) --
+// e.g. llm_model when switching back to Tesseract, split_percentage when turning multi-page off.
+// Crop is NOT included here: it's file-level, shown against the real page (with the crop bands) and saved from
+// the Verify popup instead, so there's exactly one place that writes it.
+export function controlsToScanConfig(ctl) {
+    const values = {
+        language: controlsToLanguage(ctl.language, ctl.dhundhari),
+        ocr_engine: ctl.mode === 'llm' ? 'llm' : 'tesseract',
+        multi_page: !!ctl.multiPage,
+    };
+    const removeKeys = [];
+    if (ctl.mode === 'llm') values.llm_model = ctl.modelName; else removeKeys.push('llm_model');
+    if (ctl.multiPage) values.split_percentage = ctl.splitPct; else removeKeys.push('split_percentage');
+    return { values, removeKeys };
+}
+
+// What the "Save to scan_config.json" popup shows: one row per control the file remembers, each with what was
+// loaded and what's on screen now, and whether that changed. `loaded` is what loadScanConfigControls last applied;
+// `current` is today's live control values (same shape). Crop isn't a row here -- see controlsToScanConfig.
+export function describeControlsDiff(loaded, current) {
+    const langLabel = (ctl) => ({ hin: 'Hindi', guj: 'Gujarati', 'guj+hin': 'Gujarati + Hindi' }[ctl.language] || ctl.language)
+        + (ctl.dhundhari ? ' (Dhundhari)' : '');
+    const engineLabel = (ctl) => (ctl.mode === 'llm' ? 'LLM' : 'Tesseract');
+    const rows = [
+        ['Language', langLabel(loaded), langLabel(current)],
+        ['Engine', engineLabel(loaded), engineLabel(current)],
+    ];
+    if (loaded.mode === 'llm' || current.mode === 'llm') {
+        rows.push(['Model', loaded.mode === 'llm' ? loaded.modelName : '—', current.mode === 'llm' ? current.modelName : '—']);
+    }
+    rows.push(['Multi-page', loaded.multiPage ? `on (${loaded.splitPct}%)` : 'off', current.multiPage ? `on (${current.splitPct}%)` : 'off']);
+    return rows.map(([label, before, after]) => ({ label, before, after, changed: before !== after }));
+}
+
 // One-line description of what was applied, e.g. "LLM · Hindi · crop T9 B4".
 export function describeControls(ctl) {
     const parts = [ctl.mode === 'llm' ? 'LLM' : 'Tesseract'];
