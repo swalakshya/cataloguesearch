@@ -1,14 +1,20 @@
 import React, { useState } from 'react';
-import { SimilarIcon, ExpandIcon, PdfIcon, ShareIcon, DownloadIcon } from './SharedComponents';
+import { FileDown, ExternalLink, FileText } from 'lucide-react';
+import { SimilarIcon, ExpandIcon, PdfIcon, ShareIcon } from './SharedComponents';
 import ShareModal from './ShareModal';
 import { Badge, Pagination as UiPagination, Skeleton } from './ui';
 import { CATEGORY_EMOJI_SRC } from './chat/categoryEmoji';
+import { buildPdfPageUrl } from '../utils/pdfUtils';
 
 // --- SEARCH RESULTS COMPONENTS ---
 
 // Hides the "Similar" action button (product decision, 2026-09-04) without
 // deleting the find-similar feature it drives -- flip back to true to restore it.
 const SHOW_SIMILAR_BUTTON = false;
+
+// Hides the "Expand" action button (product decision, 2026-09-23) -- "View PDF"
+// covers reading a result in context. Flip back to true to restore it.
+const SHOW_EXPAND_BUTTON = false;
 
 const highlightSnippet = (content, extraClass = '') =>
     ({ __html: (content || '').replace(/<em>/g, `<mark class="search-highlight ${extraClass}">`).replace(/<\/em>/g, '</mark>') });
@@ -203,6 +209,8 @@ export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, on
                 </div>
                 {/* Actions */}
                 <div className="flex items-center gap-0.5 flex-shrink-0">
+                    {/* In-app viewer is desktop-only; on mobile the browser's own
+                        viewer (Open PDF) is the better experience. */}
                     {result.file_url && (
                         <button
                             onClick={() => onOpenReference?.({
@@ -214,17 +222,30 @@ export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, on
                                 volume: result.metadata?.volume,
                                 category: resultType === 'pravachan' ? 'Pravachan' : undefined,
                             })}
-                            className="result-action result-action-danger"
+                            className="result-action hidden lg:inline-flex"
                         >
-                            <PdfIcon />PDF
+                            <FileText className="h-4 w-4 mr-1" />View PDF
                         </button>
+                    )}
+                    {result.file_url && (
+                        <a
+                            href={buildPdfPageUrl({ file_url: result.file_url, pdf_page_number: result.pdf_page_number, page_number: result.page_number })}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="result-action"
+                            title={`Open PDF in new tab at page ${result.page_number}`}
+                        >
+                            <ExternalLink className="h-4 w-4 mr-1" />Open PDF
+                        </a>
                     )}
                     <button onClick={() => setShowShareModal(true)} className="result-action">
                         <ShareIcon />Share
                     </button>
-                    <button onClick={handleExpandClick} className="result-action">
-                        <ExpandIcon />Expand
-                    </button>
+                    {SHOW_EXPAND_BUTTON && (
+                        <button onClick={handleExpandClick} className="result-action">
+                            <ExpandIcon />Expand
+                        </button>
+                    )}
                     {SHOW_SIMILAR_BUTTON && resultType !== 'granth' && (
                         <button onClick={() => onFindSimilar(result)} className="result-action">
                             <SimilarIcon />Similar
@@ -373,8 +394,10 @@ export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData
                 </button>
             )}
             {showExport && (
-                <button onClick={() => onExportClick(EXPORT_CATEGORY_BY_TAB[activeTab])} className="result-action ml-auto" title="Export as PDF">
-                    <DownloadIcon />PDF
+                <button onClick={() => onExportClick(EXPORT_CATEGORY_BY_TAB[activeTab])} className="result-action ml-auto" title="Download these results as a PDF">
+                    <FileDown className="h-4 w-4 mr-1" />
+                    <span className="hidden lg:inline">Download results</span>
+                    <span className="lg:hidden">Results</span>
                 </button>
             )}
         </div>

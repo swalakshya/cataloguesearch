@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, Minus, Plus, Link2, Download, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Minus, Plus, Link2, ExternalLink, Check } from 'lucide-react';
 import { useOverlayBehavior } from '../ui/Modal';
 import { OverlayBackdrop, CloseButton } from '../ui/Overlay';
 import usePDFViewer from '../../hooks/usePDFViewer';
@@ -7,31 +7,13 @@ import { api } from '../../services/api';
 import { Spinner } from '../SharedComponents';
 import { buildReferenceTitleLine } from './answerFormatting';
 import { copyToClipboard } from '../../utils/shareUtils';
+import { resolveCitationTarget, buildPdfPageUrl } from '../../utils/pdfUtils';
 
 // Starting zoom is 1 (100%, the page's natural fit-to-container size); MIN
 // sits below that so the "−" button isn't permanently disabled at rest.
 const ZOOM_MIN = 0.75;
 const ZOOM_MAX = 2;
 const ZOOM_STEP = 0.25;
-
-// Resolves a citation's (file_url, page) pair. Summary-mode citations carry
-// page_number/pdf_page_number as separate fields alongside a clean file_url.
-// Structured mode reconstructs a citation from the QPDF marker embedded in
-// formatAnswerHtml's output, which only has a page-suffixed URL (see
-// buildReferencePdfUrl in answerFormatting.js) — no separate page field — so
-// that suffix has to be parsed back off before handing the URL to pdf.js.
-function resolveCitationTarget(citation) {
-    const rawUrl = String(citation?.file_url || '').trim();
-    const explicitPage = Number(citation?.pdf_page_number ?? citation?.page_number);
-    if (Number.isFinite(explicitPage) && explicitPage > 0) {
-        return { url: rawUrl, page: explicitPage };
-    }
-    const suffixMatch = rawUrl.match(/^(.*)\/(\d+)$/);
-    if (suffixMatch) {
-        return { url: suffixMatch[1], page: Number(suffixMatch[2]) };
-    }
-    return { url: rawUrl, page: 1 };
-}
 
 // Shared PDF popup for both structured and summary chat modes — resizable
 // card over a dimmed backdrop on desktop, full-screen takeover on mobile (no
@@ -45,7 +27,6 @@ export default function PdfCitationModal({ citation, onClose }) {
     const [jumpValue, setJumpValue] = useState('');
     const [zoom, setZoom] = useState(1);
     const [linkCopied, setLinkCopied] = useState(false);
-    const [downloading, setDownloading] = useState(false);
     // {loaded, total} from pdf.js's own network progress, total is null until
     // the proxy's Content-Length is known (see usePDFViewer's loadPDFFromUrl).
     const [loadProgress, setLoadProgress] = useState(null);
@@ -121,33 +102,7 @@ export default function PdfCitationModal({ citation, onClose }) {
         }
     };
 
-    // Fetches through our own proxy rather than linking straight to the
-    // source host — a bare cross-origin <a href download> mostly just opens
-    // the file in a new tab instead of downloading it, since browsers only
-    // honor `download` reliably for same-origin (or CORS-visible) responses.
-    // See backend/api/pdf_proxy.py, the same reason this whole proxy exists.
-    const handleDownload = async () => {
-        const { url } = resolveCitationTarget(citation);
-        if (!url) return;
-        setDownloading(true);
-        try {
-            const response = await fetch(api.buildPdfProxyUrl(url));
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const blob = await response.blob();
-            const blobUrl = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = blobUrl;
-            link.download = `${(citation?.granth || 'reference').replace(/[^\w-]+/g, '_')}.pdf`;
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            URL.revokeObjectURL(blobUrl);
-        } catch {
-            setError('Could not download the PDF.');
-        } finally {
-            setDownloading(false);
-        }
-    };
+    const openUrl = buildPdfPageUrl(citation);
 
     return (
         <OverlayBackdrop
@@ -175,16 +130,19 @@ export default function PdfCitationModal({ citation, onClose }) {
                     >
                         {linkCopied ? <Check size={16} /> : <Link2 size={16} />}
                     </button>
-                    <button
-                        onClick={handleDownload}
-                        disabled={!citation?.file_url || downloading}
-                        className="shrink-0 h-7 w-7 rounded flex items-center justify-center disabled:opacity-30"
-                        style={{ color: 'var(--color-brand)' }}
-                        aria-label="Download PDF"
-                        title="Download PDF"
-                    >
-                        {downloading ? <Spinner /> : <Download size={16} />}
-                    </button>
+                    {openUrl && (
+                        <a
+                            href={openUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="shrink-0 h-7 w-7 rounded flex items-center justify-center"
+                            style={{ color: 'var(--color-brand)' }}
+                            aria-label="Open PDF in new tab"
+                            title="Open PDF in new tab"
+                        >
+                            <ExternalLink size={16} />
+                        </a>
+                    )}
                     <CloseButton onClick={onClose} className="h-7 w-7 rounded" />
                 </div>
 
