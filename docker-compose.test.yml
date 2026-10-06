@@ -1,10 +1,10 @@
 services:
   opensearch-test:
-    image: swalakshya/cataloguesearch:opensearch
+    image: swalakshya/cataloguesearch:opensearch-3.6.0
     build:
       context: .
       dockerfile: docker/opensearch/Dockerfile
-    platform: ${DOCKER_PLATFORM}
+    platform: linux/amd64
     pull_policy: never
     container_name: opensearch-test
     environment:

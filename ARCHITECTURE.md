@@ -92,10 +92,28 @@ The reranker runs as ONNX (not PyTorch) for significantly faster inference. The 
 
 ### OpenSearch
 
-Custom Docker image (`docker/opensearch/Dockerfile`) based on `opensearchproject/opensearch:3.3.1` with two additional plugins:
+Custom Docker image (`docker/opensearch/Dockerfile`) based on `opensearchproject/opensearch:3.6.0`, tagged `swalakshya/cataloguesearch:opensearch-3.6.0`, with two additional plugins:
 
 - `analysis-icu` — Unicode-aware tokenisation for Indic scripts
 - `repository-gcs` — GCS snapshot repository support
+
+The base distribution also bundles ML Commons (`opensearch-ml`), Neural Search
+and k-NN. The Docker build verifies their presence for the planned local model
+inference migration; model registration and deployment are separate steps.
+
+Production uses `swalakshya/cataloguesearch:opensearch-3.6.0-bge-1024-v1`, built
+with `docker/opensearch/Dockerfile.models`. It bundles CPU ONNX BGE-M3 and
+BGE-reranker-base, native runtime libraries, and a pinned ML Commons tokenizer
+patch giving embeddings 1,024 tokens. Reranking retains 512 tokens shared by
+query and passage. Startup registers missing models, reloads existing models,
+and verifies short/long inference before readiness. Local builds/runs use
+`docker-compose.models.yml` alongside the main Compose file; production Compose
+references the final image directly. See `docker/opensearch/MODELS.md` for the
+artifact, image and deployment workflow. API migration/re-embedding are separate.
+
+OpenSearch uses `linux/amd64` in local, test and production Compose files.
+On Apple Silicon, OrbStack runs this image through x86 emulation. Build it with
+`docker build --platform linux/amd64 -f docker/opensearch/Dockerfile -t swalakshya/cataloguesearch:opensearch-3.6.0 .`.
 
 Three indices:
 

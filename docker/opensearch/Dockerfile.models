@@ -1,0 +1,38 @@
+# Build the base OpenSearch image first. Model export is a separate, offline step.
+FROM swalakshya/cataloguesearch:opensearch-3.6.0 AS translator-build
+
+USER root
+RUN yum install -y python3 && yum clean all
+COPY docker/opensearch/patches /opt/embedding-patch
+RUN python3 /opt/embedding-patch/build.py
+
+FROM swalakshya/cataloguesearch:opensearch-3.6.0
+USER root
+RUN yum install -y python3 && yum clean all
+COPY --from=translator-build --chown=opensearch:opensearch \
+    /usr/share/opensearch/plugins/opensearch-ml/opensearch-ml-algorithms-3.6.0.0.jar \
+    /usr/share/opensearch/plugins/opensearch-ml/opensearch-ml-algorithms-3.6.0.0.jar
+COPY --chown=opensearch:opensearch models/opensearch/bge-m3/model.zip models/opensearch/bge-m3/manifest.json /opt/opensearch-models/bge-m3/
+COPY --chown=opensearch:opensearch models/opensearch/bge-reranker-base/model.zip models/opensearch/bge-reranker-base/manifest.json /opt/opensearch-models/bge-reranker-base/
+COPY docker/opensearch/patches/WarmRuntime.java /tmp/WarmRuntime.java
+# Populate the native cache at build time. ML Commons uses data/ml_cache at
+# runtime, so the entrypoint seeds it before OpenSearch starts on any volume.
+RUN python3 -c 'import zipfile; z=zipfile.ZipFile("/opt/opensearch-models/bge-m3/model.zip"); z.extract("tokenizer.json", "/tmp")' && \
+    /usr/share/opensearch/jdk/bin/javac -proc:none -cp '/usr/share/opensearch/plugins/opensearch-ml/*' /tmp/WarmRuntime.java && \
+    /usr/share/opensearch/jdk/bin/java -cp '/tmp:/usr/share/opensearch/lib/*:/usr/share/opensearch/plugins/opensearch-ml/*' WarmRuntime /tmp/tokenizer.json && \
+    python3 -c 'from pathlib import Path; import hashlib,json; root=Path("/opt/opensearch-runtime"); files={str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob("*") if p.is_file()}; assert any("libtorch_cpu" in p for p in files) and any("libtokenizers" in p for p in files); (root/"checksums.json").write_text(json.dumps(files,indent=2))' && \
+    chown -R opensearch:opensearch /opt/opensearch-runtime && \
+    rm /tmp/WarmRuntime.java /tmp/WarmRuntime.class /tmp/tokenizer.json
+COPY --chown=opensearch:opensearch scripts/register_opensearch_models.py /usr/local/bin/register-opensearch-models.py
+COPY --chown=opensearch:opensearch models/opensearch/bge-m3/fixture.json /opt/opensearch-models/bge-m3/
+COPY --chown=opensearch:opensearch models/opensearch/bge-reranker-base/fixture.json /opt/opensearch-models/bge-reranker-base/
+COPY --chown=opensearch:opensearch docker/opensearch/seed-runtime.py /usr/local/bin/seed-runtime.py
+COPY --chown=opensearch:opensearch docker/opensearch/models-entrypoint.sh /usr/local/bin/models-entrypoint.sh
+RUN chmod +x /usr/local/bin/models-entrypoint.sh && \
+    python3 -c 'import runpy; from pathlib import Path; script=runpy.run_path("/usr/local/bin/register-opensearch-models.py"); script["load_packages"](Path("/opt/opensearch-models"))'
+LABEL org.swalakshya.embedding-context="1024" \
+    org.swalakshya.ml-commons-source="4f7054ff02c2476e2307220c47af07e899120644"
+USER opensearch
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15m --retries=3 \
+    CMD test -f /tmp/opensearch-models-ready && curl -fsS http://localhost:9200/_cluster/health > /dev/null
+ENTRYPOINT ["/usr/local/bin/models-entrypoint.sh"]

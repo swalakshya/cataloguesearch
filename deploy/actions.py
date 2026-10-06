@@ -26,8 +26,17 @@ def commands_for(action: str, params: Dict) -> List[Cmd]:
         main = [s for s in selected if s != settings.CHAT_SERVICE]
         cmds = []
         if main:
+            compose_args = ["-f", settings.COMPOSE_FILE]
+            if "opensearch" in main:
+                # Models depend on the custom base. Build it locally, then push
+                # only the final image referenced by production Compose.
+                cmds.append(Cmd(
+                    ["docker", "build", "--platform", "linux/amd64", "-f", "docker/opensearch/Dockerfile",
+                     "-t", "swalakshya/cataloguesearch:opensearch-3.6.0", "."],
+                    "build OpenSearch base", progress_parser=DockerBuildProgress()))
+                compose_args += ["-f", "docker-compose.models.yml"]
             cmds.append(Cmd(
-                ["docker", "compose", "--env-file", settings.BUILD_ENV_FILE, "-f", settings.COMPOSE_FILE,
+                ["docker", "compose", "--env-file", settings.BUILD_ENV_FILE, *compose_args,
                  "build", "--push", *main],
                 f"docker compose build --push {' '.join(main)}", progress_parser=DockerBuildProgress()))
         if settings.CHAT_SERVICE in selected:

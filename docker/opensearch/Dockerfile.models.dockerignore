@@ -1,0 +1,16 @@
+# Send only the validated packages and bootstrap code to this build.
+**
+!models/
+!models/opensearch/
+!models/opensearch/bge-m3/
+!models/opensearch/bge-m3/**
+!models/opensearch/bge-reranker-base/
+!models/opensearch/bge-reranker-base/**
+!scripts/
+!scripts/register_opensearch_models.py
+!docker/
+!docker/opensearch/
+!docker/opensearch/models-entrypoint.sh
+!docker/opensearch/seed-runtime.py
+!docker/opensearch/patches/
+!docker/opensearch/patches/**

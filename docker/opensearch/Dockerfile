@@ -1,4 +1,12 @@
-FROM opensearchproject/opensearch:3.3.1
+FROM opensearchproject/opensearch:3.6.0
+
+# The full distribution bundles the plugins needed for local embedding and
+# cross-encoder inference. Fail the build if a future base image omits them.
+RUN set -eu; \
+    plugins="$(/usr/share/opensearch/bin/opensearch-plugin list)"; \
+    for plugin in opensearch-ml opensearch-neural-search opensearch-knn; do \
+        echo "$plugins" | grep -Fx "$plugin"; \
+    done
 
 # Install required plugins
 RUN /usr/share/opensearch/bin/opensearch-plugin install --batch analysis-icu && \

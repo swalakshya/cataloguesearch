@@ -1,0 +1,10 @@
+# Opt-in image with bundled models; use alongside docker-compose.yml.
+services:
+  opensearch:
+    image: swalakshya/cataloguesearch:opensearch-3.6.0-bge-1024-v1
+    build:
+      context: .
+      dockerfile: docker/opensearch/Dockerfile.models
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/opensearch-models-ready && curl -f http://localhost:9200/_cluster/health || exit 1"]
+      start_period: 15m

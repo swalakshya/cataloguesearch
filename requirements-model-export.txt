@@ -1,0 +1,7 @@
+# Offline model preparation only; not installed in the API or OpenSearch images.
+torch>=2.6,<3
+transformers==4.57.6
+onnx>=1.18
+onnxscript
+onnxruntime==1.26.0
+numpy>=1.26.4
