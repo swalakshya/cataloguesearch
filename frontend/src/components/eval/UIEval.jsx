@@ -1,0 +1,595 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import PDFParser from './PDFParser';
+import ParagraphGenEval from './ParagraphGenEval';
+import OCRPreview from './OCRPreview';
+import FileBrowser from './FileBrowser';
+import ParaClassifier from './ParaClassifier';
+import UnindexedPDFs from './UnindexedPDFs';
+import LoadTest from './LoadTest';
+import BookmarkBackfill from './BookmarkBackfill';
+import { storeDirectoryHandles, getStoredDirectoryHandles, validateDirectoryHandles, requestStoredPermissions, clearStoredDirectoryHandles } from './lib/directoryHandlers';
+import { createRemoteDirectoryHandle } from './lib/remoteFsHandles';
+import EvalBar from './EvalBar';
+import { useDevShell } from '../dev/DevShell';
+
+const API_BASE_URL = import.meta.env.REACT_APP_EVAL_API_BASE_URL || '/api';
+
+// Persisted so the choice survives reloads without needing a rebuild/restart --
+// server is the default since most usage is over an SSH port-forward, where
+// the browser's native folder picker would browse the laptop, not the remote
+// machine the backend runs on. Flip to 'local' only in the tab where the
+// browser and backend actually share a filesystem with the backend.
+const FS_MODE_KEY = 'eval_fs_mode';
+
+
+const LocalModeIcon = ({ className = 'w-4 h-4' }) => (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.25 17L4 20h16l-1.25-3M4 4h16a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V5a1 1 0 011-1z" />
+    </svg>
+);
+
+const ServerModeIcon = ({ className = 'w-4 h-4' }) => (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 4h14a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1zM5 14h14a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4a1 1 0 011-1z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7.5 7.5h.01M7.5 17.5h.01" />
+    </svg>
+);
+
+const FolderIcon = ({ className = 'w-4 h-4' }) => (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
+    </svg>
+);
+
+const UIEval = () => {
+    const [activeTab, setActiveTab] = useState(() => {
+        // /eval?tab=load-test opens that tool directly (used by the /dev homepage)
+        const tab = new URLSearchParams(window.location.search).get('tab');
+        return ['pdf-parser', 'ocr-preview', 'paragraph-eval', 'paragraph-classifier', 'unindexed-pdfs',
+            'bookmark-backfill', 'load-test'].includes(tab) ? tab : 'home';
+    });
+    const [basePaths, setBasePaths] = useState(null);
+    const [selectedFile, setSelectedFile] = useState(null);
+    const { focus, setFocus } = useDevShell();
+    const [showFileBrowser, setShowFileBrowser] = useState(false);
+    const [selectedFolder, setSelectedFolder] = useState(null);
+    const [baseDirectoryHandles, setBaseDirectoryHandles] = useState(null);
+    const [expiredHandles, setExpiredHandles] = useState(null); // stored but permissions lapsed
+    const [pendingHandles, setPendingHandles] = useState({ pdf: null, ocr: null, text: null });
+    const [pdfParentDirPath, setPdfParentDirPath] = useState('');
+    const [fsMode, setFsMode] = useState(() => {
+        try {
+            return localStorage.getItem(FS_MODE_KEY) === 'local' ? 'local' : 'server';
+        } catch {
+            return 'server';
+        }
+    });
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(FS_MODE_KEY, fsMode);
+        } catch {
+            // localStorage unavailable (private mode, etc.) -- mode just won't persist
+        }
+    }, [fsMode]);
+
+    // All three roots (pdf/ocr/text) when browsing via the backend API instead
+    // of the local File System Access picker. In 'local' mode these are all
+    // null and effectiveDirectoryHandles below just passes baseDirectoryHandles
+    // through untouched, so the original local-picker flow is unaffected.
+    const remoteHandles = useMemo(() => {
+        if (fsMode !== 'server' || !basePaths) return null;
+        return {
+            pdf: basePaths.base_pdf_path ? createRemoteDirectoryHandle(API_BASE_URL, 'pdf', basePaths.base_pdf_path) : null,
+            ocr: basePaths.base_ocr_path ? createRemoteDirectoryHandle(API_BASE_URL, 'ocr', basePaths.base_ocr_path) : null,
+            text: basePaths.base_text_path ? createRemoteDirectoryHandle(API_BASE_URL, 'text', basePaths.base_text_path) : null,
+        };
+    }, [fsMode, basePaths]);
+
+    const effectiveDirectoryHandles = fsMode === 'server' ? remoteHandles : baseDirectoryHandles;
+
+    // In 'server' mode nothing local needs to be granted at all -- all three
+    // roots come from remoteHandles once basePaths has loaded.
+    const permissionsReady = fsMode === 'server'
+        ? !!remoteHandles
+        : !!(baseDirectoryHandles?.pdf && baseDirectoryHandles?.ocr && baseDirectoryHandles?.text);
+
+    // Debug activeTab changes
+    useEffect(() => {
+        console.log('activeTab changed to:', activeTab);
+    }, [activeTab]);
+
+    // Load base paths from API
+    useEffect(() => {
+        const loadBasePaths = async () => {
+            try {
+                const response = await fetch(`${API_BASE_URL}/eval/paths`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('Response is not JSON - backend server may not be running or eval routes not loaded');
+                }
+                const data = await response.json();
+                setBasePaths(data);
+            } catch (err) {
+                console.error('Failed to load configuration:', err);
+                // For development, you can add fallback paths here
+                console.warn('Using fallback configuration - please restart the backend server to load eval routes');
+                setBasePaths({
+                    base_pdf_path: '/path/to/pdf',
+                    base_ocr_path: '/path/to/ocr', 
+                    base_text_path: '/path/to/text'
+                });
+            }
+        };
+        loadBasePaths();
+    }, []);
+
+    // Load stored directory handles on component mount. Only relevant to
+    // 'local' mode -- 'server' mode never touches this (see remoteHandles
+    // above), so no mode-awareness needed here.
+    useEffect(() => {
+        const loadStoredHandles = async () => {
+            try {
+                const storedHandles = await getStoredDirectoryHandles();
+                if (storedHandles.pdf && storedHandles.ocr && storedHandles.text) {
+                    const isValid = await validateDirectoryHandles(storedHandles);
+                    if (isValid) {
+                        setBaseDirectoryHandles(storedHandles);
+                        console.log('Successfully restored directory handles from storage');
+                    } else {
+                        // Permissions lapsed — keep handles so we can re-grant without navigation
+                        setExpiredHandles(storedHandles);
+                        console.log('Stored handles found but permissions lapsed — re-grant available');
+                    }
+                }
+            } catch (err) {
+                console.log('Error loading stored directory handles:', err);
+            }
+        };
+
+        loadStoredHandles();
+    }, []);
+
+    const handleBrowseFiles = () => {
+        setShowFileBrowser(true);
+    };
+
+    const handleCloseFileBrowser = () => {
+        setShowFileBrowser(false);
+    };
+
+    const handleFileSelect = (file) => {
+        setSelectedFile(file);
+        setShowFileBrowser(false);
+    };
+
+    const handleFolderSelect = (folderSelection) => {
+        setSelectedFolder(folderSelection);
+        
+        // Set selected file for different file types
+        if (folderSelection && (folderSelection.selectedPDFFile || folderSelection.fileType === 'markdown')) {
+            setSelectedFile(folderSelection);
+            if (folderSelection.selectedPDFFile) {
+                console.log('PDF file selected for OCR:', folderSelection.selectedPDFFile);
+            } else if (folderSelection.fileType === 'markdown') {
+                console.log('Markdown file selected for Scripture Eval:', folderSelection.selectedFileName);
+            }
+        }
+        
+        setShowFileBrowser(false);
+        console.log('Folder selected:', folderSelection);
+    };
+
+    // /eval?tab=pdf-parser&file=<path of the PDF relative to the pdf root> opens that file straight away
+    // (used by the Discover page). Builds the same selection object the file browser would. Server mode only:
+    // in 'local' mode the browser needs a manual folder grant first, so there is nothing to auto-load.
+    const deepLinkFile = useRef(new URLSearchParams(window.location.search).get('file'));
+    useEffect(() => {
+        const pdfFilePath = deepLinkFile.current;
+        if (!pdfFilePath || fsMode !== 'server' || !basePaths || !permissionsReady) return;
+        deepLinkFile.current = null; // consume once
+        const name = pdfFilePath.split('/').pop();
+        const stem = name.replace(/\.pdf$/i, '');
+        const dir = pdfFilePath.includes('/') ? pdfFilePath.slice(0, pdfFilePath.lastIndexOf('/')) : '';
+        const relativePath = dir ? `${dir}/${stem}` : stem;
+        handleFolderSelect({
+            relativePath,
+            sourcePath: `${basePaths.base_ocr_path}/${relativePath}`,
+            targetPath: `${basePaths.base_text_path}/${relativePath}`,
+            selectedFolderName: stem,
+            selectedPDFFile: name,
+            pdfFilePath,
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [fsMode, basePaths, permissionsReady]);
+
+    const handleBaseDirectoryHandlesChange = (handles) => {
+        setBaseDirectoryHandles(handles);
+    };
+
+    const resetPermissions = async () => {
+        await clearStoredDirectoryHandles();
+        setBaseDirectoryHandles(null);
+        setExpiredHandles(null);
+    };
+
+    const regrantPermissions = async () => {
+        if (!expiredHandles) return;
+        try {
+            const granted = await requestStoredPermissions(expiredHandles);
+            if (granted) {
+                setBaseDirectoryHandles(expiredHandles);
+                setExpiredHandles(null);
+            } else {
+                alert('Permission was denied. Please try again or use "Set up from scratch".');
+            }
+        } catch (err) {
+            console.error('Error re-granting permissions:', err);
+        }
+    };
+
+    const pickerActiveRef = React.useRef(false);
+
+    const pickDirectory = async (key) => {
+        if (pickerActiveRef.current) return;
+        if (!window.showDirectoryPicker) {
+            alert('File System Access API is not supported in this browser. Please use Google Chrome for the best experience.');
+            return;
+        }
+        pickerActiveRef.current = true;
+        try {
+            const handle = await window.showDirectoryPicker();
+            setPendingHandles(prev => ({ ...prev, [key]: handle }));
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                console.error('Error picking directory:', err);
+            }
+        } finally {
+            pickerActiveRef.current = false;
+        }
+    };
+
+    const confirmDirectories = async () => {
+        const handles = { ...pendingHandles };
+        setBaseDirectoryHandles(handles);
+        setExpiredHandles(null);
+        setPendingHandles({ pdf: null, ocr: null, text: null });
+        try {
+            await storeDirectoryHandles(handles);
+            console.log('Directory handles stored successfully');
+        } catch (storageErr) {
+            console.warn('Could not persist directory handles:', storageErr);
+        }
+    };
+
+
+
+    const canBrowse = ['pdf-parser', 'ocr-preview', 'paragraph-eval', 'paragraph-classifier'].includes(activeTab);
+    const fileLabel = selectedFile?.selectedPDFFile || selectedFile?.selectedFileName || selectedFolder?.selectedPDFFile || null;
+    // The tools that have side-by-side panes size them to the window; the rest are ordinary scrolling pages.
+    const fill = ['pdf-parser', 'ocr-preview', 'paragraph-eval', 'paragraph-classifier'].includes(activeTab);
+
+    return (
+        <div className="h-full flex flex-col min-h-0">
+            {/* File Browser Modal */}
+            {showFileBrowser && (
+                <FileBrowser
+                    isOpen={showFileBrowser}
+                    onClose={handleCloseFileBrowser}
+                    onFolderSelect={handleFolderSelect}
+                    basePaths={basePaths}
+                    baseDirectoryHandles={effectiveDirectoryHandles}
+                    currentTab={activeTab}
+                    startPath={pdfParentDirPath}
+                    fsMode={fsMode}
+                />
+            )}
+
+            {/* Hidden together with the Dev bar in full screen, for more room; Esc brings both back (DevShell owns that key). */}
+            {!focus ? (
+                <EvalBar
+                    activeTab={activeTab}
+                    onTab={setActiveTab}
+                    fileLabel={fileLabel}
+                    canBrowse={canBrowse}
+                    onBrowse={handleBrowseFiles}
+                    basePaths={basePaths}
+                    focus={focus}
+                    onToggleFocus={() => setFocus(!focus)}
+                />
+            ) : (
+                // Esc is the normal way back, but it's not discoverable -- without this, someone whose browser
+                // already remembered full screen from before would open Eval to bars gone and no visible way out.
+                <button onClick={() => setFocus(false)} aria-label="Exit full screen" title="Exit full screen (Esc)"
+                    className="cursor-pointer fixed top-2 right-2 z-50 h-8 w-8 flex items-center justify-center rounded-full border border-slate-300 bg-white/90 text-slate-600 shadow hover:bg-white">
+                    ⤡
+                </button>
+            )}
+
+            <div className="flex-1 min-h-0 overflow-auto p-2 md:p-3" data-testid="eval-content">
+                <div className={activeTab === 'home' || !fill ? '' : 'h-full'}>
+                        {activeTab === 'home' && (
+                            <div className="space-y-6">
+                                {/* Directory Permissions Setup */}
+                                {basePaths && (
+                                    <div className="rounded-lg shadow-sm border border-slate-200 p-6" style={{ backgroundColor: 'var(--bg-card)' }}>
+                                        <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+                                            <div>
+                                                <h3 className="text-lg font-semibold text-slate-800 mb-2">Directory Permissions</h3>
+                                                <p className="text-slate-600 text-sm">
+                                                    {fsMode === 'server'
+                                                        ? "Reading configs/PDFs, OCR output, and Text output from the backend's configured base paths — no local folder permissions needed."
+                                                        : 'Grant access to your base directories to enable file browsing across all evaluation tools.'}
+                                                </p>
+                                            </div>
+
+                                            {/* Filesystem source toggle — governs all three roots (pdf/ocr/text) at once.
+                                                Use "Server" when viewing this UI through an SSH port-forward, where the
+                                                browser's native folder picker would browse your laptop, not the remote
+                                                machine the backend actually runs on. */}
+                                            <div className="inline-flex rounded-md border border-slate-300 overflow-hidden flex-shrink-0">
+                                                <button
+                                                    onClick={() => setFsMode('local')}
+                                                    className={`px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5 ${fsMode === 'local' ? 'bg-sky-600 text-white' : 'bg-white text-slate-600 hover:bg-neutral-100'}`}
+                                                >
+                                                    <LocalModeIcon className="w-3.5 h-3.5" />
+                                                    Local folder
+                                                </button>
+                                                <button
+                                                    onClick={() => setFsMode('server')}
+                                                    className={`px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5 ${fsMode === 'server' ? 'bg-sky-600 text-white' : 'bg-white text-slate-600 hover:bg-neutral-100'}`}
+                                                >
+                                                    <ServerModeIcon className="w-3.5 h-3.5" />
+                                                    Server path (via API)
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {fsMode === 'local' && (permissionsReady ? (
+                                            // State 1 — all good
+                                            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                                                <div className="flex items-start">
+                                                    <svg className="w-5 h-5 text-green-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                    <div>
+                                                        <p className="text-green-800 font-medium text-sm">Directory permissions granted</p>
+                                                        <p className="text-green-700 text-sm mt-1">File browsing is available across all evaluation tools.</p>
+                                                        <div className="mt-2 text-xs text-green-600 space-y-0.5">
+                                                            <div className="flex items-center gap-1.5"><FolderIcon className="w-3 h-3" /> Configs & PDFs: {baseDirectoryHandles.pdf?.name}</div>
+                                                            <div className="flex items-center gap-1.5"><FolderIcon className="w-3 h-3" /> OCR Output: {baseDirectoryHandles.ocr?.name}</div>
+                                                            <div className="flex items-center gap-1.5"><FolderIcon className="w-3 h-3" /> Text Output: {baseDirectoryHandles.text?.name}</div>
+                                                        </div>
+                                                        <button
+                                                            onClick={resetPermissions}
+                                                            className="mt-3 text-green-700 text-xs underline hover:text-green-900"
+                                                        >
+                                                            Reset &amp; start over
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : expiredHandles ? (
+                                            // State 2 — had permissions before, just need re-grant (no navigation)
+                                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                                                <div className="flex items-start">
+                                                    <svg className="w-5 h-5 text-amber-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                                                    </svg>
+                                                    <div className="flex-1">
+                                                        <p className="text-amber-800 font-medium text-sm">Permissions expired</p>
+                                                        <p className="text-amber-700 text-sm mt-1">
+                                                            Your previously selected folders are remembered. Click Re-grant — the browser will show Allow dialogs, no folder navigation needed.
+                                                        </p>
+                                                        <div className="mt-2 text-xs text-amber-700 space-y-0.5">
+                                                            <div className="flex items-center gap-1.5"><FolderIcon className="w-3 h-3" /> Configs & PDFs: <span className="font-mono">{expiredHandles.pdf?.name}</span></div>
+                                                            <div className="flex items-center gap-1.5"><FolderIcon className="w-3 h-3" /> OCR Output: <span className="font-mono">{expiredHandles.ocr?.name}</span></div>
+                                                            <div className="flex items-center gap-1.5"><FolderIcon className="w-3 h-3" /> Text Output: <span className="font-mono">{expiredHandles.text?.name}</span></div>
+                                                        </div>
+                                                        <div className="mt-3 flex items-center gap-3">
+                                                            <button
+                                                                onClick={regrantPermissions}
+                                                                className="bg-amber-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-amber-700 transition duration-200"
+                                                            >
+                                                                Re-grant Access
+                                                            </button>
+                                                            <button
+                                                                onClick={resetPermissions}
+                                                                className="text-amber-700 text-sm underline hover:text-amber-900"
+                                                            >
+                                                                Set up from scratch
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            // State 3 — first time, pick each directory independently
+                                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                                                <div className="flex items-start">
+                                                    <svg className="w-5 h-5 text-amber-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                                                    </svg>
+                                                    <div className="flex-1">
+                                                        <p className="text-amber-800 font-medium text-sm">Directory access required</p>
+                                                        <p className="text-amber-700 text-sm mt-1">
+                                                            Select each directory individually, then click Confirm.
+                                                        </p>
+                                                        <div className="mt-3 space-y-2">
+                                                            {[
+                                                                { key: 'pdf', label: 'Configs & PDFs', path: basePaths.base_pdf_path },
+                                                                { key: 'ocr', label: 'OCR Output', path: basePaths.base_ocr_path },
+                                                                { key: 'text', label: 'Text Output', path: basePaths.base_text_path },
+                                                            ].map(({ key, label, path }) => (
+                                                                <div key={key} className="flex items-center gap-3">
+                                                                    <button
+                                                                        onClick={() => pickDirectory(key)}
+                                                                        className="bg-amber-600 text-white text-xs font-semibold py-1.5 px-3 rounded-md hover:bg-amber-700 transition duration-200 whitespace-nowrap"
+                                                                    >
+                                                                        Select
+                                                                    </button>
+                                                                    <div className="text-xs">
+                                                                        <span className="font-medium text-amber-800">{label}:</span>
+                                                                        {pendingHandles[key] ? (
+                                                                            <span className="text-green-700 ml-1">✓ {pendingHandles[key].name}</span>
+                                                                        ) : (
+                                                                            <span className="font-mono text-amber-600 ml-1">{path}</span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                        {pendingHandles.pdf && pendingHandles.ocr && pendingHandles.text && (
+                                                            <button
+                                                                onClick={confirmDirectories}
+                                                                className="mt-3 bg-green-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-green-700 transition duration-200"
+                                                            >
+                                                                Confirm &amp; Save
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Evaluation Tools */}
+                                <div className="rounded-lg shadow-sm border border-slate-200 p-8" style={{ backgroundColor: 'var(--bg-card)' }}>
+                                    <div className="text-center max-w-2xl mx-auto">
+                                        <div className="mb-6">
+                                            <svg className="mx-auto h-16 w-16 text-sky-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                            <h2 className="text-2xl font-bold text-slate-800 mb-4">Manual Evaluation Tools</h2>
+                                            <p className="text-slate-600 mb-6">
+                                                Choose an evaluation tool to get started with manual assessment of your data processing pipeline.
+                                            </p>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div className="border border-slate-200 rounded-lg p-6 hover:bg-neutral-100 transition-colors cursor-pointer"
+                                                 style={{ backgroundColor: 'var(--bg-surface)' }}
+                                                 onClick={() => setActiveTab('pdf-parser')}>
+                                                <div className="text-sky-600 mb-3">
+                                                    <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                    </svg>
+                                                </div>
+                                                <h3 className="text-lg font-semibold text-slate-800 mb-2">PDF Parser</h3>
+                                                <p className="text-sm text-slate-600">
+                                                    Parse PDFs using Tesseract OCR or Gemini LLM. Extract text, paragraphs, and structured content from scanned documents.
+                                                </p>
+                                            </div>
+
+                                            <div className="border border-slate-200 rounded-lg p-6 hover:bg-neutral-100 transition-colors cursor-pointer"
+                                                 style={{ backgroundColor: 'var(--bg-surface)' }}
+                                                 onClick={() => setActiveTab('paragraph-eval')}>
+                                                <div className="text-green-600 mb-3">
+                                                    <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                                    </svg>
+                                                </div>
+                                                <h3 className="text-lg font-semibold text-slate-800 mb-2">Paragraph Generation Eval</h3>
+                                                <p className="text-sm text-slate-600">
+                                                    Compare paragraph generation outputs between different directories. Side-by-side comparison of source and target text files.
+                                                </p>
+                                            </div>
+
+                                            <div className="border border-slate-200 rounded-lg p-6 hover:bg-neutral-100 transition-colors cursor-pointer"
+                                                 style={{ backgroundColor: 'var(--bg-surface)' }}
+                                                 onClick={() => setActiveTab('paragraph-classifier')}>
+                                                <div className="text-orange-600 mb-3">
+                                                    <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                    </svg>
+                                                </div>
+                                                <h3 className="text-lg font-semibold text-slate-800 mb-2">Paragraph Classifier</h3>
+                                                <p className="text-sm text-slate-600">
+                                                    Manually fix Gemini OCR classification errors. View PDF pages alongside extracted blocks and re-classify each block type.
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                    {basePaths && (
+                                        <div className="mt-8 p-4 bg-sky-50 border border-sky-200 rounded-lg">
+                                            <h4 className="font-semibold text-sky-800 mb-2">Configuration Loaded</h4>
+                                            <p className="text-sm text-sky-700">
+                                                Base paths have been loaded from the server configuration. You can now use the evaluation tools with your configured directories.
+                                            </p>
+                                        </div>
+                                    )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'pdf-parser' && (
+                            <PDFParser
+                                fill
+                                selectedFile={selectedFile}
+                                onFileSelect={handleFileSelect}
+                                basePaths={basePaths}
+                                baseDirectoryHandles={effectiveDirectoryHandles}
+                                onPdfParentDirChange={(dirPath) => {
+                                    console.log('PDF parent directory changed to:', dirPath);
+                                    setPdfParentDirPath(dirPath);
+                                }}
+                            />
+                        )}
+
+                        {activeTab === 'paragraph-eval' && basePaths && (
+                            <ParagraphGenEval
+                                fill
+                                showFileBrowser={showFileBrowser}
+                                onCloseFileBrowser={handleCloseFileBrowser}
+                                basePaths={basePaths}
+                                selectedFolder={selectedFolder}
+                                baseDirectoryHandles={effectiveDirectoryHandles}
+                                onPdfParentDirChange={(dirPath) => {
+                                    console.log('PDF parent directory changed to:', dirPath);
+                                    setPdfParentDirPath(dirPath);
+                                }}
+                            />
+                        )}
+
+                        {activeTab === 'ocr-preview' && (
+                            <OCRPreview
+                                fill
+                                selectedFile={selectedFile}
+                                baseDirectoryHandles={effectiveDirectoryHandles}
+                            />
+                        )}
+
+                        {activeTab === 'paragraph-classifier' && (
+                            <ParaClassifier
+                                fill
+                                selectedFile={selectedFile}
+                                baseDirectoryHandles={effectiveDirectoryHandles}
+                                basePaths={basePaths}
+                            />
+                        )}
+
+                        {activeTab === 'unindexed-pdfs' && (
+                            <UnindexedPDFs />
+                        )}
+
+                        {activeTab === 'bookmark-backfill' && (
+                            <BookmarkBackfill />
+                        )}
+
+                        {activeTab === 'load-test' && (
+                            <LoadTest />
+                        )}
+
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default UIEval;

@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.common.embedding_models import get_embedding_model_factory
 from backend.common.opensearch import get_opensearch_client, get_metadata
 from backend.common.catalogue import get_catalogue
+from backend.common.author_filters import group_authors, filter_categories_for as _filter_categories_for
 from backend.common.language import text_field_for_language
 from backend.config import Config
 from backend.search.index_searcher import IndexSearcher
@@ -37,23 +38,6 @@ from backend.shortener.core import ShortenerStore
 from backend.shortener.opensearch_loader import fetch_file_urls
 
 log_handle = logging.getLogger(__name__)
-
-# Metadata filter fields that are valid per category.
-# Prevents cross-category filters (e.g. a Granth filter) from zeroing out Books results.
-_CATEGORY_FILTER_FIELDS: Dict[str, set] = {
-    # "Name" is deliberately absent here: a Granth/Book title picked for Pravachan
-    # filtering goes through "_pravachan_groups" (which carries granth/series/volume
-    # scoped to Pravachan only) so it doesn't also narrow Granth/Books results — see
-    # PravachanFilter.handleApply in the frontend.
-    "Pravachan": {"Anuyog", "Series", "volume", "pravachan_number", "_pravachan_groups"},
-    "Granth":    {"Name", "Anuyog", "Author"},
-    "Books":     {"Name", "Author"},
-}
-
-def _filter_categories_for(cat: str, categories: Dict[str, List[str]]) -> Dict[str, List[str]]:
-    """Return only the category-filter entries that are valid for the given category."""
-    allowed = _CATEGORY_FILTER_FIELDS.get(cat, set(categories.keys()))
-    return {k: v for k, v in categories.items() if k in allowed}
 
 def _resolve_search_mode(config, index_searcher, keywords: str, text_search: bool,
                           exact_match: bool, exclude_words: List[str]) -> tuple[str, Optional[bool]]:
@@ -378,6 +362,25 @@ async def get_metadata_api(request: Request):
         log_handle.exception(f"Error retrieving metadata: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
 
+def _cached_catalogue(request: Request):
+    cache = request.app.state.catalogue_cache
+    now = time.time()
+    if cache["data"] is None or now - cache["timestamp"] >= cache["ttl"]:
+        cache["data"] = get_catalogue(request.app.state.config)
+        cache["timestamp"] = now
+    return cache["data"]
+
+
+@app.get("/api/authors")
+async def get_authors_api(request: Request):
+    """Authors grouped by catalogue category and language, without reindexing."""
+    try:
+        return JSONResponse(content=group_authors(_cached_catalogue(request)))
+    except Exception as e:
+        log_handle.exception("Error retrieving authors")
+        raise HTTPException(status_code=500, detail="Could not retrieve authors") from e
+
+
 @app.get("/api/catalogue", response_model=List[Dict[str, Any]])
 async def get_catalogue_api(request: Request):
     """
@@ -387,21 +390,7 @@ async def get_catalogue_api(request: Request):
     pattern as /api/metadata.
     """
     try:
-        current_time = time.time()
-        cache = request.app.state.catalogue_cache
-
-        if (cache["data"] is not None and
-            current_time - cache["timestamp"] < cache["ttl"]):
-            log_handle.info("Retrieving catalogue from in-memory cache")
-            return JSONResponse(content=cache["data"], status_code=200)
-
-        log_handle.info("Cache expired or empty, fetching catalogue from OpenSearch")
-        rows = get_catalogue(request.app.state.config)
-
-        cache["data"] = rows
-        cache["timestamp"] = current_time
-
-        log_handle.info(f"Catalogue retrieved and cached: {len(rows)} rows")
+        rows = _cached_catalogue(request)
         return JSONResponse(content=rows, status_code=200)
     except Exception as e:
         log_handle.exception(f"Error retrieving catalogue: {e}")

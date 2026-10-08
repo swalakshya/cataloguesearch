@@ -38,7 +38,7 @@ export const ANSWER_FORMAT_OPTIONS = [
 // Exported as the app's hardcoded default, with no localStorage involved —
 // used to seed a logged-in user who has no saved server settings yet.
 export function envDefault() {
-    const raw = String(process.env.REACT_APP_CHAT_RESPONSE_FORMAT || '').trim().toLowerCase();
+    const raw = String(import.meta.env.REACT_APP_CHAT_RESPONSE_FORMAT || '').trim().toLowerCase();
     return raw === 'summary' ? 'summary' : 'structured';
 }
 

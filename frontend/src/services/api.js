@@ -1,7 +1,7 @@
 // --- API SERVICE ---
 import { randomUUID } from '../utils/uuid';
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
-const LLM_API_BASE_URL = process.env.REACT_APP_LLM_API_BASE_URL || 'http://localhost:8012';
+const API_BASE_URL = import.meta.env.REACT_APP_API_BASE_URL || '/api';
+const LLM_API_BASE_URL = import.meta.env.REACT_APP_LLM_API_BASE_URL || 'http://localhost:8012';
 
 // Shared client-side cache for getCatalogue() -- see its definition below for
 // why this lives at module scope instead of on the `api` object.
@@ -88,6 +88,15 @@ export const api = {
             console.error("API Error: Could not fetch metadata", error);
             return {};
         }
+    },
+
+    getAuthors: async () => {
+        const response = await fetch(`${API_BASE_URL}/authors`);
+        if (!response.ok) throw new Error(`Could not fetch authors: ${response.status}`);
+        const groups = await response.json();
+        return Object.fromEntries(Object.entries(groups).map(([category, languages]) => [
+            category, { hindi: languages.hi || [], gujarati: languages.gu || [] },
+        ]));
     },
 
     // Content catalogue: one row per (category, language, Granth, Series) that has

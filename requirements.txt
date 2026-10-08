@@ -18,3 +18,6 @@ coverage-badge==1.1.2        # Generate SVG coverage badge from .coverage data
 
 # Ops scripts (scripts/create_snapshots.py)
 zstandard==0.23.0            # Multi-threaded zstd compression for snapshot tarballs
+
+# Model conversion (scripts/convert_reranking_model.py); not needed for inference
+optimum-onnx[onnxruntime]==0.1.0  # Provides optimum.onnxruntime; supports transformers==4.57.6

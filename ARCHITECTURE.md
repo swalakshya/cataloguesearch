@@ -92,10 +92,11 @@ The reranker runs as ONNX (not PyTorch) for significantly faster inference. The 
 
 ### OpenSearch
 
-Custom Docker image (`docker/opensearch/Dockerfile`) based on `opensearchproject/opensearch:3.3.1` with two additional plugins:
+Custom Docker image (`docker/opensearch/Dockerfile`) based on `opensearchproject/opensearch:3.3.1` with one additional plugin:
 
 - `analysis-icu` — Unicode-aware tokenisation for Indic scripts
-- `repository-gcs` — GCS snapshot repository support
+
+Snapshots use a local filesystem repository managed by `scripts/create_snapshots.py` and `scripts/restore_snapshots.py`.
 
 Three indices:
 

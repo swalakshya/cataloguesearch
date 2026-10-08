@@ -47,7 +47,7 @@ def commands_for(action: str, params: Dict) -> List[Cmd]:
             Cmd(_ssh(f"cat > {remote_script}.new && mv {remote_script}.new {remote_script}"),
                 "upload restore_snapshots.py to prod",
                 stdin_path=settings.REPO_ROOT / "scripts" / "restore_snapshots.py"),
-            Cmd(_ssh(f"cd {settings.PROD_DIR} && python3 -u restore_snapshots.py --yes"),
+            Cmd(_ssh(f"cd {settings.PROD_DIR} && python3 -u restore_snapshots.py --yes --mode full-cycle"),
                 "run restore_snapshots.py on prod"),
         ]
     raise ValueError(f"Unknown action: {action}")

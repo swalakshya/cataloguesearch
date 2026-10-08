@@ -5,6 +5,8 @@
 *
 !frontend/package.json
 !frontend/package-lock.json
+!frontend/index.html
+!frontend/vite.config.mjs
 !frontend/public
 !frontend/tailwind.config.js
 !frontend/postcss.config.js
@@ -14,10 +16,12 @@
 
 # The local dev tools are not part of the production site. Leaving them out of the context means editing them (or any
 # test) no longer changes the `COPY frontend/src` layer, so Docker reuses the cached `npm run build`. The build itself
-# does not need them: see the REACT_APP_DEV_TOOLS flag in frontend/src/App.js.
+# does not need them: see the REACT_APP_DEV_TOOLS flag in frontend/vite.config.mjs.
 frontend/src/components/eval
 frontend/src/components/dev
 frontend/src/components/deploy
 frontend/src/components/discover
 **/*.test.js
+**/*.test.jsx
+frontend/src/setupTests.js
 **/__tests__

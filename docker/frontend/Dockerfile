@@ -20,22 +20,22 @@ COPY frontend/package*.json ./
 
 # Install all dependencies (including dev dependencies for build)
 # This layer will be cached unless package.json changes
-RUN --mount=type=cache,target=/root/.npm npm install
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 # Copy static assets and config files (rarely change)
 COPY frontend/public/ ./public/
+COPY frontend/index.html frontend/vite.config.mjs ./
 COPY frontend/tailwind.config.js* ./
 COPY frontend/postcss.config.js* ./
 
 # Copy source code last (most frequently changed)
 COPY frontend/src/ ./src/
 
-# Build the application. The cache mount keeps webpack/babel's cache between builds, so when something does
-# change the rebuild is much faster than a cold one.
-RUN --mount=type=cache,target=/app/node_modules/.cache npm run build
+# Build the production application with Vite.
+RUN npm run build
 
 # Guard: fail the build if dev-tools code ever ends up in the production bundle (e.g. someone imports it directly).
-RUN if grep -rqE "api/(deploy|discover|jobs)|Verify sub-sections|dev server offline|Restart Docker" build/static/js; then \
+RUN if grep -rqE "api/(deploy|discover|jobs)|Verify sub-sections|dev server offline|Restart Docker" build/static; then \
       echo "ERROR: dev tools leaked into the production bundle" >&2; exit 1; fi
 
 # Stage 2: Serve with nginx

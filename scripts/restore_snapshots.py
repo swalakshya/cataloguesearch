@@ -4,8 +4,8 @@ Automated OpenSearch snapshot restore script.
 Replaces restore_snapshots.sh with fully automated Python using only stdlib.
 Docker operations use the Docker Unix socket API directly (no subprocess).
 OpenSearch operations use urllib (no curl).
-Step 9 uses subprocess to run docker-compose (down + up) so that containers
-are fully recreated with the latest .env.prod values.
+Data-only mode restores indices using the running OpenSearch container.
+Full-cycle mode also pulls images and recreates application containers.
 """
 
 import argparse
@@ -284,43 +284,69 @@ def _validate_docker_socket():
 # Confirmation prompt
 # ---------------------------------------------------------------------------
 
-def _confirm():
-    print()
-    print("=" * 62)
-    print("  OpenSearch Snapshot Restore")
-    print("=" * 62)
-    print()
-    print("The following steps will be executed:")
-    print()
-    print("  0. Pull the latest images for cataloguesearch-api,")
-    print("     cataloguesearch-frontend and cataloguesearch-chat (runs first, so a failed pull aborts")
-    print("     before anything is deleted)")
-    print("  1. Restart opensearch-node container (refresh bind mount)")
-    print("  2. Fix permissions on /tmp/snapshots/ inside the container")
-    print("     and VERIFY them with stat")
-    print("  3. Delete existing snapshot repository (local_backup)")
-    print("  4. Register new snapshot repository → /tmp/snapshots")
-    print("  5. Verify all snapshots are present and state=SUCCESS")
-    print("  6. Delete existing OpenSearch indices")
-    print("  7. Restore all snapshots")
-    print("  8. Poll until all indices are fully restored, then print")
-    print("     document counts")
-    print("  9. Recreate cataloguesearch-api and cataloguesearch-frontend")
-    print("     (down + up -d, so they run the images pulled in step 0);")
-    print("     cataloguesearch-chat is recreated only if its image changed")
-    print()
-    print("⚠️  WARNING: Step 6 will PERMANENTLY DELETE all data in:")
-    print("           • cataloguesearch_prod")
-    print("           • cataloguesearch_prod_metadata")
-    print("         Ensure your snapshots are valid before proceeding.")
-    print("⚠️  WARNING: OpenSearch will be restarted (brief downtime).")
-    print()
+def _select_mode(mode: str | None, assume_yes: bool) -> str:
+    if mode is not None:
+        return mode
+    if assume_yes:
+        return "data-only"
+    print("Choose a restore mode:")
+    print("  1. Data only (default): use the running OpenSearch container; verify")
+    print("     the snapshot mount, fix snapshot permissions, register and verify")
+    print("     snapshots, replace the target indices, and wait for restore.")
+    print("     No image pulls, container restarts, or service recreation.")
+    print("  2. Full cycle: pull application images, restart OpenSearch, restore")
+    print("     data, recreate API/frontend, and roll chat if its image changed.")
+    while True:
+        answer = input("Restore mode [1=data only, 2=full cycle] (default 1): ").strip().lower()
+        if answer in ("", "1", "data-only", "data only"):
+            return "data-only"
+        if answer in ("2", "full-cycle", "full cycle"):
+            return "full-cycle"
+        print("Please choose 1 (data only) or 2 (full cycle).")
 
+
+def _confirm(mode: str):
+    print()
+    print("=" * 62)
+    print(f"  OpenSearch Snapshot Restore — {mode}")
+    print("=" * 62)
+    if mode == "full-cycle":
+        print("Pull application images, restart OpenSearch, restore data, then")
+        print("recreate API/frontend and roll chat if its image changed.")
+        print("OpenSearch will have brief downtime.")
+    else:
+        print("Use the running OpenSearch container and existing snapshot mount.")
+        print("No images will be pulled and no containers restarted or recreated.")
+    print("Fix snapshot folder permissions; reset/register the repository;")
+    print("verify snapshots; replace target indices; wait and print counts.")
+    print("WARNING: Existing data in these indices will be permanently deleted:")
+    for name in SNAPSHOTS:
+        print(f"  • {name}")
+    print("Searches/writes to these indices may fail during restoration.")
     answer = input("Do you want to proceed? (yes/no): ").strip().lower()
     if answer != "yes":
         log_handle.info("🚫 Aborted by user.")
         sys.exit(0)
     print()
+
+
+def _validate_running_opensearch():
+    """Fail before modifying data if data-only mode cannot use the current mount."""
+    info = _docker_request("GET", f"/containers/{CONTAINER_NAME}/json")
+    if info.get("State", {}).get("Status") != "running":
+        raise RuntimeError("OpenSearch must already be running for data-only restore.")
+    mount = next((m for m in info.get("Mounts", [])
+                  if m.get("Destination") == SNAPSHOTS_MOUNT), None)
+    if (not mount or mount.get("Type") != "bind"
+            or Path(mount.get("Source", "")).resolve() != SNAPSHOTS_DIR.resolve()):
+        raise RuntimeError(
+            f"Data-only restore requires {SNAPSHOTS_DIR} to be bind-mounted at "
+            f"{SNAPSHOTS_MOUNT} in {CONTAINER_NAME}. Fix the mount before retrying."
+        )
+    status, _ = _os_request("GET", "/_cluster/health")
+    if status != 200:
+        raise RuntimeError("OpenSearch is not ready for data-only restore. No containers were restarted.")
+    log_handle.info("✅ Running OpenSearch and snapshot mount verified.")
 
 
 # ---------------------------------------------------------------------------
@@ -724,8 +750,8 @@ def main():
     parser = argparse.ArgumentParser(
         description=(
             "Automated OpenSearch snapshot restore script.\n"
-            "Restarts the opensearch-node container, fixes permissions, registers\n"
-            "the snapshot repository, and restores all production indices."
+            "Choose data-only restore (default) or the full container cycle.\n"
+            "Both modes replace the target production indices from snapshots."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -744,6 +770,10 @@ def main():
         action="store_true",
         help="Skip the interactive confirmation prompt.",
     )
+    parser.add_argument(
+        "--mode", choices=("data-only", "full-cycle"), default=None,
+        help="Restore mode. Prompts when omitted; with --yes defaults to data-only.",
+    )
     args = parser.parse_args()
 
     _setup_logging()
@@ -754,12 +784,20 @@ def main():
     try:
         _validate_snapshots_dir()
         _validate_docker_socket()
+        mode = _select_mode(args.mode, args.yes)
+        log_handle.info("Restore mode: %s", mode)
         if not args.yes:
-            _confirm()
+            _confirm(mode)
 
-        phases = [
-            ("Pull latest images", step0_pull_images),
-            ("Restart OpenSearch", step1_restart_container),
+        phases = []
+        if mode == "full-cycle":
+            phases.extend([
+                ("Pull latest images", step0_pull_images),
+                ("Restart OpenSearch", step1_restart_container),
+            ])
+        else:
+            phases.append(("Verify running OpenSearch and snapshot mount", _validate_running_opensearch))
+        phases.extend([
             ("Fix snapshot folder permissions", step2_fix_permissions),
             ("Reset snapshot repository", step3_delete_repository),
             ("Register snapshot repository", step4_create_repository),
@@ -767,8 +805,9 @@ def main():
             ("Delete old indices", step6_delete_indices),
             ("Start restore", step7_restore_snapshots),
             ("Wait for restore to finish", step8_wait_for_restore),
-            ("Recreate services", step9_restart_services),
-        ]
+        ])
+        if mode == "full-cycle":
+            phases.append(("Recreate services", step9_restart_services))
         global PHASE_INDEX, PHASE_TOTAL
         PHASE_TOTAL = len(phases)
         for i, (label, fn) in enumerate(phases, 1):
@@ -778,7 +817,7 @@ def main():
 
         log_handle.info("✅ Script completed successfully.")
 
-    except (FileNotFoundError, PermissionError, RuntimeError) as exc:
+    except (OSError, RuntimeError, EOFError) as exc:
         log_handle.error("❌ FATAL: %s", exc)
         sys.exit(1)
     except KeyboardInterrupt:

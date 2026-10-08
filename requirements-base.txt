@@ -16,9 +16,8 @@ sentence-transformers==3.3.1  # For creating sentence and text embeddings
 # (>=4.56.1) -- surya-ocr was removed 2026-09-18 (see requirements-crawler.txt),
 # so that constraint no longer applies, but this pin hasn't been revisited.
 transformers==4.57.6
-onnxruntime==1.26.0           # Runs the ONNX reranker directly (backend/common/reranker.py);
-                              # replaced optimum[onnxruntime], which pins transformers below
-                              # 4.47/4.58 and can't coexist with surya-ocr's floor above.
+onnxruntime==1.26.0           # Runs the ONNX reranker directly (backend/common/reranker.py).
+                              # Optimum export tooling is development-only (requirements.txt).
 onnxscript                    # Required for PyTorch → ONNX export
 langdetect==1.0.9            # Language detection library
 indic-nlp-library==0.92      # Core library for Indian language NLP tasks

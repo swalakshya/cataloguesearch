@@ -91,7 +91,7 @@ def test_restore_snapshots_markers_and_real_recovery_percentage(monkeypatch):
     for n in ("_validate_snapshots_dir", "_validate_docker_socket", "_setup_logging"):
         monkeypatch.setattr(rs, n, lambda *a, **k: None)
     monkeypatch.setattr(rs, "_resolve_snapshots_dir", lambda x: Path("/tmp/s"))
-    monkeypatch.setattr("sys.argv", ["restore_snapshots.py", "--yes"])
+    monkeypatch.setattr("sys.argv", ["restore_snapshots.py", "--yes", "--mode", "full-cycle"])
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         rs.main()

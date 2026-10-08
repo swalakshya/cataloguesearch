@@ -28,8 +28,8 @@ const SRC_DIR = path.join(__dirname, '..', 'src');
 // not new regressions. Fix these and remove them from here rather than
 // growing this list.
 const KNOWN_EXCEPTIONS = new Set([
-    'components/eval/FileBrowser.js',
-    'components/eval/OCRPreview.js',
+    'components/eval/FileBrowser.jsx',
+    'components/eval/OCRPreview.jsx',
 ]);
 
 // Building blocks that intentionally render the overlay shape without calling
@@ -38,7 +38,7 @@ const KNOWN_EXCEPTIONS = new Set([
 // click-outside wiring, not lifecycle management). Permanent exclusion, not
 // a gap to fix.
 const DEFINITION_FILES = new Set([
-    'components/ui/Overlay.js',
+    'components/ui/Overlay.jsx',
 ]);
 
 const OVERLAY_SHAPE_RE = /fixed\s+inset-(?:0\b|x-0\s+bottom-0)/;
