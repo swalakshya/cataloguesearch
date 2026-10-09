@@ -13,6 +13,9 @@ PDF page numbers, enabling "View PDF" to open the correct PDF page.
 import json
 import logging
 import os
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+
+from tqdm import tqdm
 
 from PIL import Image
 
@@ -127,20 +130,21 @@ class MultiPagePDFProcessor:
 
         ext = self.get_output_file_extension()
 
-        # Only process PDF pages where at least one logical half is missing
-        pages_to_process = []
-        for pdf_page in pages_list:
-            lp_left, lp_right = self._logical_pages(pdf_page)
-            left_exists = (
-                lp_left <= 0
-                or os.path.exists(f"{output_ocr_dir}/page_{lp_left:04d}{ext}")
-            )
-            right_exists = (
-                lp_right <= 0
-                or os.path.exists(f"{output_ocr_dir}/page_{lp_right:04d}{ext}")
-            )
-            if not (left_exists and right_exists):
-                pages_to_process.append(pdf_page)
+        # Resume per half, respecting subsection boundaries before rendering.
+        page_mapping = self._load_page_mapping(output_ocr_dir)
+        missing = {}
+        for pdf_page in dict.fromkeys(pages_list):
+            for logical in self._logical_pages(pdf_page):
+                if logical <= 0 or (allowed_logical_pages is not None
+                                    and logical not in allowed_logical_pages):
+                    continue
+                if os.path.exists(f"{output_ocr_dir}/page_{logical:04d}{ext}"):
+                    page_mapping[str(logical)] = pdf_page
+                else:
+                    missing.setdefault(pdf_page, set()).add(logical)
+        pages_to_process = list(missing)
+        if page_mapping:
+            self._save_page_mapping(output_ocr_dir, page_mapping)
 
         if not pages_to_process:
             log_handle.info(
@@ -154,11 +158,15 @@ class MultiPagePDFProcessor:
             f"start_side={self._book_start_side})"
         )
 
+        if isinstance(self._inner, AdvancedPDFProcessor):
+            return self._process_tesseract_parallel(
+                pdf_file, scan_config, missing, output_ocr_dir, page_mapping
+            )
+
         images, pdf_page_numbers = self._inner._get_image(
             pdf_file, pages_to_process, scan_config
         )
 
-        page_mapping = self._load_page_mapping(output_ocr_dir)
         failed = False
 
         for pdf_page, image in zip(pdf_page_numbers, images):
@@ -166,12 +174,8 @@ class MultiPagePDFProcessor:
             lp_left, lp_right = self._logical_pages(pdf_page)
 
             # Respect side-boundary filter when provided
-            write_left = lp_left > 0 and (
-                allowed_logical_pages is None or lp_left in allowed_logical_pages
-            )
-            write_right = lp_right > 0 and (
-                allowed_logical_pages is None or lp_right in allowed_logical_pages
-            )
+            write_left = lp_left in missing[pdf_page]
+            write_right = lp_right in missing[pdf_page]
 
             ok1 = self._ocr_and_write(left_img, lp_left, scan_config, output_ocr_dir) if write_left else True
             ok2 = self._ocr_and_write(right_img, lp_right, scan_config, output_ocr_dir) if write_right else True
@@ -191,6 +195,73 @@ class MultiPagePDFProcessor:
                     f"(logical pages {lp_left}, {lp_right})"
                 )
                 failed = True
+        return not failed
+
+    def _process_tesseract_parallel(self, pdf_file, scan_config, missing,
+                                    output_ocr_dir, page_mapping):
+        # pytesseract launches a separate Tesseract process for each call. Threads
+        # orchestrate those processes without pickling large images or losing the
+        # configured tessdata path in newly spawned Python processes on macOS.
+        workers = max(1, int(self._inner._config.OCR_MAX_WORKERS))
+        pending = {}
+        failed = False
+        language = scan_config.get("language", "hi")
+        pyt_lang = "+".join(self._inner._pytesseract_language_map.get(part, part)
+                            for part in language.split("+"))
+        psm = scan_config.get("psm", 6)
+        total = sum(len(pages) for pages in missing.values())
+        log_handle.info("OCR of %s split pages with %s workers", total, workers)
+
+        def collect():
+            nonlocal failed
+            finished, _ = wait(pending, return_when=FIRST_COMPLETED)
+            for future in finished:
+                pdf_page, logical = pending.pop(future)
+                try:
+                    page_num, data = future.result()
+                    if page_num != logical or not data:
+                        raise ValueError("OCR returned empty data or the wrong page number")
+                    self._inner._write_output_to_file(output_ocr_dir, [(logical, data)])
+                    output = os.path.join(output_ocr_dir, f"page_{logical:04d}.json")
+                    if not os.path.exists(output):
+                        raise IOError("OCR output was not written")
+                    page_mapping[str(logical)] = pdf_page
+                    self._save_page_mapping(output_ocr_dir, page_mapping)
+                except Exception:
+                    log_handle.exception("OCR failed for PDF page %s, logical page %s",
+                                         pdf_page, logical)
+                    failed = True
+                bar.update(1)
+
+        with ThreadPoolExecutor(max_workers=workers) as executor, tqdm(
+                total=total, desc="OCR split pages", unit="page") as bar:
+            for pdf_page, logical_pages in missing.items():
+                # Keep at most two tasks per worker queued; render one spread at
+                # a time so a long book never holds every 350-DPI image in RAM.
+                while len(pending) + len(logical_pages) > workers * 2:
+                    collect()
+                images, rendered = self._inner._get_image(pdf_file, [pdf_page], scan_config)
+                if rendered != [pdf_page] or len(images) != 1:
+                    log_handle.error("Could not render PDF page %s", pdf_page)
+                    failed = True
+                    bar.update(len(logical_pages))
+                    continue
+                image = images.pop()
+                halves = self._split_image(image)
+                image.close()
+                for logical, half in zip(self._logical_pages(pdf_page), halves):
+                    if logical in logical_pages:
+                        future = executor.submit(AdvancedPDFProcessor._process_single_page,
+                                                 (logical, half, pyt_lang, psm))
+                        pending[future] = (pdf_page, logical)
+                    else:
+                        half.close()
+                del halves, half
+                # Persist ready results before rendering another spread.
+                if any(f.done() for f in pending):
+                    collect()
+            while pending:
+                collect()
         return not failed
 
     def read_paragraphs(self, ocr_dir: str, pages_list: list[int]):
