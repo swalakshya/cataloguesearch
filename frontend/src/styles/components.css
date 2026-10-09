@@ -344,3 +344,13 @@ input::placeholder, textarea::placeholder { color: var(--color-ink-muted); }
     outline: 2px solid var(--color-brand);
     outline-offset: 2px;
 }
+
+/* Share the existing Granth table width with its edition-language column. */
+.granth-index-table .data-table { table-layout: fixed; }
+.granth-index-table th:nth-child(1) { width: 28%; }
+.granth-index-table th:nth-child(2) { width: 25%; }
+.granth-index-table th:nth-child(3) { width: 21%; }
+.granth-index-table th:nth-child(4) { width: 16%; }
+.granth-index-table th:nth-child(5) { width: 10%; }
+.granth-index-table th,
+.granth-index-table td { overflow-wrap: anywhere; }

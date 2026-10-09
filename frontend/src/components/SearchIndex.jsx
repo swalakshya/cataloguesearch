@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Check, ChevronDown } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import useCatalogue from '../hooks/useCatalogue';
 import { PageHeader, Table, Badge } from './ui';
 import StatsStrip from './chat/StatsStrip';
@@ -30,17 +30,11 @@ const renderCount = (count) => {
   return <span className="font-semibold" style={{ fontVariantNumeric: 'tabular-nums' }}>{Number.isNaN(n) ? count : n.toLocaleString()}</span>;
 };
 
-// A tick echoes the colored icon-chip language used by StatsStrip elsewhere
-// in the app, rather than a bare glyph -- consistent with the rest of the UI.
-const AvailabilityMark = ({ available }) => (
-  available ? (
-    <span
-      className="inline-flex items-center justify-center w-6 h-6 rounded-full"
-      style={{ backgroundColor: 'color-mix(in srgb, var(--color-success) 16%, var(--color-surface))' }}
-    >
-      <Check className="w-3.5 h-3.5" style={{ color: 'var(--color-success)' }} />
-    </span>
-  ) : <span className="text-ink-muted">-</span>
+const LanguageAvailability = ({ hi, gu }) => (
+  <div className="flex flex-wrap gap-1">
+    {hi && <Badge variant="success" aria-label="Hindi" title="Hindi">हि</Badge>}
+    {gu && <Badge variant="success" aria-label="Gujarati" title="Gujarati">ગુ</Badge>}
+  </div>
 );
 
 const AnuyogBadge = ({ anuyog }) => anuyog ? <Badge variant="neutral">{anuyog}</Badge> : <span className="text-ink-muted">-</span>;
@@ -187,10 +181,7 @@ const SearchIndex = () => {
     [pravachanRows]
   );
 
-  // One row per (Granth, Series) -- a series recorded in both languages (rare;
-  // it only happens when the series label coincides, e.g. Niyamsaar's "1975
-  // Series") collapses into a single row with both columns ticked. Otherwise a
-  // series shows a tick in exactly one language column, "-" in the other.
+  // Collapse matching series across languages and show their availability together.
   const groupedPravachan = useMemo(() => {
     const map = new Map();
     pravachanRows.forEach((r) => {
@@ -223,12 +214,26 @@ const SearchIndex = () => {
     return { hindi: sum('hi', hiOn), gujarati: sum('gu', guOn) };
   }, [pravachanRows, selectedGranths, hiOn, guOn]);
 
-  const filteredGranths = useMemo(() => granthRows
+  // Editions with the same title and contributors share a row; different
+  // commentaries remain distinct works even when their title matches.
+  const groupedGranths = useMemo(() => {
+    const map = new Map();
+    granthRows.forEach((row) => {
+      const key = JSON.stringify([row.granth, row.author || '', row.tikakaar || '', row.anuyog || '']);
+      if (!map.has(key)) map.set(key, { ...row, key, hi: false, gu: false });
+      const group = map.get(key);
+      if (row.language === 'hi') group.hi = true;
+      else if (row.language === 'gu') group.gu = true;
+    });
+    return Array.from(map.values());
+  }, [granthRows]);
+
+  const filteredGranths = useMemo(() => groupedGranths
     .filter((g) => selectedGranthAuthors.has(g.author))
     .filter((g) => selectedGranthAnuyogs.has(g.anuyog))
-    .filter((g) => (granthHiOn && g.language === 'hi') || (granthGuOn && g.language === 'gu'))
+    .filter((g) => (granthHiOn && g.hi) || (granthGuOn && g.gu))
     .sort((a, b) => a.granth.localeCompare(b.granth)),
-    [granthRows, selectedGranthAuthors, selectedGranthAnuyogs, granthHiOn, granthGuOn]);
+    [groupedGranths, selectedGranthAuthors, selectedGranthAnuyogs, granthHiOn, granthGuOn]);
 
   const filteredBooks = useMemo(() => bookRows
     .filter((b) => selectedBookAuthors.has(b.author))
@@ -274,8 +279,7 @@ const SearchIndex = () => {
                 { key: 'series', label: 'Series' },
                 { key: 'anuyog', label: 'Anuyog' },
                 { key: 'count', label: 'Count' },
-                { key: 'hi', label: 'Hindi' },
-                { key: 'gu', label: 'Gujarati' },
+                { key: 'language', label: 'Language' },
               ]}
               rows={mergedPravachan}
               rowKey={(row) => `${row.granth}::${row.series || ''}`}
@@ -296,8 +300,7 @@ const SearchIndex = () => {
                   <td>{row.series || '-'}</td>
                   <td><AnuyogBadge anuyog={row.anuyog} /></td>
                   <td>{renderCount(row.count)}</td>
-                  <td className="text-center"><AvailabilityMark available={row.hi} /></td>
-                  <td className="text-center"><AvailabilityMark available={row.gu} /></td>
+                  <td><LanguageAvailability hi={row.hi} gu={row.gu} /></td>
                 </>
               )}
             />
@@ -322,20 +325,23 @@ const SearchIndex = () => {
         </div>
 
         <Table
+          className="granth-index-table"
           columns={[
             { key: 'granth', label: 'Granth' },
             { key: 'author', label: 'Author' },
             { key: 'tikakaar', label: 'Tikakaar / Bhasha Vachanika' },
             { key: 'anuyog', label: 'Anuyog' },
+            { key: 'language', label: 'Language' },
           ]}
           rows={filteredGranths}
-          rowKey={(row) => row.relative_path}
+          rowKey={(row) => row.key}
           renderRow={(row) => (
             <>
               <td className="font-medium text-ink">{row.granth}</td>
               <td className="text-ink-muted">{row.author}</td>
               <td className="text-ink-muted">{row.tikakaar || '-'}</td>
               <td><AnuyogBadge anuyog={row.anuyog} /></td>
+              <td><LanguageAvailability hi={row.hi} gu={row.gu} /></td>
             </>
           )}
         />
