@@ -49,14 +49,13 @@ it('sends the currently selected Khoj mode and can switch back to Low', async ()
     expect(apiMock.search.mock.calls[1][0].accuracy_mode).toBe(false);
 });
 
-it('renders the shared collapsed search timing row', async () => {
+it('renders the shared search total without a breakdown', async () => {
     apiMock.search.mockResolvedValue({ timings: { total_ms: 18400, operations: { context: 800, reranking: 15100 } } });
     render(<App />);
     await waitFor(() => expect(apiMock.getAppConfig).toHaveBeenCalled());
     fireEvent.change(screen.getByLabelText('Search query'), { target: { value: 'विकल्प और विचार' } });
     fireEvent.click(screen.getByRole('button', { name: 'Search', exact: true }));
-    const timing = await screen.findByRole('button', { name: /Searched in 18.4s/ });
-    expect(timing).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(timing);
-    expect(screen.getByText('Surrounding context')).toBeTruthy();
+    expect(await screen.findByText('Searched in 18.4s')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Searched in/ })).toBeNull();
+    expect(screen.queryByText('Surrounding context')).toBeNull();
 });

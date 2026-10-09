@@ -42,8 +42,7 @@ it('renders completed chat timings through the shared component', async () => {
     render(<MemoryRouter><ChatPage language="hindi" appName="swalakshya" activeCategories={['Granth']}
         activeFilters={[]} query="विकल्प और विचार" setQuery={() => {}} answerFormat="summary" /></MemoryRouter>);
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-    const timing = await screen.findByRole('button', { name: /Completed in 32.6s/ });
-    expect(timing).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(timing);
-    expect(screen.getByText('Generating answer')).toBeTruthy();
+    expect(await screen.findByText('Completed in 32.6s')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Completed in/ })).toBeNull();
+    expect(screen.queryByText('Generating answer')).toBeNull();
 });
