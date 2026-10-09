@@ -499,6 +499,7 @@ class IndexSearcher:
             oversample: int = 40, rerank: bool = True,
             start_year: int | None = None, end_year: int | None = None,
             rerank_timeout_seconds: int = 40,
+            accuracy_mode: bool = False,
     ) -> Tuple[List[Dict[str, Any]], int]:
         """
         Reciprocal Rank Fusion search: runs BM25 and raw kNN in parallel,
@@ -556,7 +557,7 @@ class IndexSearcher:
             # Fall back to content_snippet since _source is not retained after _extract_results.
             sentence_pairs = [[keywords, r.get("content_snippet", "")] for r in fused]
             max_length = self._config.RERANK_MAX_LENGTH
-            if getattr(self._config, "CONTEXT_RERANKING", False) is True:
+            if accuracy_mode or getattr(self._config, "CONTEXT_RERANKING", False) is True:
                 fused = enrich_results(fused, self._opensearch_client, self._index_name,
                                        detected_language, keywords, self._reranker.tokenizer, max_length)
                 sentence_pairs = [[r["_rerank_query"], r["_rerank_text"]] for r in fused]
@@ -595,7 +596,7 @@ class IndexSearcher:
             page_size: int, page_number: int, language: str, rerank: bool = True,
             rerank_top_k: int = 40,
             start_year: int | None = None, end_year: int | None = None,
-            rerank_timeout_seconds: int = 40) -> Tuple[List[Dict[str, Any]], int]:
+            rerank_timeout_seconds: int = 40, accuracy_mode: bool = False) -> Tuple[List[Dict[str, Any]], int]:
         initial_fetch_size = rerank_top_k
         from_ = 0 if rerank else (page_number - 1) * page_size
 
@@ -637,7 +638,7 @@ class IndexSearcher:
 
             log_handle.info("--- Starting expensive reranker.predict() call... ---")
             max_length = self._config.RERANK_MAX_LENGTH
-            if getattr(self._config, "CONTEXT_RERANKING", False) is True:
+            if accuracy_mode or getattr(self._config, "CONTEXT_RERANKING", False) is True:
                 hits = enrich_hits(hits, self._opensearch_client, self._index_name, language,
                                    keywords, self._reranker.tokenizer, max_length)
                 sentence_pairs = [[h["_rerank_query"], h["_rerank_text"]] for h in hits]

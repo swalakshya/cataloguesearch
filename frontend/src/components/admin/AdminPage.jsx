@@ -21,7 +21,7 @@ const PARAM_META = {
     page_size_books:     { label: 'Page size — Books',        type: 'number', min: 5,   max: 100, step: 5 },
     spelling_min_score:  { label: 'Spelling suggestion min score', type: 'number', min: 0, max: 1, step: 0.05 },
     enable_reranking:    { label: 'Enable reranking',         type: 'boolean' },
-    context_reranking:   { label: 'Rerank with surrounding context', type: 'boolean', tooltip: 'Adds bounded previous/next paragraph context to every reranking candidate in Khoj and chat. May take longer. Disabled by default.' },
+    context_reranking:   { label: 'Rerank with surrounding context', type: 'boolean', tooltip: 'Enables bounded previous/next paragraph context for Low effort in Khoj and chat. High effort always uses context when reranking. May take longer.' },
     active_categories:   { label: 'Default active categories', type: 'multiselect', options: ['Pravachan', 'Granth', 'Books'] },
 };
 

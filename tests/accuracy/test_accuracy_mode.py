@@ -39,6 +39,7 @@ def test_khoj_request_scopes_candidate_depth(monkeypatch, mode, accuracy, expect
     call = searcher.perform_rrf_search.call_args if mode == "rrf" else searcher.perform_vector_search.call_args
     assert call.kwargs["oversample" if mode == "rrf" else "rerank_top_k"] == expected
     assert call.kwargs["rerank_timeout_seconds"] == (60 if accuracy else 40)
+    assert call.kwargs["accuracy_mode"] is accuracy
     assert app.state.config.RERANK_OVERSAMPLE == 40
 
 
@@ -58,6 +59,8 @@ def test_chat_agent_request_scopes_candidate_depth(monkeypatch, mode, accuracy, 
     request = Request({"type": "http", "headers": [], "app": SimpleNamespace(state=state)})
     monkeypatch.setattr(agent, "get_opensearch_client", lambda _: client)
     monkeypatch.setattr(agent, "_shorten_results", lambda *args: None)
+    monkeypatch.setattr(agent, "context_token_limit", lambda *args: 512)
+    monkeypatch.setattr(agent, "enrich_hits", lambda hits, *args: [dict(h, _rerank_query="query", _rerank_text="answer") for h in hits])
     response = asyncio.run(agent.agent_search(request, agent.AgentSearchRequest(query="आत्मा का स्वरूप क्या है?",
         language="hi", accuracy_mode=accuracy)))
     assert response.status_code == 200

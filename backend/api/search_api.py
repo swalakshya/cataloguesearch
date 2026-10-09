@@ -72,6 +72,7 @@ async def _search_category(
     enable_reranking: bool, rerank_oversample: int,
     start_year: Optional[int], end_year: Optional[int],
     rerank_timeout_seconds: int = 40,
+    accuracy_mode: bool = False,
 ) -> tuple[List[Dict[str, Any]], int]:
     """Runs the search for a single category using the configured search mode.
     Shared by /api/search (per-category streaming loop) and /api/export-pdf."""
@@ -92,6 +93,7 @@ async def _search_category(
                     oversample=rerank_oversample,
                     rerank=enable_reranking,
                     rerank_timeout_seconds=rerank_timeout_seconds,
+                    accuracy_mode=accuracy_mode,
                     start_year=start_year,
                     end_year=end_year,
                 )
@@ -127,6 +129,7 @@ async def _search_category(
                     rerank=enable_reranking,
                     rerank_top_k=rerank_oversample,
                     rerank_timeout_seconds=rerank_timeout_seconds,
+                    accuracy_mode=accuracy_mode,
                     start_year=start_year,
                     end_year=end_year,
                 )
@@ -579,6 +582,7 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
                     categories, language, effective_mode, is_lexical_query, query_embedding,
                     enable_reranking, rerank_oversample, start_year, end_year,
                     rerank_timeout(request_data.accuracy_mode),
+                    accuracy_mode=request_data.accuracy_mode,
                 )
 
             category_results[cat] = (results, hits)
@@ -706,6 +710,7 @@ async def export_pdf(request: Request, request_data: ExportPdfRequest = Body(...
         categories, language, effective_mode, is_lexical_query, query_embedding,
         enable_reranking, rerank_oversample, start_year, end_year,
         rerank_timeout(request_data.accuracy_mode),
+        accuracy_mode=request_data.accuracy_mode,
     )
 
     log_handle.info(f"Export PDF: category={category}, count={count}, keywords='{keywords}', "

@@ -463,7 +463,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
 
             if payload.rerank and index_searcher._reranker and fused:
                 max_length = config._agent_config["rerank_max_length"]
-                if getattr(config, "CONTEXT_RERANKING", False) is True:
+                if payload.accuracy_mode or getattr(config, "CONTEXT_RERANKING", False) is True:
                     contextual_hits = enrich_hits([item["_hit"] for item in fused], client,
                         config.OPENSEARCH_INDEX_NAME, payload.language, payload.query,
                         index_searcher._reranker.tokenizer, max_length)
@@ -551,7 +551,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
 
         try:
             max_length = config._agent_config["rerank_max_length"]
-            if getattr(config, "CONTEXT_RERANKING", False) is True:
+            if payload.accuracy_mode or getattr(config, "CONTEXT_RERANKING", False) is True:
                 hits = enrich_hits(hits, client, config.OPENSEARCH_INDEX_NAME, payload.language,
                                   payload.query, index_searcher._reranker.tokenizer, max_length)
                 sentence_pairs = [[h["_rerank_query"], h["_rerank_text"]] for h in hits]

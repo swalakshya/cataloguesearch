@@ -232,3 +232,7 @@ Search API
       ▼
    Response → Frontend
 ```
+
+### Search effort and surrounding context
+
+High effort (`accuracy_mode=true`) retrieves 100 candidates and always attempts bounded previous/next paragraph enrichment before vector or hybrid reranking in Khoj and chat. Low effort uses the configured candidate count (default 40) and follows the admin `context_reranking` flag. The rule is request-scoped; choosing High never changes the shared admin setting or another request. Khoj PDF exports carry the same effort option. Missing or incompatible neighbours and token limits can reduce the available context; lexical-only searches do not rerank.

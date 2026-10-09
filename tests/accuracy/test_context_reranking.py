@@ -122,7 +122,9 @@ def test_flag_defaults_off_and_token_limit_is_capped_at_deployed_model():
 
 @pytest.mark.parametrize("mode", ["vector", "rrf"])
 @pytest.mark.parametrize("enabled", [False, True])
-def test_khoj_context_flag_controls_both_reranking_paths(mode, enabled):
+@pytest.mark.parametrize("accuracy", [False, True])
+def test_khoj_context_flag_controls_both_reranking_paths(mode, enabled, accuracy):
+    use_context = enabled or accuracy
     from backend.search.index_searcher import IndexSearcher
     searcher = IndexSearcher.__new__(IndexSearcher)
     searcher._config = SimpleNamespace(CONTEXT_RERANKING=enabled, RERANK_BATCH_SIZE=4, RERANK_MAX_LENGTH=1500)
@@ -138,22 +140,24 @@ def test_khoj_context_flag_controls_both_reranking_paths(mode, enabled):
     searcher._reranker = Mock(tokenizer=Tokenizer(), predict=Mock(return_value=[0.5]))
     searcher.perform_category_search = Mock(return_value=([searcher._extract_results([centre], False, "hi")[0]], 1))
     if mode == "vector":
-        results, _ = searcher.perform_vector_search("query", [0.1], {}, 10, 1, "hi")
+        results, _ = searcher.perform_vector_search("query", [0.1], {}, 10, 1, "hi", accuracy_mode=accuracy)
     else:
-        results, _ = searcher.perform_rrf_search("Pravachan", "query", False, [], {}, [0.1], "hi", 10, 1)
+        results, _ = searcher.perform_rrf_search("Pravachan", "query", False, [], {}, [0.1], "hi", 10, 1, accuracy_mode=accuracy)
     pairs = searcher._reranker.predict.call_args.args[0]
-    assert pairs[0][1] == ("BEFORE\nCENTRE\nAFTER" if enabled else "CENTRE")
-    assert ("rerank_context" in results[0]) is enabled
-    if enabled:
+    assert pairs[0][1] == ("BEFORE\nCENTRE\nAFTER" if use_context else "CENTRE")
+    assert ("rerank_context" in results[0]) is use_context
+    if use_context:
         assert results[0]["rerank_context"]["previous"]["document_id"] == "doc_hi_1"
         assert searcher._reranker.predict.call_args.kwargs["max_length"] == 512
     assert all(not key.startswith("_rerank_") for key in results[0]), "internal sources must not leak"
-    assert client.search.call_count == (2 if enabled else 1)
+    assert client.search.call_count == (2 if use_context else 1)
 
 
 @pytest.mark.parametrize("mode", ["vector", "rrf"])
 @pytest.mark.parametrize("enabled", [False, True])
-def test_chat_context_flag_controls_every_agent_reranking_path(monkeypatch, mode, enabled):
+@pytest.mark.parametrize("accuracy", [False, True])
+def test_chat_context_flag_controls_every_agent_reranking_path(monkeypatch, mode, enabled, accuracy):
+    use_context = enabled or accuracy
     import asyncio
     import json
     from starlette.requests import Request
@@ -171,11 +175,11 @@ def test_chat_context_flag_controls_every_agent_reranking_path(monkeypatch, mode
     request = Request({"type": "http", "headers": [], "app": SimpleNamespace(state=state)})
     monkeypatch.setattr(agent, "get_opensearch_client", lambda _: client)
     monkeypatch.setattr(agent, "_shorten_results", lambda *args: None)
-    response = asyncio.run(agent.agent_search(request, agent.AgentSearchRequest(query="query", language="hi")))
+    response = asyncio.run(agent.agent_search(request, agent.AgentSearchRequest(query="query", language="hi", accuracy_mode=accuracy)))
     results = json.loads(response.body)
-    assert reranker.predict.call_args.args[0][0][1] == ("BEFORE\nCENTRE\nAFTER" if enabled else "CENTRE")
-    assert ("rerank_context" in results[0]) is enabled
-    if enabled:
+    assert reranker.predict.call_args.args[0][0][1] == ("BEFORE\nCENTRE\nAFTER" if use_context else "CENTRE")
+    assert ("rerank_context" in results[0]) is use_context
+    if use_context:
         assert results[0]["rerank_context"]["previous"]["chunk_id"] == "doc_hi_1"
         assert results[0]["rerank_context"]["previous"]["page_number"] == 1
         assert reranker.predict.call_args.kwargs["max_length"] == 512
