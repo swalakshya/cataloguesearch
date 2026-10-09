@@ -33,6 +33,8 @@ import ExportPdfModal from './components/ExportPdfModal';
 import { AlertTriangle, Mail, Home as HomeIcon, PenLine, SendHorizontal } from 'lucide-react';
 import { Modal, InputActionBar, PageHeader } from './components/ui';
 import SettingsModal from './components/settings/SettingsModal';
+import AccuracyModeSelect from './components/AccuracyModeSelect';
+import { getStoredChatAccuracyMode } from './config/accuracyConfig';
 
 // Import API service
 import { api } from './services/api';
@@ -209,6 +211,7 @@ const AppContent = () => {
     const [activeCategories, setActiveCategories] = useState(['Pravachan', 'Granth']);
     const [language, setLanguage] = useState('hindi');
     const [textSearch, setTextSearch] = useState(false);
+    const [khojAccuracyMode, setKhojAccuracyMode] = useState(false);
     const [exactMatch, setExactMatch] = useState(false);
     const [excludeWords, setExcludeWords] = useState('');
     const [searchType] = useState('relevance'); // Always use better relevance
@@ -269,6 +272,7 @@ const AppContent = () => {
     const [pendingChatQuestion, setPendingChatQuestion] = useState(null);
     const chatPageRef = useRef(null);
     const [answerFormat, setAnswerFormat] = useState(() => getStoredAnswerFormat());
+    const [chatAccuracyMode, setChatAccuracyMode] = useState(() => getStoredChatAccuracyMode());
     // Lifted here (rather than read fresh from localStorage at each call site)
     // so the same live value works regardless of login state -- ChatPage
     // consumes chatDefaultCategories as a prop, the khoj mount-effect below
@@ -366,6 +370,7 @@ const AppContent = () => {
             setMode(getInitialMode());
             setPalette(getInitialPalette());
             setAnswerFormat(getStoredAnswerFormat());
+            setChatAccuracyMode(getStoredChatAccuracyMode());
             setChatDefaultCategoriesState(getStoredChatDefaultCategories(activeCategories));
             const khojDefault = getStoredKhojDefaultCategories(activeCategories);
             setKhojDefaultCategoriesState(khojDefault);
@@ -379,6 +384,7 @@ const AppContent = () => {
         syncedSettingsKeyRef.current = syncKey;
 
         if (settings) {
+            setChatAccuracyMode(settings.chatAccuracyMode === true);
             // Server has saved values -- apply directly to in-memory state,
             // validated/clamped the same way the localStorage path always
             // was (the backend now also validates on save, but a stale
@@ -404,6 +410,7 @@ const AppContent = () => {
             setMode(getSystemDefaultMode());
             setPalette(DEFAULT_PALETTE);
             setAnswerFormat(envDefault());
+            setChatAccuracyMode(false);
             setChatDefaultCategoriesState([...activeCategories]);
             setKhojDefaultCategoriesState([...activeCategories]);
             applyContentTypesFrom(activeCategories);
@@ -602,6 +609,7 @@ const AppContent = () => {
         return {
             query,
             text_search: textSearch,
+            accuracy_mode: khojAccuracyMode,
             exact_match: exactMatch,
             exclude_words: excludeWords.split(',').map(word => word.trim()).filter(word => word.length > 0),
             categories: activeFilters.reduce((acc, f) => ({ ...acc, [f.key]: [...(acc[f.key] || []), f.value] }), {}),
@@ -628,7 +636,7 @@ const AppContent = () => {
             ...(startYear && { start_year: startYear }),
             ...(endYear && { end_year: endYear })
         };
-    }, [query, activeFilters, contentTypes, effectiveContentTypes, language, textSearch, exactMatch, excludeWords, searchType, startYear, endYear, booksPage]);
+    }, [query, activeFilters, contentTypes, effectiveContentTypes, language, textSearch, khojAccuracyMode, exactMatch, excludeWords, searchType, startYear, endYear, booksPage]);
 
     // Params for the "Export PDF" modal: the same query/filters as the active
     // search (no per-category page/enabled config -- /api/export-pdf always
@@ -636,6 +644,7 @@ const AppContent = () => {
     const buildExportParams = useCallback((category) => ({
         query,
         text_search: textSearch,
+        accuracy_mode: khojAccuracyMode,
         exact_match: exactMatch,
         exclude_words: excludeWords.split(',').map(word => word.trim()).filter(word => word.length > 0),
         categories: activeFilters.reduce((acc, f) => ({ ...acc, [f.key]: [...(acc[f.key] || []), f.value] }), {}),
@@ -644,7 +653,7 @@ const AppContent = () => {
         ...(startYear && { start_year: startYear }),
         ...(endYear && { end_year: endYear }),
         category,
-    }), [query, activeFilters, language, textSearch, exactMatch, excludeWords, searchType, startYear, endYear]);
+    }), [query, activeFilters, language, textSearch, khojAccuracyMode, exactMatch, excludeWords, searchType, startYear, endYear]);
 
     const handleSearch = useCallback(async (page = 1) => {
         if (!query.trim()) {
@@ -930,6 +939,8 @@ const AppContent = () => {
                 onSaveChatDefaultCategories={handleSaveChatDefaultCategories}
                 khojDefaultCategories={khojDefaultCategories}
                 onSaveKhojDefaultCategories={handleSaveKhojDefaultCategories}
+                chatAccuracyMode={chatAccuracyMode}
+                onSaveChatAccuracyMode={setChatAccuracyMode}
             />
 
             <div className="flex flex-col min-w-0 col-start-2 row-start-2">
@@ -953,6 +964,7 @@ const AppContent = () => {
                                 appName={appName}
                                 activeCategories={activeCategories}
                                 chatDefaultCategories={chatDefaultCategories}
+                                chatDefaultAccuracyMode={chatAccuracyMode}
                                 debugMode={debugMode}
                                 activeFilters={activeFilters}
                                 startYear={startYear}
@@ -982,14 +994,17 @@ const AppContent = () => {
                                     <div className="card p-3 shadow-sm mb-3">
                                         <InputActionBar
                                             action={
-                                                <button
-                                                    onClick={() => handleSearch(1)}
-                                                    disabled={isLoading || query.trim().length === 0}
-                                                    className="btn btn-primary h-10 w-10 rounded-full p-0 shrink-0"
-                                                    aria-label="Search"
-                                                >
-                                                    {isLoading ? <Spinner /> : <SendHorizontal size={18} strokeWidth={2.5} />}
-                                                </button>
+                                                <div className="flex items-center gap-1.5 shrink-0">
+                                                    <AccuracyModeSelect accuracyMode={khojAccuracyMode} onChange={setKhojAccuracyMode} disabled={isLoading} />
+                                                    <button
+                                                        onClick={() => handleSearch(1)}
+                                                        disabled={isLoading || query.trim().length === 0}
+                                                        className="btn btn-primary h-10 w-10 rounded-full p-0 shrink-0"
+                                                        aria-label="Search"
+                                                    >
+                                                        {isLoading ? <Spinner /> : <SendHorizontal size={18} strokeWidth={2.5} />}
+                                                    </button>
+                                                </div>
                                             }
                                         >
                                             <SearchBar

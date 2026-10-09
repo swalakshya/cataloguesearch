@@ -5,6 +5,7 @@ import { Spinner } from '../SharedComponents';
 import { InputActionBar } from '../ui';
 import ChatFilters from './ChatFilters';
 import AiDisclaimer from './AiDisclaimer';
+import AccuracyModeSelect from '../AccuracyModeSelect';
 
 // The chat input group used both in the empty-state hero and the active-chat
 // sticky bar — one component so the two stay visually identical instead of
@@ -23,6 +24,8 @@ export default function ChatComposer({
     debugMode,
     chatContentTypes,
     setChatContentTypes,
+    accuracyMode = false,
+    setAccuracyMode,
     placeholder = 'Ask anything about Jain philosophy, scriptures, or teachings...',
     showDisclaimer = true,
     // Large standalone category tiles (matching the mock) fit the spacious
@@ -74,6 +77,7 @@ export default function ChatComposer({
             <InputActionBar
                 action={
                     <div className="flex items-center gap-1.5 shrink-0">
+                        <AccuracyModeSelect accuracyMode={accuracyMode} onChange={setAccuracyMode} disabled={disabled || loading} />
                         {compact && (
                             <button
                                 type="button"

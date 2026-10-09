@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import useCatalogue from '../../hooks/useCatalogue';
+import { groupGranthEditions } from '../../utils/catalogue';
 import { CategoryEmojiIcon } from './categoryEmoji';
 
 // category keys match categoryEmoji.js's CATEGORY_EMOJI_SRC, and colorVar
@@ -39,7 +40,7 @@ export default function StatsStrip({ topAccent, spacious = false, labels }) {
     const pravachanTotal = loading ? null : rows.reduce(
         (sum, r) => sum + (r.category === 'Pravachan' && r.count !== 'compiled' ? (parseInt(r.count, 10) || 0) : 0), 0
     );
-    const granthCount = loading ? null : rows.filter((r) => r.category === 'Granth').length;
+    const granthCount = loading ? null : groupGranthEditions(rows.filter((r) => r.category === 'Granth')).length;
     const booksCount = loading ? null : rows.filter((r) => r.category === 'Books').length;
 
     const tiles = TILES(pravachanTotal, granthCount, booksCount, resolvedLabels);

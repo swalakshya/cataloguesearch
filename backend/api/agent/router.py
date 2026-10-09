@@ -13,6 +13,8 @@ from backend.common.opensearch import get_metadata, get_opensearch_client
 from backend.common.utils import get_pravachankar_display
 from backend.common.language import text_field_for_language
 from backend.search.result_ranker import ResultRanker
+from backend.search.accuracy import candidate_count, rerank_timeout
+from backend.search.context_reranking import enrich_hits, context_token_limit
 from backend.utils import JSONResponse
 from utils.logger import set_query_id, get_query_id
 
@@ -42,6 +44,7 @@ class AgentSearchRequest(BaseModel):
     page_size: int = Field(10, ge=1, le=50)
     page: int = Field(1, ge=1)
     rerank: bool = Field(True, description="Apply cross-encoder reranking")
+    accuracy_mode: bool = Field(False, description="Search 100 candidates for deeper retrieval; may take longer.")
 
 
 class AgentNavigateRequest(BaseModel):
@@ -124,6 +127,9 @@ def _chunk_from_hit(hit: Dict[str, Any], language: str) -> Dict[str, Any]:
     pravachankar = metadata.get("Pravachankar")
     if pravachankar:
         result["Pravachankar"] = get_pravachankar_display(pravachankar, language)
+    if hit.get("_rerank_context"):
+        result["rerank_context"] = {direction: _chunk_from_hit(neighbour, language)
+                                    for direction, neighbour in hit["_rerank_context"].items()}
     return result
 
 
@@ -369,6 +375,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
                 "page": payload.page,
                 "page_size": payload.page_size,
                 "rerank": payload.rerank,
+                "accuracy_mode": payload.accuracy_mode,
                 "has_anuyog": bool(payload.anuyog),
                 "has_granth": bool(payload.granth),
                 "verse_filters": {
@@ -408,7 +415,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
                 log_handle.warning("agent_search RRF produced empty embedding; returning empty results")
                 return _respond([], "rrf", False)
 
-            oversample = config._agent_config["rerank_oversample"]
+            oversample = candidate_count(payload.accuracy_mode, config._agent_config["rerank_oversample"])
 
             # BM25 leg
             bm25_body = {
@@ -455,15 +462,25 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
             log_handle.info("agent_search RRF bm25=%s knn=%s fused=%s", len(bm25_hits), len(knn_hits), len(fused))
 
             if payload.rerank and index_searcher._reranker and fused:
+                max_length = config._agent_config["rerank_max_length"]
+                if getattr(config, "CONTEXT_RERANKING", False) is True:
+                    contextual_hits = enrich_hits([item["_hit"] for item in fused], client,
+                        config.OPENSEARCH_INDEX_NAME, payload.language, payload.query,
+                        index_searcher._reranker.tokenizer, max_length)
+                    for item, contextual_hit in zip(fused, contextual_hits):
+                        item["_hit"] = contextual_hit
+                    max_length = context_token_limit(index_searcher._reranker.tokenizer, max_length)
                 sentence_pairs = [
-                    [payload.query, (item["_hit"].get("_source", {}).get(text_field, ""))[:1000]]
+                    [item["_hit"].get("_rerank_query", payload.query),
+                     item["_hit"].get("_rerank_text", (item["_hit"].get("_source", {}).get(text_field, ""))[:1000])]
                     for item in fused
                 ]
                 try:
                     rerank_scores = index_searcher._reranker.predict(
                         sentence_pairs,
                         batch_size=config._agent_config["rerank_batch_size"],
-                        max_length=config._agent_config["rerank_max_length"],
+                        max_length=max_length,
+                        timeout_seconds=rerank_timeout(payload.accuracy_mode),
                     )
                     for item, score in zip(fused, rerank_scores):
                         item["rerank_score"] = float(score)
@@ -504,7 +521,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
             log_handle.warning("agent_search produced empty embedding; returning empty results")
             return _respond([], "vector", False)
 
-        initial_fetch_size = config._agent_config["rerank_oversample"] if payload.rerank else payload.page_size
+        initial_fetch_size = candidate_count(payload.accuracy_mode, config._agent_config["rerank_oversample"]) if payload.rerank else payload.page_size
         knn_query = {"vector_embedding": {"vector": query_embedding, "k": initial_fetch_size}}
         if filters:
             knn_query["vector_embedding"]["filter"] = {"bool": {"filter": filters}}
@@ -533,10 +550,17 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
             sentence_pairs.append([payload.query, truncated_text])
 
         try:
+            max_length = config._agent_config["rerank_max_length"]
+            if getattr(config, "CONTEXT_RERANKING", False) is True:
+                hits = enrich_hits(hits, client, config.OPENSEARCH_INDEX_NAME, payload.language,
+                                  payload.query, index_searcher._reranker.tokenizer, max_length)
+                sentence_pairs = [[h["_rerank_query"], h["_rerank_text"]] for h in hits]
+                max_length = context_token_limit(index_searcher._reranker.tokenizer, max_length)
             rerank_scores = index_searcher._reranker.predict(
                 sentence_pairs,
                 batch_size=config._agent_config["rerank_batch_size"],
-                max_length=config._agent_config["rerank_max_length"],
+                max_length=max_length,
+                timeout_seconds=rerank_timeout(payload.accuracy_mode),
             )
         except Exception as rerank_exc:
             log_handle.exception("agent_search reranking failed; returning unreranked results: %s", rerank_exc)
@@ -547,7 +571,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
         for hit, score in zip(hits, rerank_scores):
             hit["rerank_score"] = score
 
-        reranked_hits = sorted(hits, key=lambda x: x["rerank_score"], reverse=True)
+        reranked_hits = sorted(hits, key=lambda x: x.get("rerank_score", float("-inf")), reverse=True)
         paginated_hits = reranked_hits[from_:from_ + payload.page_size]
         results = [_chunk_from_hit(hit, payload.language) for hit in paginated_hits]
         _shorten_results(results, request.app.state.shortener_store, request.app.state.shortener_base_url)

@@ -14,6 +14,7 @@ import { FeedbackButtons } from '../AibotFeedback';
 import { cleanAnswerText, preTokenizeCitations } from './answerFormatting';
 import { AUTH_LOGOUT_EVENT, CHAT_SESSION_STORAGE_KEY } from '../../config/chatConfig';
 import { getStoredChatDefaultCategories } from '../../config/filterDefaults';
+import { getStoredChatAccuracyMode } from '../../config/accuracyConfig';
 import { USER_ID } from '../../utils/userId';
 import { randomUUID } from '../../utils/uuid';
 import bulbEmoji from '../../assets/emoji/bulb.svg';
@@ -46,6 +47,7 @@ const ChatPage = forwardRef(function ChatPage(
         onNavigateFeedback,
         answerFormat,
         chatDefaultCategories,
+        chatDefaultAccuracyMode = false,
         remoteSessionId,
         remoteSessionNavKey,
         onSessionActivity,
@@ -62,6 +64,8 @@ const ChatPage = forwardRef(function ChatPage(
     const [chatMessages, setChatMessages] = useState([]);
     const [chatInput, setChatInput] = useState('');
     const [chatContentTypes, setChatContentTypes] = useState(() => chatDefaultCategories || activeCategories || ['Pravachan', 'Granth']);
+    const [accuracyMode, setAccuracyMode] = useState(chatDefaultAccuracyMode);
+    useEffect(() => { setAccuracyMode(chatDefaultAccuracyMode); }, [chatDefaultAccuracyMode]);
     const [expandedAnswers, setExpandedAnswers] = useState({});
     const [displayedTexts, setDisplayedTexts] = useState({});
     const [chunkTextsCache, setChunkTextsCache] = useState({});
@@ -535,6 +539,7 @@ const ChatPage = forwardRef(function ChatPage(
                 role: 'user',
                 content: message,
                 response_format: answerFormat,
+                accuracy_mode: accuracyMode,
                 filters: buildLlmFilters(),
                 client_message_id: clientMsgId,
             });
@@ -667,7 +672,8 @@ const ChatPage = forwardRef(function ChatPage(
         // is always current, updated on save) rather than keeping whatever
         // filter was active in the just-ended conversation.
         setChatContentTypes(chatDefaultCategories || activeCategories || ['Pravachan', 'Granth']);
-    }, [activeCategories, chatDefaultCategories, chatSessionId, clearPendingMessage, clearPersistedChatSession, clearRecoveryTimer, invalidateChatRuns, resetTypingState]);
+        setAccuracyMode(chatDefaultAccuracyMode);
+    }, [activeCategories, chatDefaultCategories, chatDefaultAccuracyMode, chatSessionId, clearPendingMessage, clearPersistedChatSession, clearRecoveryTimer, invalidateChatRuns, resetTypingState]);
 
     // AuthContext dispatches this right after logout — reuses the same
     // local-only reset as "New Chat" (no server delete), so a currently-open
@@ -683,6 +689,7 @@ const ChatPage = forwardRef(function ChatPage(
             // this exact point that we're offline, so read the true offline
             // default directly rather than trust that prop's timing.
             setChatContentTypes(getStoredChatDefaultCategories(activeCategories || ['Pravachan', 'Granth']));
+            setAccuracyMode(getStoredChatAccuracyMode());
         };
         window.addEventListener(AUTH_LOGOUT_EVENT, onLogout);
         return () => window.removeEventListener(AUTH_LOGOUT_EVENT, onLogout);
@@ -720,6 +727,8 @@ const ChatPage = forwardRef(function ChatPage(
                             debugMode={debugMode}
                             chatContentTypes={chatContentTypes}
                             setChatContentTypes={setChatContentTypes}
+                            accuracyMode={accuracyMode}
+                            setAccuracyMode={setAccuracyMode}
                             showDisclaimer={false}
                         />
                         <div className="w-full pt-8">
@@ -893,6 +902,8 @@ const ChatPage = forwardRef(function ChatPage(
                             chatContentTypes={chatContentTypes}
                             setChatContentTypes={setChatContentTypes}
                             compact
+                            accuracyMode={accuracyMode}
+                            setAccuracyMode={setAccuracyMode}
                             placeholder="Ask a follow-up question..."
                         />
                     </div>

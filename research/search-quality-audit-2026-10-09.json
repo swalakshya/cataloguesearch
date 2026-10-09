@@ -1,0 +1,1423 @@
+{
+  "date": "2026-10-09",
+  "instance": "local OpenSearch cataloguesearch_prod; not independently verified against production",
+  "version": "3.3.1",
+  "profile": {
+    "took": 424,
+    "timed_out": false,
+    "terminated_early": true,
+    "_shards": {
+      "total": 1,
+      "successful": 1,
+      "skipped": 0,
+      "failed": 0
+    },
+    "hits": {
+      "total": {
+        "value": 545626,
+        "relation": "eq"
+      },
+      "max_score": null,
+      "hits": []
+    },
+    "aggregations": {
+      "metadata_Author": {
+        "doc_count": 161274
+      },
+      "metadata_Anuyog": {
+        "doc_count": 512551
+      },
+      "metadata_Name": {
+        "doc_count": 545626
+      },
+      "chunk_labels_pravachan_number": {
+        "doc_count": 285098
+      },
+      "documents": {
+        "value": 1509
+      },
+      "vector_embedding": {
+        "doc_count": 510398
+      },
+      "text_content_hindi": {
+        "doc_count": 408993
+      },
+      "text_content_gujarati": {
+        "doc_count": 136633
+      },
+      "verse_id": {
+        "doc_count": 35228
+      },
+      "language": {
+        "doc_count_error_upper_bound": 0,
+        "sum_other_doc_count": 0,
+        "buckets": [
+          {
+            "key": "hi",
+            "doc_count": 408993
+          },
+          {
+            "key": "gu",
+            "doc_count": 123916
+          },
+          {
+            "key": "gu+hi",
+            "doc_count": 12717
+          }
+        ]
+      },
+      "chunk_labels_gatha": {
+        "doc_count": 96772
+      },
+      "document_id": {
+        "doc_count": 545626
+      },
+      "language_category": {
+        "doc_count_error_upper_bound": 0,
+        "sum_other_doc_count": 0,
+        "buckets": [
+          {
+            "key": "hi",
+            "doc_count": 408993,
+            "categories": {
+              "doc_count_error_upper_bound": 0,
+              "sum_other_doc_count": 0,
+              "buckets": [
+                {
+                  "key": "Pravachan",
+                  "doc_count": 257382
+                },
+                {
+                  "key": "Granth",
+                  "doc_count": 135554
+                },
+                {
+                  "key": "Books",
+                  "doc_count": 16057
+                }
+              ]
+            }
+          },
+          {
+            "key": "gu",
+            "doc_count": 123916,
+            "categories": {
+              "doc_count_error_upper_bound": 0,
+              "sum_other_doc_count": 0,
+              "buckets": [
+                {
+                  "key": "Pravachan",
+                  "doc_count": 114416
+                },
+                {
+                  "key": "Granth",
+                  "doc_count": 9500
+                }
+              ]
+            }
+          },
+          {
+            "key": "gu+hi",
+            "doc_count": 12717,
+            "categories": {
+              "doc_count_error_upper_bound": 0,
+              "sum_other_doc_count": 0,
+              "buckets": [
+                {
+                  "key": "Pravachan",
+                  "doc_count": 12717
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "metadata_author": {
+        "doc_count": 370
+      },
+      "metadata_Pravachankar": {
+        "doc_count": 384515
+      },
+      "metadata_name": {
+        "doc_count": 0
+      },
+      "verse_type": {
+        "doc_count": 35228
+      },
+      "names": {
+        "doc_count_error_upper_bound": 0,
+        "sum_other_doc_count": 0,
+        "buckets": [
+          {
+            "key": "Samaysaar",
+            "doc_count": 127092
+          },
+          {
+            "key": "Niyamsaar",
+            "doc_count": 44634
+          },
+          {
+            "key": "Pravachansaar",
+            "doc_count": 34187
+          },
+          {
+            "key": "Parmatma Prakash",
+            "doc_count": 31029
+          },
+          {
+            "key": "Asht Pahud",
+            "doc_count": 28007
+          },
+          {
+            "key": "Samaysaar Kalash Tika",
+            "doc_count": 16320
+          },
+          {
+            "key": "Panchastikaya",
+            "doc_count": 16088
+          },
+          {
+            "key": "Natak Samaysar",
+            "doc_count": 13892
+          },
+          {
+            "key": "Bahinshree Na Vachanamrut",
+            "doc_count": 13106
+          },
+          {
+            "key": "Bahinshree Tattva Charcha",
+            "doc_count": 12717
+          },
+          {
+            "key": "Moksh Marg Prakashak",
+            "doc_count": 12253
+          },
+          {
+            "key": "Shrimad Rajchandra",
+            "doc_count": 9662
+          },
+          {
+            "key": "Samadhi Tantra",
+            "doc_count": 8090
+          },
+          {
+            "key": "Bhagwati Aradhana",
+            "doc_count": 8053
+          },
+          {
+            "key": "Purusharth Siddhi Upay",
+            "doc_count": 7808
+          },
+          {
+            "key": "Pravachan Navneet",
+            "doc_count": 7387
+          },
+          {
+            "key": "Padmanandi Panchvinshati",
+            "doc_count": 6243
+          },
+          {
+            "key": "Kartikeya Anupreksha",
+            "doc_count": 5733
+          },
+          {
+            "key": "Moolachar",
+            "doc_count": 5644
+          },
+          {
+            "key": "Yogsaar",
+            "doc_count": 5164
+          },
+          {
+            "key": "Pravachansaar — Tattparyavratti",
+            "doc_count": 4824
+          },
+          {
+            "key": "Asht Sahastri",
+            "doc_count": 4703
+          },
+          {
+            "key": "Ishtopadesh",
+            "doc_count": 4445
+          },
+          {
+            "key": "Chhah Dhala",
+            "doc_count": 4305
+          },
+          {
+            "key": "Samyag Gyan Chandrika Karmkand",
+            "doc_count": 4206
+          },
+          {
+            "key": "Bruhad Dravya Sangrah",
+            "doc_count": 4064
+          },
+          {
+            "key": "Padmanandi Panchvinchhati",
+            "doc_count": 3864
+          },
+          {
+            "key": "Samyag Gyan Chandrika Jeevkand",
+            "doc_count": 3847
+          },
+          {
+            "key": "Dhanya Munidasha",
+            "doc_count": 3634
+          },
+          {
+            "key": "Ratnakarand Shravakachar",
+            "doc_count": 3629
+          },
+          {
+            "key": "Anagaar Dharmamrut",
+            "doc_count": 3518
+          },
+          {
+            "key": "Dharm Pariksha",
+            "doc_count": 3107
+          },
+          {
+            "key": "Gommatsaar Karmkand",
+            "doc_count": 2955
+          },
+          {
+            "key": "Moksha Shastra",
+            "doc_count": 2856
+          },
+          {
+            "key": "Triloksaar",
+            "doc_count": 2804
+          },
+          {
+            "key": "Gommatsaar Jeevkand",
+            "doc_count": 2583
+          },
+          {
+            "key": "Aadi Puran",
+            "doc_count": 2550
+          },
+          {
+            "key": "Gnaanarnav",
+            "doc_count": 2547
+          },
+          {
+            "key": "Bhartesh Vaibhav",
+            "doc_count": 2425
+          },
+          {
+            "key": "Panchadhyayi",
+            "doc_count": 2389
+          },
+          {
+            "key": "Padma Puran",
+            "doc_count": 2163
+          },
+          {
+            "key": "Shalaksha Purush",
+            "doc_count": 2116
+          },
+          {
+            "key": "Sudrushti Tarangani",
+            "doc_count": 1999
+          },
+          {
+            "key": "Mangal Teerth Yatra",
+            "doc_count": 1903
+          },
+          {
+            "key": "Harivansh Puran",
+            "doc_count": 1890
+          },
+          {
+            "key": "Charcha Chaitanya Ki",
+            "doc_count": 1838
+          },
+          {
+            "key": "Tattvagyan Tarangini",
+            "doc_count": 1631
+          },
+          {
+            "key": "Atmanushashan",
+            "doc_count": 1454
+          },
+          {
+            "key": "Swanubhuti Darshan",
+            "doc_count": 1429
+          },
+          {
+            "key": "Jain Tattva Mimamsa",
+            "doc_count": 1405
+          },
+          {
+            "key": "Uttar Puran",
+            "doc_count": 1346
+          },
+          {
+            "key": "Laghu Tattvasphot",
+            "doc_count": 1299
+          },
+          {
+            "key": "Panchastikaya — Tattparyavratti",
+            "doc_count": 1295
+          },
+          {
+            "key": "Samyag Gyan Chandrika Labdhisaar",
+            "doc_count": 1283
+          },
+          {
+            "key": "Parambhav Prakashak Naichakra",
+            "doc_count": 1271
+          },
+          {
+            "key": "Naychakko",
+            "doc_count": 1261
+          },
+          {
+            "key": "Sagaar Dharmamrut",
+            "doc_count": 1116
+          },
+          {
+            "key": "Gunasthan Vivechan",
+            "doc_count": 1103
+          },
+          {
+            "key": "Sarvartha Siddhi",
+            "doc_count": 1078
+          },
+          {
+            "key": "Gyan Goshthi",
+            "doc_count": 1069
+          },
+          {
+            "key": "Pandav Puran",
+            "doc_count": 1067
+          },
+          {
+            "key": "Param Adhyatm Tarangini",
+            "doc_count": 1011
+          },
+          {
+            "key": "Jain Shraman: Swaroop aur Sameeksha",
+            "doc_count": 960
+          },
+          {
+            "key": "Aapt Pariksha",
+            "doc_count": 945
+          },
+          {
+            "key": "Shrenik Charitra",
+            "doc_count": 924
+          },
+          {
+            "key": "Bhav Deepika",
+            "doc_count": 901
+          },
+          {
+            "key": "Samyag Gyan Chandrika Kshapanasaar",
+            "doc_count": 832
+          },
+          {
+            "key": "Vachanamrut Sar",
+            "doc_count": 813
+          },
+          {
+            "key": "Shantinath Puran",
+            "doc_count": 759
+          },
+          {
+            "key": "Jain Siddhant Praveshika",
+            "doc_count": 743
+          },
+          {
+            "key": "Dravya Drushti Prakash",
+            "doc_count": 736
+          },
+          {
+            "key": "Teen Lok",
+            "doc_count": 728
+          },
+          {
+            "key": "Panchkalyanak Pravachan",
+            "doc_count": 720
+          },
+          {
+            "key": "Dharm Ki Kriya",
+            "doc_count": 704
+          },
+          {
+            "key": "Varasanuvekkha",
+            "doc_count": 681
+          },
+          {
+            "key": "Jeevan ka Aadhar — Samadhi",
+            "doc_count": 677
+          },
+          {
+            "key": "Adhyatma Kamal Martand",
+            "doc_count": 669
+          },
+          {
+            "key": "Jain Siddhant Darpan",
+            "doc_count": 666
+          },
+          {
+            "key": "Updesh Siddhant Ratnamala",
+            "doc_count": 652
+          },
+          {
+            "key": "Dharm ke Das Lakshan",
+            "doc_count": 646
+          },
+          {
+            "key": "Lok Vibhag",
+            "doc_count": 631
+          },
+          {
+            "key": "Rishabh Stotra",
+            "doc_count": 621
+          },
+          {
+            "key": "Karmchakra se Siddhchakra",
+            "doc_count": 595
+          },
+          {
+            "key": "Jambu Swami Charitra",
+            "doc_count": 584
+          },
+          {
+            "key": "Drushti Ke Nidhan",
+            "doc_count": 552
+          },
+          {
+            "key": "Bhaktamar Stotra",
+            "doc_count": 547
+          },
+          {
+            "key": "Paramagam Saar",
+            "doc_count": 546
+          },
+          {
+            "key": "Mool ma Bhool",
+            "doc_count": 533
+          },
+          {
+            "key": "Aaradhansaar",
+            "doc_count": 521
+          },
+          {
+            "key": "Amrutashiti",
+            "doc_count": 514
+          },
+          {
+            "key": "Aapt Mimamsa",
+            "doc_count": 509
+          },
+          {
+            "key": "Tattvanushashan",
+            "doc_count": 482
+          },
+          {
+            "key": "Mokshmarg Sanjeevani",
+            "doc_count": 467
+          },
+          {
+            "key": "Chaitanya ki Surabhi Pankhuriyan",
+            "doc_count": 433
+          },
+          {
+            "key": "Rayansaar",
+            "doc_count": 433
+          },
+          {
+            "key": "Charcha Sangrah",
+            "doc_count": 425
+          },
+          {
+            "key": "Jain Kshitij Ke Udit Nakshatra",
+            "doc_count": 425
+          },
+          {
+            "key": "Chaitanya Vihar",
+            "doc_count": 417
+          },
+          {
+            "key": "Songadh Pratishtha Mahotsav Tattvacharcha",
+            "doc_count": 416
+          },
+          {
+            "key": "Krambaddh Paryay",
+            "doc_count": 403
+          },
+          {
+            "key": "Jain Parva Charcha",
+            "doc_count": 370
+          },
+          {
+            "key": "Acharya Kundkund Dev",
+            "doc_count": 368
+          },
+          {
+            "key": "Jain Darshan Sameeksha",
+            "doc_count": 367
+          },
+          {
+            "key": "Swatmaanubhavmanan Avam Bhasha Vaakyaavalee",
+            "doc_count": 351
+          },
+          {
+            "key": "Aatmavlokan",
+            "doc_count": 331
+          },
+          {
+            "key": "Anubhav Anand",
+            "doc_count": 329
+          },
+          {
+            "key": "Chid Vilas",
+            "doc_count": 318
+          },
+          {
+            "key": "Samyag Gyan Deepika",
+            "doc_count": 316
+          },
+          {
+            "key": "Satta Swaroop",
+            "doc_count": 309
+          },
+          {
+            "key": "Aalap Paddhati",
+            "doc_count": 301
+          },
+          {
+            "key": "Bhagwan Hanuman",
+            "doc_count": 286
+          },
+          {
+            "key": "Bhagwan Shantinath",
+            "doc_count": 259
+          },
+          {
+            "key": "Gurudevshri ke Vachanamrut",
+            "doc_count": 252
+          },
+          {
+            "key": "Sukumal Charitra",
+            "doc_count": 227
+          },
+          {
+            "key": "Namokaar Mahamantra",
+            "doc_count": 225
+          },
+          {
+            "key": "Darshansar",
+            "doc_count": 216
+          },
+          {
+            "key": "Samudghat",
+            "doc_count": 210
+          },
+          {
+            "key": "Gyan Darpan",
+            "doc_count": 203
+          },
+          {
+            "key": "Gautam Charitra",
+            "doc_count": 200
+          },
+          {
+            "key": "Maharani Chelna",
+            "doc_count": 187
+          },
+          {
+            "key": "Bhed Vigyan",
+            "doc_count": 182
+          },
+          {
+            "key": "Anubhav Prakash",
+            "doc_count": 178
+          },
+          {
+            "key": "Tattva Saar",
+            "doc_count": 156
+          },
+          {
+            "key": "Nimitt Upadaan",
+            "doc_count": 148
+          },
+          {
+            "key": "Bhagwan Parshvanath",
+            "doc_count": 138
+          },
+          {
+            "key": "Kaal Chakra: Jain Darshan ke Paripeksha Mein",
+            "doc_count": 138
+          },
+          {
+            "key": "Parmatma Puran",
+            "doc_count": 124
+          },
+          {
+            "key": "Adhyatma Parag",
+            "doc_count": 122
+          },
+          {
+            "key": "Jin Poojan Rahasya",
+            "doc_count": 106
+          },
+          {
+            "key": "Das Lakshan Parv",
+            "doc_count": 89
+          },
+          {
+            "key": "Shakahaar",
+            "doc_count": 65
+          },
+          {
+            "key": "Shrut Panchmi",
+            "doc_count": 64
+          },
+          {
+            "key": "Kshama",
+            "doc_count": 55
+          },
+          {
+            "key": "Veer Nirvan Parv",
+            "doc_count": 48
+          },
+          {
+            "key": "Veer Shasan Jayanti",
+            "doc_count": 41
+          },
+          {
+            "key": "Moksh Marg Prakashak Parishisht",
+            "doc_count": 35
+          },
+          {
+            "key": "Anekant Syadvad",
+            "doc_count": 34
+          },
+          {
+            "key": "Swarnapuri par Swarna Purush ka Uday",
+            "doc_count": 34
+          },
+          {
+            "key": "Veer Nirvanotsav",
+            "doc_count": 29
+          },
+          {
+            "key": "Savaiya Teeka",
+            "doc_count": 14
+          }
+        ]
+      },
+      "metadata_sub_section_name": {
+        "doc_count": 114262
+      },
+      "metadata_Series": {
+        "doc_count": 350913
+      },
+      "files": {
+        "value": 366
+      },
+      "categories": {
+        "doc_count_error_upper_bound": 0,
+        "sum_other_doc_count": 0,
+        "buckets": [
+          {
+            "key": "Pravachan",
+            "doc_count": 384515
+          },
+          {
+            "key": "Granth",
+            "doc_count": 145054
+          },
+          {
+            "key": "Books",
+            "doc_count": 16057
+          }
+        ]
+      },
+      "authors": {
+        "doc_count_error_upper_bound": 0,
+        "sum_other_doc_count": 0,
+        "buckets": [
+          {
+            "key": "Acharya Kund Kund",
+            "doc_count": 19194
+          },
+          {
+            "key": "Acharya Nemichand Siddhant Chakravarti",
+            "doc_count": 14663
+          },
+          {
+            "key": "Shrimad Rajchandra",
+            "doc_count": 9662
+          },
+          {
+            "key": "Acharya Shivarya",
+            "doc_count": 8053
+          },
+          {
+            "key": "Acharya Vidyanand",
+            "doc_count": 5648
+          },
+          {
+            "key": "Acharya Vattakera",
+            "doc_count": 5644
+          },
+          {
+            "key": "Pandit Todarmal",
+            "doc_count": 5362
+          },
+          {
+            "key": "Acharya Amitgati",
+            "doc_count": 4996
+          },
+          {
+            "key": "Pandit Ashadhar",
+            "doc_count": 4634
+          },
+          {
+            "key": "Acharya Shubhchandra",
+            "doc_count": 4625
+          },
+          {
+            "key": "Acharya Jinsen",
+            "doc_count": 4440
+          },
+          {
+            "key": "Acharya Samant Bhadra",
+            "doc_count": 4138
+          },
+          {
+            "key": "Acharya Padmanandi",
+            "doc_count": 3864
+          },
+          {
+            "key": "Babu Jugal Kishore Jain 'Yugal'",
+            "doc_count": 3840
+          },
+          {
+            "key": "Acharya Amritchandra",
+            "doc_count": 3193
+          },
+          {
+            "key": "Dr. Sanjeev Godha",
+            "doc_count": 2997
+          },
+          {
+            "key": "Muni Yogindu Dev",
+            "doc_count": 2908
+          },
+          {
+            "key": "Acharya Umaswami",
+            "doc_count": 2856
+          },
+          {
+            "key": "Acharya Gunbhadra",
+            "doc_count": 2800
+          },
+          {
+            "key": "Br. Harilal Jain",
+            "doc_count": 2773
+          },
+          {
+            "key": "Shri Kanji Swami",
+            "doc_count": 2680
+          },
+          {
+            "key": "Dr. Hukumchand Bharill",
+            "doc_count": 2567
+          },
+          {
+            "key": "Pujyapaad Swami",
+            "doc_count": 2514
+          },
+          {
+            "key": "Pandit Ratanchand Bharill",
+            "doc_count": 2447
+          },
+          {
+            "key": "Mahakavi Ratnakar Varni",
+            "doc_count": 2425
+          },
+          {
+            "key": "Pandit Deepchand Kasliwal",
+            "doc_count": 2398
+          },
+          {
+            "key": "Unknown",
+            "doc_count": 2389
+          },
+          {
+            "key": "Acharya Ravisen",
+            "doc_count": 2163
+          },
+          {
+            "key": "Swami Kartikeya",
+            "doc_count": 2089
+          },
+          {
+            "key": "Pandit Tekchand",
+            "doc_count": 1999
+          },
+          {
+            "key": "Bhattarak Shri Gyanbhushan",
+            "doc_count": 1631
+          },
+          {
+            "key": "Bahinshree Champaben",
+            "doc_count": 1429
+          },
+          {
+            "key": "Pandit Gopaldas Baraiyya",
+            "doc_count": 1409
+          },
+          {
+            "key": "Pandit Fulchand Siddhant Shastri",
+            "doc_count": 1405
+          },
+          {
+            "key": "Mailla Dhawal",
+            "doc_count": 1261
+          },
+          {
+            "key": "Pandit Rajmal Pandey",
+            "doc_count": 1253
+          },
+          {
+            "key": "Acharya Devsen",
+            "doc_count": 1194
+          },
+          {
+            "key": "Br. Yashpal Jain",
+            "doc_count": 1103
+          },
+          {
+            "key": "Gurudev Kanji Swami",
+            "doc_count": 1085
+          },
+          {
+            "key": "Acharya Sakalkirti",
+            "doc_count": 986
+          },
+          {
+            "key": "Dr. Yogesh Chandra Jain",
+            "doc_count": 960
+          },
+          {
+            "key": "Bhattarak Shubhchandra",
+            "doc_count": 924
+          },
+          {
+            "key": "Shrimad Nemichand Siddhant Dev",
+            "doc_count": 853
+          },
+          {
+            "key": "Nihal Chandra Sogani",
+            "doc_count": 736
+          },
+          {
+            "key": "Shri Ramji Manekchand Doshi",
+            "doc_count": 704
+          },
+          {
+            "key": "Dharmdas Kshullak",
+            "doc_count": 667
+          },
+          {
+            "key": "Shri Nemichand Bhandari",
+            "doc_count": 652
+          },
+          {
+            "key": "Acharya Simhasuri",
+            "doc_count": 631
+          },
+          {
+            "key": "Pandit Daulatram",
+            "doc_count": 489
+          },
+          {
+            "key": "Muni Nagsen",
+            "doc_count": 482
+          },
+          {
+            "key": "Br. Raimall",
+            "doc_count": 425
+          },
+          {
+            "key": "Shri M. B. Patil",
+            "doc_count": 368
+          },
+          {
+            "key": "Pandit Bhagchandra Chhajed",
+            "doc_count": 309
+          },
+          {
+            "key": "Mandalacharya Shri Dharmchandra",
+            "doc_count": 200
+          },
+          {
+            "key": "Sanklit",
+            "doc_count": 122
+          },
+          {
+            "key": "Pandit Banarasidas",
+            "doc_count": 35
+          }
+        ]
+      }
+    }
+  },
+  "coverage_checks": {
+    "took": 183,
+    "timed_out": false,
+    "terminated_early": true,
+    "_shards": {
+      "total": 1,
+      "successful": 1,
+      "skipped": 0,
+      "failed": 0
+    },
+    "hits": {
+      "total": {
+        "value": 545626,
+        "relation": "eq"
+      },
+      "max_score": null,
+      "hits": []
+    },
+    "aggregations": {
+      "verse_with_vector": {
+        "doc_count": 0,
+        "categories": {
+          "doc_count_error_upper_bound": 0,
+          "sum_other_doc_count": 0,
+          "buckets": []
+        }
+      },
+      "no_vector": {
+        "doc_count": 35228,
+        "categories": {
+          "doc_count_error_upper_bound": 0,
+          "sum_other_doc_count": 0,
+          "buckets": [
+            {
+              "key": "Granth",
+              "doc_count": 35170
+            },
+            {
+              "key": "Pravachan",
+              "doc_count": 58
+            }
+          ]
+        }
+      },
+      "mixed_matches_gu_term": {
+        "doc_count": 12717,
+        "categories": {
+          "doc_count_error_upper_bound": 0,
+          "sum_other_doc_count": 0,
+          "buckets": [
+            {
+              "key": "Pravachan",
+              "doc_count": 12717
+            }
+          ]
+        }
+      },
+      "hi_term_no_hi_text": {
+        "doc_count": 12717,
+        "categories": {
+          "doc_count_error_upper_bound": 0,
+          "sum_other_doc_count": 0,
+          "buckets": [
+            {
+              "key": "Pravachan",
+              "doc_count": 12717
+            }
+          ]
+        }
+      },
+      "mixed": {
+        "doc_count": 12717,
+        "categories": {
+          "doc_count_error_upper_bound": 0,
+          "sum_other_doc_count": 0,
+          "buckets": [
+            {
+              "key": "Pravachan",
+              "doc_count": 12717
+            }
+          ]
+        }
+      },
+      "mixed_matches_hi_term": {
+        "doc_count": 12717,
+        "categories": {
+          "doc_count_error_upper_bound": 0,
+          "sum_other_doc_count": 0,
+          "buckets": [
+            {
+              "key": "Pravachan",
+              "doc_count": 12717
+            }
+          ]
+        }
+      },
+      "no_vector_no_verse": {
+        "doc_count": 0,
+        "categories": {
+          "doc_count_error_upper_bound": 0,
+          "sum_other_doc_count": 0,
+          "buckets": []
+        }
+      }
+    }
+  },
+  "stratified_sample_summary": [
+    {
+      "language": "hi",
+      "category": "Pravachan",
+      "population": 257382,
+      "sample": 1000,
+      "chars_p10": 97,
+      "chars_median": 403,
+      "chars_p90": 794,
+      "chars_p99": 944,
+      "words_median": 76,
+      "words_p90": 152,
+      "over_1000_chars": 1,
+      "under_30_words": 207,
+      "sample_exact_duplicate_excess": 1,
+      "short_examples": [
+        "सर्वविशुद्धि द्वार, पद ७० से ७४",
+        "सर्वविशुद्धि द्वार, पद ९३ से ९७",
+        "सर्वविशुद्धि द्वार, पद १०७ - १०८",
+        "सर्वविशुद्द्रि द्वारा पद ७५ से ८१",
+        "सर्वविशुद्ध्रि द्वार, पद ८२ से ८७"
+      ]
+    },
+    {
+      "language": "hi",
+      "category": "Granth",
+      "population": 135554,
+      "sample": 1000,
+      "chars_p10": 135,
+      "chars_median": 542,
+      "chars_p90": 994,
+      "chars_p99": 1134,
+      "words_median": 102,
+      "words_p90": 162,
+      "over_1000_chars": 91,
+      "under_30_words": 151,
+      "sample_exact_duplicate_excess": 0,
+      "short_examples": [
+        "रतलचूल को कुमार ने छोड़ दिया",
+        "उत्तर में मेरी कथा भी सुनो--",
+        "भावदेव भवदेव के जीव विदेह में",
+        "जम्बूकुमार का हाथी को वश करना",
+        "विद्युच्चर का समझाना व कथा कहना"
+      ]
+    },
+    {
+      "language": "hi",
+      "category": "Books",
+      "population": 16057,
+      "sample": 1000,
+      "chars_p10": 177,
+      "chars_median": 497,
+      "chars_p90": 847,
+      "chars_p99": 946,
+      "words_median": 91,
+      "words_p90": 160,
+      "over_1000_chars": 2,
+      "under_30_words": 84,
+      "sample_exact_duplicate_excess": 0,
+      "short_examples": [
+        "शिलालेख नं. 64 शक संवत लगभग 1085",
+        "देखो, प्रवचनसार, ८१, ८२ गाथाएँ।\n३२६",
+        "इस उद्धरण से दो तथ्य स्पष्ट होते हैं—",
+        "इसे और भी स्पष्ट करते हुए वहाँ लिखा है—",
+        "इस प्रकार श्रमण ईर्या समिति का पालन करते है।"
+      ]
+    },
+    {
+      "language": "gu",
+      "category": "Pravachan",
+      "population": 114416,
+      "sample": 1000,
+      "chars_p10": 177,
+      "chars_median": 606,
+      "chars_p90": 903,
+      "chars_p99": 988,
+      "words_median": 105,
+      "words_p90": 156,
+      "over_1000_chars": 8,
+      "under_30_words": 97,
+      "sample_exact_duplicate_excess": 0,
+      "short_examples": [
+        ":- એ તો જ્ઞાનમાં આવે છે.",
+        "હું નિવૃત્તિ લઈશ. લીધા પછી થઈ",
+        "હજી નય કોને કહેવો એની ખબર ન હોય.",
+        "મુમુક્ષુ એ લોકો પણ અનિયતનું કહે છે.",
+        "મુમુક્ષુ:- પરમ ગુરુ...\nઉત્તર:- હા ઈ."
+      ]
+    },
+    {
+      "language": "gu",
+      "category": "Granth",
+      "population": 9500,
+      "sample": 1000,
+      "chars_p10": 146,
+      "chars_median": 807,
+      "chars_p90": 1017,
+      "chars_p99": 1119,
+      "words_median": 136,
+      "words_p90": 166,
+      "over_1000_chars": 143,
+      "under_30_words": 123,
+      "sample_exact_duplicate_excess": 0,
+      "short_examples": [
+        "છે, તે જ ગુણી કહેવાય છે.",
+        "નથી છોડતાં, તેઓ જ મૂખ છે.",
+        "ખૂબ જ જલ્દી કરી લેવાં જોઈએ.",
+        "તમે ક્યાં છો? મારી રક્ષા કરો.",
+        "નથી કરતાં તે જ નિદ્રાધીન કહેવાય છે."
+      ]
+    },
+    {
+      "language": "gu+hi",
+      "category": "Pravachan",
+      "population": 12717,
+      "sample": 1000,
+      "chars_p10": 122,
+      "chars_median": 539,
+      "chars_p90": 908,
+      "chars_p99": 993,
+      "words_median": 99,
+      "words_p90": 166,
+      "over_1000_chars": 9,
+      "under_30_words": 141,
+      "sample_exact_duplicate_excess": 0,
+      "short_examples": [
+        "યથાર્થ હૌય તો આગળ જાય છે.",
+        "થઈને કંઈ કામ તો થતું નથી?",
+        "થોડો દોષ નથી, મોટો દોષ છે.",
+        "તો તત્ત્વની મોટી ભૂલ થાય છે.",
+        "એનો યથાર્થ માર્ગ પ્રગટ થાય છે."
+      ]
+    }
+  ],
+  "token_length_checks": [
+    {
+      "language": "hi",
+      "category": "Pravachan",
+      "n": 1000,
+      "pairs_over512": 0,
+      "max_pair_tokens": 369,
+      "median_pair_tokens": 148,
+      "under30words": 207,
+      "over1000chars": 1,
+      "duplicate_excess": 1
+    },
+    {
+      "language": "hi",
+      "category": "Granth",
+      "n": 1000,
+      "pairs_over512": 0,
+      "max_pair_tokens": 421,
+      "median_pair_tokens": 179,
+      "under30words": 151,
+      "over1000chars": 91,
+      "duplicate_excess": 0
+    },
+    {
+      "language": "hi",
+      "category": "Books",
+      "n": 1000,
+      "pairs_over512": 0,
+      "max_pair_tokens": 326,
+      "median_pair_tokens": 156,
+      "under30words": 84,
+      "over1000chars": 2,
+      "duplicate_excess": 0
+    },
+    {
+      "language": "gu",
+      "category": "Pravachan",
+      "n": 1000,
+      "pairs_over512": 0,
+      "max_pair_tokens": 431,
+      "median_pair_tokens": 234,
+      "under30words": 97,
+      "over1000chars": 8,
+      "duplicate_excess": 0
+    },
+    {
+      "language": "gu",
+      "category": "Granth",
+      "n": 1000,
+      "pairs_over512": 0,
+      "max_pair_tokens": 502,
+      "median_pair_tokens": 298,
+      "under30words": 123,
+      "over1000chars": 143,
+      "duplicate_excess": 0
+    },
+    {
+      "language": "gu+hi",
+      "category": "Pravachan",
+      "n": 1000,
+      "pairs_over512": 0,
+      "max_pair_tokens": 404,
+      "median_pair_tokens": 199,
+      "under30words": 141,
+      "over1000chars": 9,
+      "duplicate_excess": 0
+    }
+  ],
+  "active_api_config": {
+    "search_mode": "auto",
+    "rerank_oversample": 40,
+    "ef_search": 128,
+    "rerank_max_length": 1500
+  },
+  "natural_query_probe": {
+    "query": "निमित्त उपादान का संबंध",
+    "vector_k": 200,
+    "ef_search": 512,
+    "bm25_k": 40,
+    "reranker": "bge-reranker-base ONNX",
+    "diagnostic_rerank_max_length": 512,
+    "local_rerank_seconds": 26.357537000003504,
+    "vector_top40_under30words": 23,
+    "bm25_top40_not_in_vector_top40": 36,
+    "reranker_top10_from_beyond_vector40": 8,
+    "rrf_top80_contains_reference_reranker_top10": 5,
+    "preferred_passages": [
+      {
+        "chunk_id": "5bfc9e7b-0424-5b63-93ef-bd389dd95c36_p119_para13",
+        "vector_rank": 16,
+        "rerank_score": 0.9996472597122192,
+        "title": "Mool ma Bhool",
+        "page": 119,
+        "text": "उपादान अर्थात्‌ निश्चय और निमित्त अर्थात्‌ व्यवहार। उपादान तो स्व है और निमित्त पर है अर्थात्‌ स्व निश्चय है और पर व्यवहार है, जो द्रव्य स्वयं कार्यरूप होता है वह द्रव्य कार्यमें निश्चय है और जब स्वयं कार्यरूप हो रहा हो तब अनुकूल परवस्तुके ऊपर \"निमित्त'का आरोप करना सो व्यवहार है। इसप्रकार निमित्त केवल उपचार मात्र है। इस सम्बन्धमें श्रीपूज्यपादस्वामीने कहा है कि--"
+      },
+      {
+        "chunk_id": "737709ff-88b0-50ca-a24c-83c64da813f8_p149_para15",
+        "vector_rank": 14,
+        "rerank_score": 0.9995526671409607,
+        "title": "Chaitanya Vihar",
+        "page": 149,
+        "text": "निमित्त-उपादान-संबंध के नानारूप एक ही पदार्थ एक ही समय में'निमित्त'भी होता है और'उपादान' भी होता है। जैसे दीपक का प्रकाश किसी व्यक्ति के पढ़ने में'निमित्त' है। यहाँ व्यक्ति'उपादान'और दीपक'निमित्त'है, उसी समय दीपक \"उपादान'और तेल बाती उसके'निमित्त'हैं। इसप्रकार एक ही पदार्थ एक ही समय में'उपादान'भी होता है और'निमित्त'भी। एक-निमित्त अनेक-उपादान-कभी एक पदार्थ निमित्त होता है और उपादान अनेक होते हैं; जैसे सूर्य निमित्त और जागनेवाले लोग अथवा खिलनेवाले कमल उपादान। एक अध्यापक निमित्त और अनेक विद्यार्थी उपादान अथवा धर्म या अधर्मद्रव्य निमित्त और अनेक जीव-पुद्गल की गमन/स्थिति-क्रियाओं की दृष्टि से वे उपादान।"
+      },
+      {
+        "chunk_id": "b661df57-ee78-51f6-abfb-d68c03910fa8_p112_para27",
+        "vector_rank": 137,
+        "rerank_score": 0.9993529915809631,
+        "title": "Jain Kshitij Ke Udit Nakshatra",
+        "page": 112,
+        "text": "निमित्त- उपादान के संबंध में जगत की भ्रोति यह है कि व्यक्ति अपनी भूल से उत्पन्न अपने दोषों का कारण उस पदार्थ को घोषित कर बैठता है, जो उस समय कार्य के साथ मात्र विद्यमान रहता है और इसप्रकार स्वयं निर्दोष हो जाना चाहता है। किन्तु जैसे एक चोर अपने चौर्य-कर्म का आरोप चाँदनी को देकर दण्ड-मुक्त नहीं हो सकता, इसी प्रकार अपने उपादान से उत्पन्न-दोष का भार निमित्त पर रखने की चेष्टा आत्मा में उत्तरोत्तर-विकार तथा दुःख का संचय करती है; क्योंकि इस प्रवत्ति में स्वदोष-दर्शन तथा आत्म-निरीक्षण के लिए अवकाश ही नहीं है।"
+      },
+      {
+        "chunk_id": "d299f0d6-831a-5b1b-95f0-34d91865859d_p127_para333",
+        "vector_rank": 125,
+        "rerank_score": 0.9993035793304443,
+        "title": "Naychakko",
+        "page": 127,
+        "text": "अतः निमित्तके द्वारा उपादानमें कोई शक्ति तो उत्पन्न नहीं की जा सकती। अपने-अपने योग्य शक्ति तो उपादानमें रहती ही है। जब उपादान अपनी योग्यताके अनुरूप कार्यरूप परिणत होनेके अभिमुख होता है तो जो उसमें सहायक होता है उसे निमित्त कहा जाता है। अकलंकदेवने अपने'तत्त्वार्थावार्तिक'में उपादान और निमित्तकी इस व्यवस्थाको इसी प्रकार स्वीकार किया है—\nइसका अर्थ ऊपर लिख आये हैं। इसमें दण्ड, चक्र और कुम्हारके प्रयत्नको निमित्त मात्र माना है किन्तु कब? जब मिट्टी स्वयं अपने अन्दरमें घटलरूप परिणमनके अभिमुख हो। अतः उपादानका परिणमन निमित्ताधीन नहीं है, उपादानका परिणमन उपादानके अधीन है। जब उपादान स्वयं कार्याभिमुख होता है तो निमित्त निमित्त होता है। व्यवहार दृष्टिसे हमें भले ही ऐसा लगे कि उपादानका परिणमन निमित्ताधीन\nहैं, किंतु परमार्थ दृष्टिसे अन्यका परिणमन अद्युनातीत होता ही नहीं। यदि ऐसा हो तो वस्तुव्यवस्था ही गड़बड़ा जायेगी।"
+      },
+      {
+        "chunk_id": "564cdadb-4ab7-51c5-860e-b014a99f9cc7_p157_para0",
+        "vector_rank": 51,
+        "rerank_score": 0.9988968372344971,
+        "title": "Chaitanya Vihar",
+        "page": 157,
+        "text": "\"उपादान'और \"निमित्त'वस्तुतः किसी एक या पृथक्‌ू-पृथक्‌ पदार्थों के कोई स्थायी नाम नहीं है, किन्तु अभिप्राय-विशेष से प्रदत्त दो संज्ञायें हैं। विश्व के सभी पदार्थों पर यह नियम लागू होता है। विश्व के सभी पदार्थ अपनी अपनी स्वाधीन-सीमा के अन्तर्गत रहते हुए भी परस्पर पृथक्‌ू-पृथक्‌ निमित्त-उपादान-भाव की सहज- श्रृंखला में आते हैं। यथा- अनन्तरपूर्व-पर्याय विशिष्ट प्रत्येक द्रव्य को'उपादान'कहते हैं। और उपादान से होने वाले कार्यों के साथ उससे भिन्‍न एक या एक से अधिक अन्य जिन-पदार्थों की बाह्य-व्याप्ति होती है, उन्हें'निमित्त' कहते हैं। तात्पर्य यह है कि विवक्षित-कार्य के साथ जिसकी अर्न्तव्याप्ति होती है, उसकी'उपादान'संज्ञा है और जिसकी बाह्य-व्याप्ति होती है, उसमें'निमित्त -व्यवहार होता है (समयसार गाथा 84 आत्मख्याति टीका)। ऐसा वस्तुस्वभाव है कि प्रत्येक कार्य में बाह्य-आशभ्यन्तर- उपाधि की समग्रता होती है। इसी तथ्य को स्पष्ट करते हुए आचार्य समन्दभद्र'स्वंयम्भूस्त्रोत'में कहते हैं -"
+      },
+      {
+        "chunk_id": "737709ff-88b0-50ca-a24c-83c64da813f8_p154_para23",
+        "vector_rank": 78,
+        "rerank_score": 0.9985313415527344,
+        "title": "Chaitanya Vihar",
+        "page": 154,
+        "text": "उपादान-निमित्त के संबंध में एक विकल्प यह भी किया जाता है कि पदार्थों की शुद्ध-अवस्थायें तो निमित्त-निरपेक्ष होती हैं और अशुद्ध- अवस्थायें निमित्त-सापेक्ष। किन्तु यह ठीक नहीं है, वास्तव में सभी शुद्धाशुद्ध-अवस्थायें निमित्त-निरपेक्ष और निमित्त-सापेक्ष होती हैं। निमित्त-निरपेक्ष तो इस अर्थ में होती हैं, कि निमित्त विद्यमान रहते हुए भी उन्हें निमित्त से अपने लिए कुछ लेना नहीं पड़ता। उन्हें सब कुछ अपने उपादान में से ही मिलता है। और निमित्त-सापेक्ष इसलिए होती हैं कि प्रत्येक पदार्थ की प्रत्येक पर्याय में जगत्‌ का कोई न कोई पदार्थ अवश्य निमित्त होता है। वास्तव में शुद्ध-पर्यायों को निमित्त-निरपेक्ष उन निमित्तों की अपेक्षा से कहा जाता है, जो अशुद्ध-दशा के निमित्त थे और शुद्ध-दशा में जिनका निमित्त के रूप में अभाव हो जाता है। फिर भी आकाश-कालादि, शुद्ध-पदार्थ तो पदार्थों की शुद्ध -दशाओं में अनंतकाल तक निमित्त बने ही रहते हैं। अशुद्ध-दशा को निमित्त- सापेक्ष कहने में यदि उसे'निमित्तकृत'कहने का अभिप्राय निहित हो, तो इस अभिप्राय में बड़े अनर्थों को अवकाश है।"
+      },
+      {
+        "chunk_id": "fe4ec7b8-3979-54a4-91bd-e6c9dca46548_p18_para23",
+        "vector_rank": 61,
+        "rerank_score": 0.9983829259872437,
+        "title": "Mool ma Bhool",
+        "page": 18,
+        "text": "आत्माके अन्तरड़मेंसे आत्माके गुणोंको ग्रहण किया जा सकता है इसलिये आत्मा उपादान है, जिसमेंसे गुणका ग्रहण हो वह उपादान है। चिदानन्द भगवान आत्मा अपनी अनन्त शक्तिसे देहमें विराजता है, उसे पहचानकर उसमेंसे मुक्तिका माल निकालना है। यहाँ उपादानका स्वरूप बताया गया है। अब निमित्तका स्वरूप बताते हैं:-- \"है निमित्त पर योग तें'---अर्थात्‌ जब आत्मा अपने स्वरूपकी पहिचान करता है तब जो सच्चे देव, शास्त्र, गुरु संयोगरूपमें उपस्थित हों वे निमित्त कहलाते हैं। उपादान-निमित्तका यह सम्बन्ध अनादिकालीन है, सिद्धदशामें भी आत्माकी शक्ति उपादान है और स्थितमें अधर्मद्रव्य, परिणमनमें कालद्रव्य इत्यादि निमित्त हैं। उपादान और निमित्त यह दोनों अनादिकालीन हैं।"
+      },
+      {
+        "chunk_id": "1dcbb5e1-4857-5a4e-82cd-f3cd9db81830_p42_para21",
+        "vector_rank": 53,
+        "rerank_score": 0.9982372522354126,
+        "title": "Songadh Pratishtha Mahotsav Tattvacharcha",
+        "page": 42,
+        "text": "वह प्रत्यक्ष सदगुरु सम नहीं यह आता है, प्रत्यक्ष का उपकार है। क्योंकि अनादि से स्वयं चैतन्यद्रव्य शुद्ध होने पर भी जब उसकी पर्याय पलटने का पुरुषार्थ होता है तभी देव और गुरु का निमित्त होता है। ऐसा निमित्त-उपादान का सम्बन्ध है। प्रत्येक द्रव्य स्वतंत्र होने पर भी ऐसा निमित्त-उपादान का संबंध होता है। अर्थात्‌ पर्याय का निमित्त- नैमित्तिक का कैसा सम्बन्ध है। यह ज्ञान में रखकर उसे प्रत्येक द्रव्य स्वतंत्र है। इस प्रकार की उसकी द्रव्य पर दृष्टि और इस प्रकार का वह प्रत्यक्ष सदगुरु सम नहीं यह आता है, प्रत्यक्ष का उपकार है। क्योंकि अनादि से स्वयं चैतन्यद्रव्य शुद्ध होने पर भी जब उसकी पर्याय पलटने का पुरुषार्थ होता है तभी देव और गुरु का निमित्त होता है। ऐसा निमित्त-उपादान का सम्बन्ध है। प्रत्येक द्रव्य स्वतंत्र होने पर भी ऐसा निमित्त-उपादान का संबंध होता है। अर्थात्‌ पर्याय का निमित्त- नैमित्तिक का कैसा सम्बन्ध है। यह ज्ञान में रखकर उसे प्रत्येक द्रव्य स्वतंत्र है।"
+      },
+      {
+        "chunk_id": "737709ff-88b0-50ca-a24c-83c64da813f8_p144_para3",
+        "vector_rank": 121,
+        "rerank_score": 0.9978244304656982,
+        "title": "Chaitanya Vihar",
+        "page": 144,
+        "text": "कार्य की उत्पत्ति में निमित्त का योग स्वीकार न करने पर एकांत का प्रसंग आता हो, ऐसी बात नहीं है। अनुकूल-विद्यमानता के अर्थ में तो निमित्त का योग निमित्त-उपादान-संबंध में सदा ही स्वीकृत होता है और व्यवहार-नयात्मक कथन में ये सदा ही उपादान'गौण'और निमित्त'मुख्य'रहता है। यहाँ तक कि उपादान में स्वशक्ति से निरपेक्ष- भाव से उत्पन्न-कार्य के कर्तृत्व का संपूर्ण- श्रेय ही'कुंभकार ने घट बनाया'तथा'कुम्हार न होता तो घड़ा कैसे बनता\" आदि शिष्टाचार तथा सम्मानपूर्ण वाक्य-रचना के द्वारा निमित्त को ही दिया जाता है; क्योंकि'व्यवहारनय'का वस्तुस्थिति को प्रस्तुत करने का अपना ढंग निराला ही है। अतः निमित्त का कर्तृत्व, योग अथवा सहायता व्यवहार- नयात्मक ढंग से स्वीकार करने पर भी निमित्त-उपादान की नितांत- भिन्‍नतारूप अनैकांतिक-व्यवहार में कोई अंतर नहीं आता।"
+      },
+      {
+        "chunk_id": "d299f0d6-831a-5b1b-95f0-34d91865859d_p127_para332",
+        "vector_rank": 108,
+        "rerank_score": 0.9974299073219299,
+        "title": "Naychakko",
+        "page": 127,
+        "text": "विशेषार्थ - कारणके दो भेद हैं - उपादान कारण और निमित्त कारण। जो वस्तु स्वयं कार्यरूप परिणत होती है उसे उपादान कारण कहते हैं और जो उसके कार्यरूप परिणतिमें सहायक हो उसे निमित्त कारण कहते हैं। जैसे जब मिट्टी स्वयं अपनेमें घट होनारूप परिणामके अभिमुख होती है तो दण्ड, चक्र और कुम्हारका प्रयत्न वगैरह निमित्त मात्र होता है। किन्तु दण्ड आदि निमित्तोंके होनेपर भी यदि मिट्टी कंकरोली हो तो उसके अपनेमें स्वयं घटत्व होनेके परिणामकी योग्यता न होनेसे वह घटत्वरूप परिणत नहीं होती। इसलिए मिट्टी ही बाह्य दण्डादि निमित्तोंकी अपेक्षापूर्वक अपने द्रव्यमयके परिणामके होनेपर घटत्वरूप होती है, दण्ड वगैरह घटत्व नहीं होते। अतः दण्ड आदि निमित्त मात्र होनेसे निमित्तकारण कहे जाते हैं और मिट्टी उपादान कारण है। आजकल निमित्तके विषयमें विवाद चलता है। विवाद निमित्तके अस्तित्वको लेकर नहीं है। निमित्त नहीं है ऐसा कोई नहीं कहता। निमित्त उपादानमें कुछ करता है, इस विषयमें विवाद है। एक सिद्धान्त है कि जिस द्रव्यमें जो शक्ति नहीं है, वह शक्ति अन्यके द्वारा उत्पन्न नहीं की जा सकती।"
+      }
+    ]
+  },
+  "api_probe": {
+    "False": {
+      "result_count": 10,
+      "under30words": 8,
+      "titles": [
+        "Chaitanya Vihar",
+        "Moksha Shastra",
+        "Vachanamrut Sar",
+        "Vachanamrut Sar",
+        "Moksha Shastra",
+        "Tattvagyan Tarangini",
+        "Mool ma Bhool",
+        "Mool ma Bhool",
+        "Mool ma Bhool",
+        "Mool ma Bhool"
+      ]
+    },
+    "True": {
+      "result_count": 10,
+      "under30words": 0,
+      "titles": [
+        "Mool ma Bhool",
+        "Chaitanya Vihar",
+        "Mool ma Bhool",
+        "Mool ma Bhool",
+        "Swanubhuti Darshan",
+        "Mool ma Bhool",
+        "Moksha Shastra",
+        "Mool ma Bhool",
+        "Chaitanya Vihar",
+        "Mool ma Bhool"
+      ]
+    }
+  },
+  "limitations": [
+    "One natural-language query tested end to end; six lexical probes; three document-vector probes.",
+    "No human-labelled relevance benchmark; model preferences are not ground-truth quality.",
+    "Single-run local timing is not production latency or a concurrency benchmark.",
+    "Data changed between initial inspection and aggregation; figures are observations, not an immutable snapshot.",
+    "Sample uses 1000 chunks in each of six language/category strata and is not proportionally weighted.",
+    "No production index, model, or runtime setting changed."
+  ]
+}

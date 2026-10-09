@@ -51,6 +51,7 @@ class SettingsPayload(BaseModel):
     answerFormat: Optional[Literal["summary", "structured"]] = None
     chatDefaultCategories: Optional[List[str]] = None
     khojDefaultCategories: Optional[List[str]] = None
+    chatAccuracyMode: Optional[bool] = None
 
 
 def _user_settings(user: Dict[str, Any]) -> Optional[Dict[str, Any]]:

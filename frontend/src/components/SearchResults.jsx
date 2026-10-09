@@ -256,6 +256,27 @@ export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, on
             <div className={`text-base text-ink ${compact ? 'leading-snug' : 'leading-relaxed'} font-sans`}>
                 <p className="whitespace-pre-wrap" dangerouslySetInnerHTML={highlightSnippet(result.content_snippet)} />
             </div>
+            {result.rerank_context && (
+                <details className="mt-3 text-sm text-ink-muted">
+                    <summary className="cursor-pointer text-brand">Surrounding context</summary>
+                    <div className="mt-2 space-y-3">
+                        {['previous', 'next'].map(direction => {
+                            const neighbour = result.rerank_context[direction];
+                            if (!neighbour) return null;
+                            const label = `${direction === 'previous' ? 'Before' : 'After'}${neighbour.page_number != null ? ` · Page ${neighbour.page_number}` : ''}`;
+                            return (
+                                <div key={direction}>
+                                    {neighbour.file_url ? (
+                                        <a href={buildPdfPageUrl(neighbour)}
+                                            target="_blank" rel="noopener noreferrer" className="text-brand">{label}</a>
+                                    ) : <span>{label}</span>}
+                                    <p className="whitespace-pre-wrap mt-1">{neighbour.content_snippet}</p>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </details>
+            )}
 
             {showShareModal && (
                 <ShareModal

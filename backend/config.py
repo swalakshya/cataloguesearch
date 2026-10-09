@@ -19,6 +19,7 @@ ADMIN_PARAM_DEFAULTS = {
     "page_size_books":      20,
     "spelling_min_score":   0.6,
     "enable_reranking":     True,
+    "context_reranking":    False,
 }
 
 # Agent-specific tunable params. At runtime, _build_agent_config() resolves these
@@ -181,6 +182,8 @@ class Config:
             return self._overrides.get("rerank_max_length", ADMIN_PARAM_DEFAULTS["rerank_max_length"])
         elif name == "RERANK_OVERSAMPLE":
             return self._overrides.get("rerank_oversample", ADMIN_PARAM_DEFAULTS["rerank_oversample"])
+        elif name == "CONTEXT_RERANKING":
+            return self._overrides.get("context_reranking", ADMIN_PARAM_DEFAULTS["context_reranking"])
         elif name == "EF_SEARCH":
             return self._overrides.get("ef_search", ADMIN_PARAM_DEFAULTS["ef_search"])
         elif name == "SEARCH_MODE":

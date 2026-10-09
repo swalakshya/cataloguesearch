@@ -13,6 +13,7 @@ from backend.common.embedding_models import get_embedding_model_factory
 from backend.common.utils import get_pravachankar_display
 from backend.common.language import normalize_language, text_field_for_language
 from backend.search.result_ranker import ResultRanker
+from backend.search.context_reranking import enrich_hits, enrich_results, context_token_limit
 from backend.utils import json_dumps
 
 log_handle = logging.getLogger(__name__)
@@ -387,7 +388,7 @@ class IndexSearcher:
                 metadata_categories = [str(metadata_categories)]
 
             original_filename = source.get('original_filename')
-            filename = os.path.basename(original_filename)
+            filename = os.path.basename(original_filename or "")
 
             result = {
                 "document_id": document_id,
@@ -407,6 +408,11 @@ class IndexSearcher:
             pravachankar = metadata.get("Pravachankar")
             if pravachankar:
                 result["Pravachankar"] = get_pravachankar_display(pravachankar, language)
+            if hit.get("_rerank_context"):
+                result["rerank_context"] = {
+                    direction: self._extract_results([neighbour], is_lexical=False, language=language)[0]
+                    for direction, neighbour in hit["_rerank_context"].items()
+                }
             extracted.append(result)
         return extracted
 
@@ -492,6 +498,7 @@ class IndexSearcher:
             page_size: int, page_number: int,
             oversample: int = 40, rerank: bool = True,
             start_year: int | None = None, end_year: int | None = None,
+            rerank_timeout_seconds: int = 40,
     ) -> Tuple[List[Dict[str, Any]], int]:
         """
         Reciprocal Rank Fusion search: runs BM25 and raw kNN in parallel,
@@ -548,11 +555,18 @@ class IndexSearcher:
             # Build sentence pairs from the fused list (which holds _source via content_snippet)
             # Fall back to content_snippet since _source is not retained after _extract_results.
             sentence_pairs = [[keywords, r.get("content_snippet", "")] for r in fused]
+            max_length = self._config.RERANK_MAX_LENGTH
+            if getattr(self._config, "CONTEXT_RERANKING", False) is True:
+                fused = enrich_results(fused, self._opensearch_client, self._index_name,
+                                       detected_language, keywords, self._reranker.tokenizer, max_length)
+                sentence_pairs = [[r["_rerank_query"], r["_rerank_text"]] for r in fused]
+                max_length = context_token_limit(self._reranker.tokenizer, max_length)
             try:
                 rerank_scores = self._reranker.predict(
                     sentence_pairs,
                     batch_size=self._config.RERANK_BATCH_SIZE,
-                    max_length=self._config.RERANK_MAX_LENGTH,
+                    max_length=max_length,
+                    timeout_seconds=rerank_timeout_seconds,
                 )
                 for result, score in zip(fused, rerank_scores):
                     result["rerank_score"] = float(score)
@@ -564,13 +578,24 @@ class IndexSearcher:
 
         total = len(fused)
         start = (page_number - 1) * page_size
-        return fused[start:start + page_size], total
+        paginated = fused[start:start + page_size]
+        for result in paginated:
+            if result.get("_rerank_context"):
+                result["rerank_context"] = {
+                    direction: self._extract_results([neighbour], is_lexical=False, language=detected_language)[0]
+                    for direction, neighbour in result["_rerank_context"].items()
+                }
+            for key in list(result):
+                if key.startswith("_rerank_"):
+                    del result[key]
+        return paginated, total
 
     def perform_vector_search(
             self, keywords: str, embedding: List[float], categories: Dict[str, List[str]],
             page_size: int, page_number: int, language: str, rerank: bool = True,
             rerank_top_k: int = 40,
-            start_year: int | None = None, end_year: int | None = None) -> Tuple[List[Dict[str, Any]], int]:
+            start_year: int | None = None, end_year: int | None = None,
+            rerank_timeout_seconds: int = 40) -> Tuple[List[Dict[str, Any]], int]:
         initial_fetch_size = rerank_top_k
         from_ = 0 if rerank else (page_number - 1) * page_size
 
@@ -591,7 +616,12 @@ class IndexSearcher:
             # Rerank, if required
             if not rerank or not self._reranker or not hits:
                 log_handle.info(f"Vector search executed (no reranking). Total hits: {total_hits}")
-                return self._extract_results(hits, is_lexical=False, language=language), total_hits
+                # With reranking requested, retrieval starts at zero so that
+                # the full candidate pool can be scored. If the model is
+                # unavailable, apply the page offset here instead.
+                page_start = (page_number - 1) * page_size if rerank else 0
+                paginated_hits = hits[page_start:page_start + page_size]
+                return self._extract_results(paginated_hits, is_lexical=False, language=language), total_hits
 
             text_field = text_field_for_language(language)
             log_handle.info(
@@ -606,11 +636,18 @@ class IndexSearcher:
                 sentence_pairs.append([keywords, truncated_text])
 
             log_handle.info("--- Starting expensive reranker.predict() call... ---")
+            max_length = self._config.RERANK_MAX_LENGTH
+            if getattr(self._config, "CONTEXT_RERANKING", False) is True:
+                hits = enrich_hits(hits, self._opensearch_client, self._index_name, language,
+                                   keywords, self._reranker.tokenizer, max_length)
+                sentence_pairs = [[h["_rerank_query"], h["_rerank_text"]] for h in hits]
+                max_length = context_token_limit(self._reranker.tokenizer, max_length)
             rerank_start_time = time.time()
             rerank_scores = self._reranker.predict(
                 sentence_pairs,
                 batch_size=self._config.RERANK_BATCH_SIZE,
-                max_length=self._config.RERANK_MAX_LENGTH,
+                max_length=max_length,
+                timeout_seconds=rerank_timeout_seconds,
             )
             rerank_duration = time.time() - rerank_start_time
             log_handle.info(
@@ -620,7 +657,8 @@ class IndexSearcher:
                 hit["rerank_score"] = score
 
             # Sort results based on the new reranked score
-            reranked_hits = sorted(hits, key=lambda x: x["rerank_score"], reverse=True)
+            # A timeout can leave an unscored tail; preserve its retrieval order.
+            reranked_hits = sorted(hits, key=lambda x: x.get("rerank_score", float("-inf")), reverse=True)
 
             # Paginate the final, sorted results
             start_index = (page_number - 1) * page_size

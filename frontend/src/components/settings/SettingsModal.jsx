@@ -8,6 +8,7 @@ import { setStoredChatDefaultCategories, setStoredKhojDefaultCategories } from '
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../services/api';
 import CategoryChips from '../CategoryChips';
+import { setStoredChatAccuracyMode } from '../../config/accuracyConfig';
 
 // Bigger, colored, icon-led product name + a divider above it is what carries
 // the hierarchy here — no card/box needed, so the field labels below (which
@@ -43,6 +44,8 @@ export default function SettingsModal({
     onSaveChatDefaultCategories,
     khojDefaultCategories,
     onSaveKhojDefaultCategories,
+    chatAccuracyMode = false,
+    onSaveChatAccuracyMode,
 }) {
     const { user, refreshSettings } = useAuth();
     const { mode, setMode, palette, setPalette } = useTheme();
@@ -51,6 +54,7 @@ export default function SettingsModal({
     const [draftFormat, setDraftFormat] = useState(answerFormat);
     const [draftChatCategories, setDraftChatCategories] = useState(() => chatDefaultCategories || activeCategories);
     const [draftKhojCategories, setDraftKhojCategories] = useState(() => khojDefaultCategories || activeCategories);
+    const [draftChatAccuracy, setDraftChatAccuracy] = useState(chatAccuracyMode);
 
     // Re-sync every draft to whatever's actually active/saved each time the
     // modal opens — otherwise closing without saving, then reopening, would
@@ -64,9 +68,10 @@ export default function SettingsModal({
             setDraftFormat(answerFormat);
             setDraftChatCategories(chatDefaultCategories || activeCategories);
             setDraftKhojCategories(khojDefaultCategories || activeCategories);
+            setDraftChatAccuracy(chatAccuracyMode);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, mode, palette, answerFormat, chatDefaultCategories, khojDefaultCategories]);
+    }, [open, mode, palette, answerFormat, chatDefaultCategories, khojDefaultCategories, chatAccuracyMode]);
 
     const formatChanged = draftFormat !== answerFormat;
 
@@ -83,6 +88,7 @@ export default function SettingsModal({
         // through, changed or not.
         onSaveChatDefaultCategories?.(draftChatCategories);
         onSaveKhojDefaultCategories?.(draftKhojCategories);
+        onSaveChatAccuracyMode?.(draftChatAccuracy);
 
         if (user) {
             // Logged in: persist to the server so it follows the account
@@ -97,6 +103,7 @@ export default function SettingsModal({
                 answerFormat: draftFormat,
                 chatDefaultCategories: draftChatCategories,
                 khojDefaultCategories: draftKhojCategories,
+                chatAccuracyMode: draftChatAccuracy,
             })
                 // Feed the saved value back into AuthContext so a later
                 // settings-sync re-run (e.g. once admin config resolves)
@@ -115,6 +122,7 @@ export default function SettingsModal({
             setStoredAnswerFormat(draftFormat);
             setStoredChatDefaultCategories(draftChatCategories);
             setStoredKhojDefaultCategories(draftKhojCategories);
+            setStoredChatAccuracyMode(draftChatAccuracy);
         }
 
         onClose();
@@ -212,6 +220,28 @@ export default function SettingsModal({
 
                 <div className="space-y-4">
                     <SectionHeader icon={MessagesSquare} colorVar="--color-mark">Swalakshya AI</SectionHeader>
+
+                    <div>
+                        <FieldLabel>Default search effort</FieldLabel>
+                        <div className="flex gap-2" role="radiogroup" aria-label="Default search effort">
+                            {[{ label: 'Low', value: false }, { label: 'High', value: true }].map((option) => {
+                                const selected = draftChatAccuracy === option.value;
+                                return (
+                                    <label key={option.label} className="flex flex-1 items-center gap-2 rounded-lg px-3 py-2.5 cursor-pointer"
+                                        style={{
+                                            border: selected ? '1.5px solid var(--color-brand)' : '1px solid var(--color-border)',
+                                            backgroundColor: selected ? 'color-mix(in srgb, var(--color-brand) 6%, var(--color-surface))' : 'var(--color-surface)',
+                                        }}>
+                                        <input type="radio" name="chat-default-search-mode" value={option.label}
+                                            checked={selected} onChange={() => setDraftChatAccuracy(option.value)}
+                                            style={{ accentColor: 'var(--color-brand)' }} />
+                                        <span className="text-sm font-medium text-ink">{option.label}</span>
+                                    </label>
+                                );
+                            })}
+                        </div>
+                        <p className="text-xs text-ink-muted mt-1">Higher effort searches more passages and may take longer. You can change it in the chat box.</p>
+                    </div>
 
                     <div>
                         <FieldLabel>Answer type</FieldLabel>

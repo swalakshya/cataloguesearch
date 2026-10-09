@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
 import useCatalogue from '../hooks/useCatalogue';
+import { groupGranthEditions } from '../utils/catalogue';
 import { PageHeader, Table, Badge } from './ui';
 import StatsStrip from './chat/StatsStrip';
 import { CategoryEmojiIcon } from './chat/categoryEmoji';
@@ -214,19 +215,7 @@ const SearchIndex = () => {
     return { hindi: sum('hi', hiOn), gujarati: sum('gu', guOn) };
   }, [pravachanRows, selectedGranths, hiOn, guOn]);
 
-  // Editions with the same title and contributors share a row; different
-  // commentaries remain distinct works even when their title matches.
-  const groupedGranths = useMemo(() => {
-    const map = new Map();
-    granthRows.forEach((row) => {
-      const key = JSON.stringify([row.granth, row.author || '', row.tikakaar || '', row.anuyog || '']);
-      if (!map.has(key)) map.set(key, { ...row, key, hi: false, gu: false });
-      const group = map.get(key);
-      if (row.language === 'hi') group.hi = true;
-      else if (row.language === 'gu') group.gu = true;
-    });
-    return Array.from(map.values());
-  }, [granthRows]);
+  const groupedGranths = useMemo(() => groupGranthEditions(granthRows), [granthRows]);
 
   const filteredGranths = useMemo(() => groupedGranths
     .filter((g) => selectedGranthAuthors.has(g.author))

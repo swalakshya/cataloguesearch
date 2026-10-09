@@ -20,6 +20,7 @@ from backend.common.author_filters import group_authors, filter_categories_for a
 from backend.common.language import text_field_for_language
 from backend.config import Config
 from backend.search.index_searcher import IndexSearcher
+from backend.search.accuracy import candidate_count, rerank_timeout
 from backend.utils import json_dumps, JSONResponse, log_memory_usage
 from utils.logger import setup_logging, VERBOSE_LEVEL_NUM, METRICS_LEVEL_NUM, set_query_id, get_query_id
 from backend.api.pdf_export import render_export_pdf
@@ -70,6 +71,7 @@ async def _search_category(
     language: str, effective_mode: str, is_lexical_query: Optional[bool], query_embedding,
     enable_reranking: bool, rerank_oversample: int,
     start_year: Optional[int], end_year: Optional[int],
+    rerank_timeout_seconds: int = 40,
 ) -> tuple[List[Dict[str, Any]], int]:
     """Runs the search for a single category using the configured search mode.
     Shared by /api/search (per-category streaming loop) and /api/export-pdf."""
@@ -89,6 +91,7 @@ async def _search_category(
                     page_number=cat_config.get("page_number", 1),
                     oversample=rerank_oversample,
                     rerank=enable_reranking,
+                    rerank_timeout_seconds=rerank_timeout_seconds,
                     start_year=start_year,
                     end_year=end_year,
                 )
@@ -123,6 +126,7 @@ async def _search_category(
                     language=language,
                     rerank=enable_reranking,
                     rerank_top_k=rerank_oversample,
+                    rerank_timeout_seconds=rerank_timeout_seconds,
                     start_year=start_year,
                     end_year=end_year,
                 )
@@ -441,6 +445,7 @@ class SearchRequest(BaseModel):
     query: str = Field(..., example="Bangalore city history")
     language: str = Field(..., description="Language of the query.", example="hindi")
     text_search: bool = Field(False, description="Force keyword/BM25 search instead of semantic (vector) search.")
+    accuracy_mode: bool = Field(False, description="Search 100 candidates for deeper retrieval; may take longer.")
     exact_match: bool = Field(False, description="Use exact phrase matching instead of regular match.")
     exclude_words: List[str] = Field([], description="List of words to exclude from search results.")
     categories: Dict[str, List[str]] = Field({}, example={"author": ["John Doe"], "category": ["Pravachan"]})
@@ -523,7 +528,7 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
         config, index_searcher, keywords, text_search, exact_match, exclude_words
     )
 
-    rerank_oversample = config.RERANK_OVERSAMPLE
+    rerank_oversample = candidate_count(request_data.accuracy_mode, config.RERANK_OVERSAMPLE)
     start_time = time.time()
     client_ip = (
         request.headers.get("x-real-ip") or
@@ -536,6 +541,7 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
                     f"exact_match={exact_match}, exclude_words={exclude_words}, "
                     f"categories={categories}, search_types={search_types}, "
                     f"language={language}, enable_reranking={enable_reranking}")
+    log_handle.info("Search accuracy_mode=%s candidates=%s", request_data.accuracy_mode, rerank_oversample)
 
     ttfb_ms = None
 
@@ -572,6 +578,7 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
                     loop, index_searcher, cat, cat_config, keywords, exact_match, exclude_words,
                     categories, language, effective_mode, is_lexical_query, query_embedding,
                     enable_reranking, rerank_oversample, start_year, end_year,
+                    rerank_timeout(request_data.accuracy_mode),
                 )
 
             category_results[cat] = (results, hits)
@@ -645,6 +652,7 @@ class ExportPdfRequest(BaseModel):
     query: str = Field(..., example="Bangalore city history")
     language: str = Field(..., description="Language of the query.", example="hindi")
     text_search: bool = Field(False, description="Force keyword/BM25 search instead of semantic (vector) search.")
+    accuracy_mode: bool = Field(False, description="Use the same deeper retrieval as Accuracy search.")
     exact_match: bool = Field(False, description="Use exact phrase matching instead of regular match.")
     exclude_words: List[str] = Field([], description="List of words to exclude from search results.")
     categories: Dict[str, List[str]] = Field({}, example={"author": ["John Doe"]})
@@ -684,7 +692,7 @@ async def export_pdf(request: Request, request_data: ExportPdfRequest = Body(...
     effective_mode, is_lexical_query = _resolve_search_mode(
         config, index_searcher, keywords, request_data.text_search, exact_match, exclude_words
     )
-    rerank_oversample = config.RERANK_OVERSAMPLE
+    rerank_oversample = candidate_count(request_data.accuracy_mode, config.RERANK_OVERSAMPLE)
     loop = asyncio.get_running_loop()
 
     needs_embedding = effective_mode in ("rrf", "vector") or (effective_mode == "auto" and not is_lexical_query)
@@ -697,6 +705,7 @@ async def export_pdf(request: Request, request_data: ExportPdfRequest = Body(...
         loop, index_searcher, category, cat_config, keywords, exact_match, exclude_words,
         categories, language, effective_mode, is_lexical_query, query_embedding,
         enable_reranking, rerank_oversample, start_year, end_year,
+        rerank_timeout(request_data.accuracy_mode),
     )
 
     log_handle.info(f"Export PDF: category={category}, count={count}, keywords='{keywords}', "
@@ -808,4 +817,3 @@ async def get_context(request: Request, chunk_id: str, language: str = Query("hi
     except Exception as e:
         log_handle.exception(f"An error occurred while fetching context: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
-
