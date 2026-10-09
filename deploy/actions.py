@@ -1,4 +1,5 @@
-"""The deploy pipeline: build & push images, copy snapshots to prod, restore on prod."""
+"""Deploy selected service images and optionally copy/restore OpenSearch snapshots."""
+import shlex
 from typing import Dict, List
 
 from deploy import db, settings
@@ -6,11 +7,13 @@ from deploy.progress import DockerBuildProgress
 from deploy.runner import Cmd, StepCtx, StepSpec, runner
 
 BUILD = "build"
+PULL_RESTART = "pull_restart"
 COPY_SNAPSHOTS = "copy_snapshots"
 RESTORE_PROD = "restore_prod"
-ACTION_ORDER = [BUILD, COPY_SNAPSHOTS, RESTORE_PROD]
+ACTION_ORDER = [BUILD, PULL_RESTART, COPY_SNAPSHOTS, RESTORE_PROD]
 ACTION_TITLES = {
     BUILD: "Build & push images",
+    PULL_RESTART: "Pull & restart services",
     COPY_SNAPSHOTS: "Create snapshots & copy to prod",
     RESTORE_PROD: "Restore snapshots on prod",
 }
@@ -35,6 +38,27 @@ def commands_for(action: str, params: Dict) -> List[Cmd]:
                             f"{settings.CHAT_SERVICE}: docker compose build --push",
                             cwd=settings.CHAT_REPO_DIR, progress_parser=DockerBuildProgress()))
         return cmds
+    if action == PULL_RESTART:
+        selected = params.get("build_services")
+        if selected is None:
+            selected = settings.DEFAULT_BUILD_SERVICES
+        if not selected:
+            raise ValueError("Select at least one service")
+        # Preserve the default home directory while quoting configurable paths and service names.
+        prod_dir = settings.PROD_DIR
+        if prod_dir == "~":
+            remote_dir = '"$HOME"'
+        elif prod_dir.startswith("~/"):
+            remote_dir = '"$HOME"/' + shlex.quote(prod_dir[2:])
+        else:
+            remote_dir = shlex.quote(prod_dir)
+        base = f"cd {remote_dir} && docker-compose --env-file .env.prod -f docker-compose.prod.yml"
+        services = shlex.join(selected)
+        return [
+            Cmd(_ssh(f"{base} pull {services}"), f"prod: pull {services}"),
+            Cmd(_ssh(f"{base} up -d --no-deps --no-build --force-recreate {services}"),
+                f"prod: restart {services}"),
+        ]
     if action == COPY_SNAPSHOTS:
         return [Cmd(
             [settings.SCRIPT_PYTHON, "-u", "scripts/create_snapshots.py", "snapshots",

@@ -84,12 +84,14 @@ async def start_run(req: StartRunRequest):
     unknown = [a for a in req.actions if a not in ACTION_ORDER]
     if unknown:
         raise HTTPException(422, f"Unknown action(s): {', '.join(unknown)}")
+    if any(a in ("build", "pull_restart") for a in req.actions) and req.build_services == []:
+        raise HTTPException(422, "Select at least one service")
     if req.build_services:
         allowed = await asyncio.to_thread(checks.build_services)
         bad = [s for s in req.build_services if s not in allowed]
         if bad:
-            raise HTTPException(422, f"Not a buildable service: {', '.join(bad)}")
-    if any(a in ("build", "copy_snapshots") for a in req.actions):   # restoring on prod only needs ssh
+            raise HTTPException(422, f"Unknown service: {', '.join(bad)}")
+    if any(a in ("build", "copy_snapshots") for a in req.actions):   # production pull/restart and restore only need SSH
         await asyncio.to_thread(_require_docker)
     try:
         run_id = start_deploy(req.actions, {"build_services": req.build_services})

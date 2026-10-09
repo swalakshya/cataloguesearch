@@ -188,6 +188,15 @@ docker-compose.prod.yml
 
 The production frontend image uses `docker/frontend/nginx.conf` which includes SSL config and proxies `/api` to the API container. The local image uses `docker/frontend/nginx-local.conf` (no SSL).
 
+### Deploy page service actions
+
+At `/deploy`, the Service images card shares one service selection between two independent actions: **Build & Push** (selected by default) and **Pull & Restart Services**. Selecting both builds and pushes first, then pulls and recreates the selected services on the configured production host. The job stops at the first failure; a failed image pull never proceeds to restart.
+
+Pull/restart uses the host's existing `.env.prod` and `docker-compose.prod.yml`, with `up -d --no-deps --no-build --force-recreate` so it only recreates the selected services. It uses SSH and works when local Docker is unavailable. The existing typed production confirmation lists the host and services before starting. Full deploy uses the chosen image actions followed by the existing OpenSearch snapshot/restore flow.
+
+Manual verification: select a service and run Build & Push alone; check that only its image is built/pushed. Select Pull & Restart Services alone, confirm the listed host/services, and inspect the two job commands (pull, then up). Select both and verify the build step precedes pull/restart. Clear the action or service selection and verify the image Run button is disabled. These checks deploy to the configured host; automated tests use mocks and do not perform a deployment.
+
+
 ---
 
 ## Data Flow for a Search Query

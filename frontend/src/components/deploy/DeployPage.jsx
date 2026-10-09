@@ -9,15 +9,18 @@ import { useDevShell, DockerBlockedNotice } from '../dev/DevShell';
 import OpenSearchCompare, { useOpenSearchCompare } from './OpenSearchCompare';
 
 // Run steps, in order. The run keeps copy and restore as separate steps so "Retry from here" works.
-const ACTION_ORDER = ['build', 'copy_snapshots', 'restore_prod'];
+const IMAGE_ACTIONS = [
+    { id: 'build', title: 'Build & Push' },
+    { id: 'pull_restart', title: 'Pull & Restart Services' },
+];
 // What the page offers: two cards, the second one runs both OpenSearch steps together.
 const CARDS = [
     {
         id: 'build',
-        title: 'Build & push images',
-        short: 'Build & push',
+        title: 'Service images',
+        short: 'Service images',
         actions: ['build'],
-        hint: 'docker compose build --push (main repo with .env.local; chat from its own repo)',
+        hint: 'Choose either action or both. When both are selected, images are built and pushed before the selected services are pulled and restarted on prod.',
     },
     {
         id: 'opensearch',
@@ -28,7 +31,7 @@ const CARDS = [
     },
 ];
 // Actions that change prod and therefore need a typed confirmation.
-const DANGEROUS = new Set(['restore_prod']);
+const DANGEROUS = new Set(['restore_prod', 'pull_restart']);
 
 export default function DeployPage() {
     const [params, setParams] = useSearchParams();
@@ -39,6 +42,9 @@ export default function DeployPage() {
     const [prod, setProd] = useState(null);
     const [prodLoading, setProdLoading] = useState(false);
     const [buildServices, setBuildServices] = useState([]);
+    const [imageActions, setImageActions] = useState(['build']);
+    const selectedImageActions = IMAGE_ACTIONS.map(a => a.id).filter(a => imageActions.includes(a));
+    const fullActions = [...selectedImageActions, 'copy_snapshots', 'restore_prod'];
     const [confirm, setConfirm] = useState(null);
     const dockerBlocked = !!useDevShell().docker?.blocked;   // yellow / red / restarting: builds and snapshots need Docker
     const compare = useOpenSearchCompare();
@@ -70,7 +76,7 @@ export default function DeployPage() {
         jobsRef.current.setError('');
         try {
             const { run_id: runId } = await postJson('/deploy/runs', {
-                actions, build_services: actions.includes('build') ? services : null,
+                actions, build_services: actions.some(a => a === 'build' || a === 'pull_restart') ? services : null,
             });
             await jobsRef.current.started(runId);
         } catch (e) { jobsRef.current.setError(e.message); }
@@ -82,13 +88,16 @@ export default function DeployPage() {
         const alreadySynced = pushesOpenSearch && compare.report?.in_sync;
         if (!alreadySynced && !actions.some((a) => DANGEROUS.has(a))) { start(actions, services); return; }
         setConfirm({
-            title: actions.includes('build') && actions.length > 1 ? 'Run full deploy to prod?'
-                : actions.includes('copy_snapshots') ? 'Deploy OpenSearch to prod?' : 'Restore on prod?',
+            title: actions.includes('restore_prod') ? 'Deploy OpenSearch to prod?' : 'Pull & restart selected services?',
             lines: [
                 ...(alreadySynced ? ['Prod already matches dev, so this would push nothing new.'] : []),
                 ...actions.map((a) => titles[a] || a),
                 `Host: ${config?.prod_host}`,
-                'Restore deletes the prod indices and replaces them with the snapshots. Prod restarts briefly.',
+                ...(actions.includes('pull_restart') ? [
+                    `Services: ${services.join(', ')}`,
+                    'Selected services are recreated using pulled images and restart briefly.',
+                ] : []),
+                ...(actions.includes('restore_prod') ? ['Restore deletes the prod indices and replaces them with the snapshots. Prod restarts briefly.'] : []),
             ],
             actions,
             services,
@@ -124,21 +133,21 @@ export default function DeployPage() {
             <div className="bg-white border-2 border-blue-200 rounded-lg p-5 flex flex-col md:flex-row md:items-center gap-4">
                 <div className="flex-1">
                     <h2 className="text-base font-semibold text-slate-800">Full deploy</h2>
-                    <p className="text-sm text-slate-500 mt-1">Runs both jobs below, one after another. Stops at the first failure.</p>
+                    <p className="text-sm text-slate-500 mt-1">Runs the selected image actions, then deploys OpenSearch to prod. Stops at the first failure.</p>
                     <div className="flex flex-wrap items-center gap-2 mt-3 text-xs text-slate-600">
                         {CARDS.map((card, idx) => (
                             <React.Fragment key={card.id}>
                                 {idx > 0 && <span className="text-slate-300">→</span>}
                                 <span className="px-2 py-1 rounded-full bg-slate-100 border border-slate-200">
-                                    {idx + 1}. {card.short}
+                                    {idx + 1}. {card.id === 'build' ? (selectedImageActions.map(a => IMAGE_ACTIONS.find(option => option.id === a).title).join(' → ') || 'No image actions') : card.short}
                                 </span>
                             </React.Fragment>
                         ))}
                     </div>
                 </div>
                 <button
-                    disabled={busy || !config}
-                    onClick={() => requestRun(ACTION_ORDER)}
+                    disabled={busy || dockerBlocked || !config || (selectedImageActions.length > 0 && buildServices.length === 0)}
+                    onClick={() => requestRun(fullActions)}
                     className="cursor-pointer px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-semibold shadow-md hover:shadow-lg transition disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none whitespace-nowrap"
                 >
                     {busy ? 'A run is in progress…' : 'Deploy to prod  ▶'}
@@ -210,20 +219,33 @@ export default function DeployPage() {
                         <p className="text-xs text-slate-500 mb-3">{card.hint}</p>
                         {card.id === 'opensearch' && <OpenSearchCompare compare={compare} />}
                         {card.id === 'build' && config && (
-                            <div className="mb-3 space-y-1">
-                                {config.build_services.map((s) => (
-                                    <label key={s} className="flex items-center gap-2 text-sm text-slate-700">
-                                        <input type="checkbox" checked={buildServices.includes(s)} onChange={() => toggleService(s)} />
-                                        {s}
-                                    </label>
-                                ))}
+                            <div className="mb-3 space-y-3">
+                                <fieldset className="space-y-1">
+                                    <legend className="text-xs font-semibold text-slate-600 mb-1">Actions</legend>
+                                    {IMAGE_ACTIONS.map(option => (
+                                        <label key={option.id} className="flex items-center gap-2 text-sm text-slate-700">
+                                            <input type="checkbox" checked={imageActions.includes(option.id)} disabled={busy}
+                                                onChange={() => setImageActions(cur => cur.includes(option.id) ? cur.filter(a => a !== option.id) : [...cur, option.id])} />
+                                            {option.title}
+                                        </label>
+                                    ))}
+                                </fieldset>
+                                <fieldset className="space-y-1">
+                                    <legend className="text-xs font-semibold text-slate-600 mb-1">Services</legend>
+                                    {config.build_services.map((s) => (
+                                        <label key={s} className="flex items-center gap-2 text-sm text-slate-700">
+                                            <input type="checkbox" checked={buildServices.includes(s)} disabled={busy} onChange={() => toggleService(s)} />
+                                            {s}
+                                        </label>
+                                    ))}
+                                </fieldset>
                             </div>
                         )}
                         <button
-                            disabled={busy || dockerBlocked || !config || (card.id === 'build' && buildServices.length === 0)}
-                            title={dockerBlocked ? 'Docker is not ready. Restart it from the Docker light at the top.' : undefined}
-                            onClick={() => requestRun(card.actions)}
-                            className={`cursor-pointer px-3 py-1.5 rounded text-sm font-medium border shadow-sm disabled:opacity-40 disabled:cursor-not-allowed ${card.actions.some((a) => DANGEROUS.has(a)) ? 'border-red-300 text-red-700 hover:bg-red-50' : 'border-slate-300 text-slate-700 hover:bg-slate-50'}`}
+                            disabled={busy || !config || (card.id === 'build' && (buildServices.length === 0 || selectedImageActions.length === 0)) || (dockerBlocked && (card.id === 'opensearch' || selectedImageActions.includes('build')))}
+                            title={dockerBlocked && (card.id === 'opensearch' || selectedImageActions.includes('build')) ? 'Docker is not ready. Restart it from the Docker light at the top.' : undefined}
+                            onClick={() => requestRun(card.id === 'build' ? selectedImageActions : card.actions)}
+                            className={`cursor-pointer px-3 py-1.5 rounded text-sm font-medium border shadow-sm disabled:opacity-40 disabled:cursor-not-allowed ${(card.id === 'build' ? selectedImageActions : card.actions).some((a) => DANGEROUS.has(a)) ? 'border-red-300 text-red-700 hover:bg-red-50' : 'border-slate-300 text-slate-700 hover:bg-slate-50'}`}
                         >
                             Run
                         </button>

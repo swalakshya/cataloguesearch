@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { copyToClipboard } from '../../utils/shareUtils';
 
 // Shared building blocks for the local dev pages (/deploy, /discover): job status, logs, history.
 
@@ -128,15 +129,32 @@ export function ConfirmModal({ title, lines, phrase, onConfirm, onCancel, confir
 
 export function LogViewer({ runId, step, running }) {
     const [text, setText] = useState('');
+    const [copyStatus, setCopyStatus] = useState('');
     const offsetRef = useRef(0);
     const boxRef = useRef(null);
     const stickRef = useRef(true);
 
     useEffect(() => {
         setText('');
+        setCopyStatus('');
         offsetRef.current = 0;
         stickRef.current = true;
     }, [runId, step]);
+
+    useEffect(() => {
+        if (!copyStatus) return undefined;
+        const timer = setTimeout(() => setCopyStatus(''), 2000);
+        return () => clearTimeout(timer);
+    }, [copyStatus]);
+
+    const copyOutput = async () => {
+        if (!text) return;
+        try {
+            setCopyStatus(await copyToClipboard(text) ? 'copied' : 'failed');
+        } catch (_) {
+            setCopyStatus('failed');
+        }
+    };
 
     useEffect(() => {
         if (!runId || !step) return undefined;
@@ -165,16 +183,26 @@ export function LogViewer({ runId, step, running }) {
     }, [text]);
 
     return (
+        <div className="rounded-md overflow-hidden bg-slate-900">
+            <div className="flex items-center justify-end gap-2 bg-slate-800 px-3 py-1.5">
+                {copyStatus === 'failed' && <span role="alert" className="text-xs text-red-300">Could not copy output.</span>}
+                <button type="button" onClick={copyOutput} disabled={!text}
+                    aria-label={copyStatus === 'copied' ? 'Copied!' : 'Copy terminal output'}
+                    className="cursor-pointer rounded px-2 py-1 text-xs text-slate-200 hover:bg-slate-700 hover:text-white focus-visible:outline focus-visible:outline-slate-400 disabled:opacity-40 disabled:cursor-default">
+                    {copyStatus === 'copied' ? 'Copied!' : 'Copy'}
+                </button>
+            </div>
         <pre
             ref={boxRef}
             onScroll={(e) => {
                 const el = e.currentTarget;
                 stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
             }}
-            className="bg-slate-900 text-slate-100 text-xs font-mono rounded-md p-3 min-h-[4rem] max-h-80 overflow-auto whitespace-pre-wrap break-words"
+            className="bg-slate-900 text-slate-100 text-xs font-mono p-3 min-h-[4rem] max-h-80 overflow-auto whitespace-pre-wrap break-words"
         >
             {text || (running ? 'Waiting for output…' : 'No output.')}
         </pre>
+        </div>
     );
 }
 
