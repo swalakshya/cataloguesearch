@@ -73,6 +73,7 @@ async def _search_category(
     start_year: Optional[int], end_year: Optional[int],
     rerank_timeout_seconds: int = 40,
     accuracy_mode: bool = False,
+    timings: Optional[dict] = None,
 ) -> tuple[List[Dict[str, Any]], int]:
     """Runs the search for a single category using the configured search mode.
     Shared by /api/search (per-category streaming loop) and /api/export-pdf."""
@@ -96,6 +97,7 @@ async def _search_category(
                     accuracy_mode=accuracy_mode,
                     start_year=start_year,
                     end_year=end_year,
+                    timings=timings,
                 )
             )
             log_handle.info(f"{cat} RRF search returned {len(results)} results (total: {hits}).")
@@ -113,6 +115,7 @@ async def _search_category(
                     page_number=cat_config.get("page_number", 1),
                     start_year=start_year,
                     end_year=end_year,
+                    timings=timings,
                 )
             )
             log_handle.info(f"{cat} lexical search returned {len(results)} results (total: {hits}).")
@@ -132,6 +135,7 @@ async def _search_category(
                     accuracy_mode=accuracy_mode,
                     start_year=start_year,
                     end_year=end_year,
+                    timings=timings,
                 )
             )
             log_handle.info(f"{cat} vector search returned {len(results)} results (total: {hits}).")
@@ -533,6 +537,8 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
 
     rerank_oversample = candidate_count(request_data.accuracy_mode, config.RERANK_OVERSAMPLE)
     start_time = time.time()
+    search_clock = time.perf_counter()
+    search_timings = {}
     client_ip = (
         request.headers.get("x-real-ip") or
         request.headers.get("x-forwarded-for", "").split(",")[0].strip() or
@@ -555,7 +561,10 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
 
         # --- Embedding (for rrf / vector modes, and auto mode routed to vector) ---
         needs_embedding = effective_mode in ("rrf", "vector") or (effective_mode == "auto" and not is_lexical_query)
+        embedding_started = time.perf_counter()
         query_embedding = await _maybe_get_embedding(loop, embedding_model, keywords, needs_embedding)
+        if needs_embedding:
+            search_timings["embedding"] = round((time.perf_counter() - embedding_started) * 1000, 2)
         if needs_embedding and not query_embedding:
             log_handle.warning("Could not generate embedding. All categories skipped.")
             for cat in all_search_cats:
@@ -583,6 +592,7 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
                     enable_reranking, rerank_oversample, start_year, end_year,
                     rerank_timeout(request_data.accuracy_mode),
                     accuracy_mode=request_data.accuracy_mode,
+                    timings=search_timings,
                 )
 
             category_results[cat] = (results, hits)
@@ -636,7 +646,7 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
         })
         log_handle.info(f"Search complete: query_id={query_id}, search_type={search_type}, total_hits={total_hits}, latency={latency_ms}ms")
 
-        yield f"data: {json.dumps({'type': 'done', 'suggestions': suggestions}, ensure_ascii=False)}\n\n"
+        yield f"data: {json.dumps({'type': 'done', 'suggestions': suggestions, 'timings': {'total_ms': round((time.perf_counter() - search_clock) * 1000, 2), 'operations': search_timings}}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
         _generate(),

@@ -36,6 +36,10 @@ def test_khoj_request_scopes_candidate_depth(monkeypatch, mode, accuracy, expect
     response = TestClient(app).post("/search", json={"query": "आत्मा का स्वरूप क्या है?", "language": "hi",
         "accuracy_mode": accuracy, "search_types": {"Granth": {"enabled": True, "page_size": 10, "page_number": 1}}})
     assert response.status_code == 200
+    import json
+    done = next(json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ") and json.loads(line[6:]).get("type") == "done")
+    assert done["timings"]["total_ms"] >= 0
+    assert "operations" in done["timings"]
     call = searcher.perform_rrf_search.call_args if mode == "rrf" else searcher.perform_vector_search.call_args
     assert call.kwargs["oversample" if mode == "rrf" else "rerank_top_k"] == expected
     assert call.kwargs["rerank_timeout_seconds"] == (60 if accuracy else 40)

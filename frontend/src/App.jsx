@@ -1,3 +1,4 @@
+import { OperationTiming } from "./components/OperationTiming";
 import devRoutes from 'virtual:dev-routes';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
@@ -224,6 +225,7 @@ const AppContent = () => {
     const [metadata, setMetadata] = useState({});
     const [searchData, setSearchData] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [searchStartedAt, setSearchStartedAt] = useState(null);
     const resultsPanelRef = useRef(null);
     const [loadingCategories, setLoadingCategories] = useState(new Set());
     const [suggestedQueries, setSuggestedQueries] = useState(() => getRandomSuggestedQueriesByLanguage(language, 5));
@@ -660,6 +662,7 @@ const AppContent = () => {
             alert("Please enter a search query.");
             return;
         }
+        setSearchStartedAt(Date.now());
         setIsLoading(true);
         setSearchData(null);
         setPravachanPage(page);
@@ -710,6 +713,7 @@ const AppContent = () => {
         if (!query.trim()) {
             return;
         }
+        setSearchStartedAt(Date.now());
         setIsLoading(true);
         setPravachanPage(page);
 
@@ -723,6 +727,7 @@ const AppContent = () => {
         if (!query.trim()) {
             return;
         }
+        setSearchStartedAt(Date.now());
         setIsLoading(true);
         setGranthPage(page);
 
@@ -736,6 +741,7 @@ const AppContent = () => {
         if (!query.trim()) {
             return;
         }
+        setSearchStartedAt(Date.now());
         setIsLoading(true);
         setBooksPage(page);
 
@@ -746,6 +752,7 @@ const AppContent = () => {
     }, [query, buildSearchPayload]);
 
     const handleFindSimilar = async (sourceDoc) => {
+        setSearchStartedAt(Date.now());
         setIsLoading(true); 
         setSourceDocForSimilarity(sourceDoc); 
         setSimilarDocsPage(1);
@@ -808,6 +815,7 @@ const AppContent = () => {
 
     const handleSuggestionClick = (suggestion) => {
         setQuery(suggestion);
+        setSearchStartedAt(Date.now());
         setIsLoading(true);
         setPravachanPage(1);
         setSimilarDocumentsData(null);
@@ -1100,6 +1108,7 @@ const AppContent = () => {
                                                 <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
                                                 <span><strong>Note:</strong> Text from Pravachans and Granths is extracted via OCR and results are ranked by AI — both may contain errors. For <strong>accurate reference</strong>, please use the <strong>original PDFs</strong> linked alongside each result.</span>
                                             </div>
+                                            <OperationTiming kind="search" running={isLoading} startedAt={searchStartedAt} timings={searchData?.timings} />
                                             <div className="card overflow-hidden" ref={resultsPanelRef}>
                                                 <Tabs activeTab={activeTab} setActiveTab={setActiveTab} searchData={searchData}
                                                     similarDocumentsData={similarDocumentsData} onClearSimilar={handleClearSimilar}

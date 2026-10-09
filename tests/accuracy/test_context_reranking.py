@@ -177,6 +177,11 @@ def test_chat_context_flag_controls_every_agent_reranking_path(monkeypatch, mode
     monkeypatch.setattr(agent, "_shorten_results", lambda *args: None)
     response = asyncio.run(agent.agent_search(request, agent.AgentSearchRequest(query="query", language="hi", accuracy_mode=accuracy)))
     results = json.loads(response.body)
+    timing = json.loads(response.headers["X-Search-Timings"])
+    assert timing["total_ms"] >= 0
+    assert "retrieval" in timing["operations"]
+    assert "reranking" in timing["operations"]
+    assert ("context" in timing["operations"]) is use_context
     assert reranker.predict.call_args.args[0][0][1] == ("BEFORE\nCENTRE\nAFTER" if use_context else "CENTRE")
     assert ("rerank_context" in results[0]) is use_context
     if use_context:

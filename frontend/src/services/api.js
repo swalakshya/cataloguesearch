@@ -134,6 +134,7 @@ export const api = {
     // onProgress(category, partialResult) is called after each category arrives.
     // Returns the final merged result when the stream closes.
     search: async (requestPayload, onProgress) => {
+        const startedAt = performance.now();
         const _empty = () => ({ results: [], total_hits: 0, page_size: 20, page_number: 1 });
         const CAT_KEY = { Pravachan: 'pravachan_results', Granth: 'granth_results', Books: 'books_results' };
         const result = {
@@ -177,11 +178,13 @@ export const api = {
                         }
                     } else if (payload.type === 'done') {
                         result.suggestions = payload.suggestions || [];
+                        if (payload.timings) result.timings = { ...payload.timings, total_ms: Math.round(performance.now() - startedAt) };
                     }
                 }
             }
             return result;
         } catch (error) {
+            result.error = error.message;
             console.error("API Error: Could not perform search", error);
             if (onProgress) onProgress(null, { ...result, error: error.message });
             return result;

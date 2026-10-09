@@ -1,3 +1,4 @@
+from backend.search.timings import measure as _measure
 import json
 import logging
 import os
@@ -333,6 +334,8 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
         chat_request_id = request.headers.get("x-chat-request-id") or None
         set_query_id(chat_request_id or os.urandom(3).hex())
         start_time = time.time()
+        search_clock = time.perf_counter()
+        search_timings = {}
         client_ip = (
             request.headers.get("x-real-ip") or
             request.headers.get("x-forwarded-for", "").split(",")[0].strip() or
@@ -346,7 +349,10 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
                 get_query_id(), mode,
                 json.dumps(results, ensure_ascii=False),
             )
-            return JSONResponse(content=results, status_code=200)
+            timing_payload = {"total_ms": round((time.perf_counter() - search_clock) * 1000, 2),
+                              "operations": search_timings}
+            return JSONResponse(content=results, status_code=200,
+                                headers={"X-Search-Timings": json.dumps(timing_payload)})
 
         def _log_metrics(results: list, mode: str, reranked: bool) -> None:
             latency_ms = round((time.time() - start_time) * 1000, 2)
@@ -410,7 +416,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
 
         # --- RRF mode ---
         if search_mode == "rrf":
-            query_embedding = embedding_model.get_embedding(payload.query)
+            query_embedding = _measure(search_timings, "embedding", embedding_model.get_embedding, payload.query)
             if not query_embedding:
                 log_handle.warning("agent_search RRF produced empty embedding; returning empty results")
                 return _respond([], "rrf", False)
@@ -427,7 +433,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
                 }
             }
             try:
-                bm25_response = client.search(
+                bm25_response = _measure(search_timings, "retrieval", client.search,
                     index=config.OPENSEARCH_INDEX_NAME,
                     body=bm25_body,
                     size=oversample,
@@ -443,7 +449,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
             if filters:
                 knn_query["vector_embedding"]["filter"] = {"bool": {"filter": filters}}
             try:
-                knn_response = client.search(
+                knn_response = _measure(search_timings, "retrieval", client.search,
                     index=config.OPENSEARCH_INDEX_NAME,
                     body={"size": oversample, "query": {"knn": knn_query}},
                     size=oversample,
@@ -464,7 +470,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
             if payload.rerank and index_searcher._reranker and fused:
                 max_length = config._agent_config["rerank_max_length"]
                 if payload.accuracy_mode or getattr(config, "CONTEXT_RERANKING", False) is True:
-                    contextual_hits = enrich_hits([item["_hit"] for item in fused], client,
+                    contextual_hits = _measure(search_timings, "context", enrich_hits, [item["_hit"] for item in fused], client,
                         config.OPENSEARCH_INDEX_NAME, payload.language, payload.query,
                         index_searcher._reranker.tokenizer, max_length)
                     for item, contextual_hit in zip(fused, contextual_hits):
@@ -476,7 +482,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
                     for item in fused
                 ]
                 try:
-                    rerank_scores = index_searcher._reranker.predict(
+                    rerank_scores = _measure(search_timings, "reranking", index_searcher._reranker.predict,
                         sentence_pairs,
                         batch_size=config._agent_config["rerank_batch_size"],
                         max_length=max_length,
@@ -503,7 +509,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
                     }
                 }
             }
-            response = client.search(
+            response = _measure(search_timings, "retrieval", client.search,
                 index=config.OPENSEARCH_INDEX_NAME,
                 body=query_body,
                 size=payload.page_size,
@@ -516,7 +522,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
             return _respond(results, "lexical", False)
 
         # --- Vector mode ---
-        query_embedding = embedding_model.get_embedding(payload.query)
+        query_embedding = _measure(search_timings, "embedding", embedding_model.get_embedding, payload.query)
         if not query_embedding:
             log_handle.warning("agent_search produced empty embedding; returning empty results")
             return _respond([], "vector", False)
@@ -526,7 +532,7 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
         if filters:
             knn_query["vector_embedding"]["filter"] = {"bool": {"filter": filters}}
 
-        response = client.search(
+        response = _measure(search_timings, "retrieval", client.search,
             index=config.OPENSEARCH_INDEX_NAME,
             body={"size": initial_fetch_size, "query": {"knn": knn_query}},
             size=initial_fetch_size,
@@ -552,11 +558,11 @@ async def agent_search(request: Request, payload: AgentSearchRequest = Body(...)
         try:
             max_length = config._agent_config["rerank_max_length"]
             if payload.accuracy_mode or getattr(config, "CONTEXT_RERANKING", False) is True:
-                hits = enrich_hits(hits, client, config.OPENSEARCH_INDEX_NAME, payload.language,
+                hits = _measure(search_timings, "context", enrich_hits, hits, client, config.OPENSEARCH_INDEX_NAME, payload.language,
                                   payload.query, index_searcher._reranker.tokenizer, max_length)
                 sentence_pairs = [[h["_rerank_query"], h["_rerank_text"]] for h in hits]
                 max_length = context_token_limit(index_searcher._reranker.tokenizer, max_length)
-            rerank_scores = index_searcher._reranker.predict(
+            rerank_scores = _measure(search_timings, "reranking", index_searcher._reranker.predict,
                 sentence_pairs,
                 batch_size=config._agent_config["rerank_batch_size"],
                 max_length=max_length,

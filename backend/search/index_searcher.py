@@ -1,3 +1,4 @@
+from backend.search.timings import capture_timings, timed_call
 import json
 import logging
 import os
@@ -416,6 +417,7 @@ class IndexSearcher:
             extracted.append(result)
         return extracted
 
+    @capture_timings
     def perform_lexical_search(
             self, keywords: str, exact_match: bool, exclude_words: List[str],
             categories: Dict[str, List[str]], detected_language: str,
@@ -427,7 +429,7 @@ class IndexSearcher:
         from_ = (page_number - 1) * page_size
         log_handle.verbose(f"Lexical query: {json_dumps(query_body)}")
         try:
-            response = self._opensearch_client.search(
+            response = timed_call("retrieval", self._opensearch_client.search,
                 index=self._index_name,
                 body=query_body,
                 size=page_size,
@@ -445,6 +447,7 @@ class IndexSearcher:
             log_handle.error(f"Error during lexical search: {e}", exc_info=True)
             return [], 0
 
+    @capture_timings
     def perform_category_search(
             self, category: str, keywords: str, exact_match: bool, exclude_words: List[str],
             categories: Dict[str, List[str]], detected_language: str,
@@ -491,6 +494,7 @@ class IndexSearcher:
             detected_language, page_size, page_number, start_year, end_year
         )
 
+    @capture_timings
     def perform_rrf_search(
             self, category: str, keywords: str, exact_match: bool,
             exclude_words: List[str], categories: Dict[str, List[str]],
@@ -534,7 +538,7 @@ class IndexSearcher:
             start_year, end_year,
         )
         try:
-            response = self._opensearch_client.search(
+            response = timed_call("retrieval", self._opensearch_client.search,
                 index=self._index_name,
                 body=knn_query,
                 size=oversample,
@@ -558,12 +562,12 @@ class IndexSearcher:
             sentence_pairs = [[keywords, r.get("content_snippet", "")] for r in fused]
             max_length = self._config.RERANK_MAX_LENGTH
             if accuracy_mode or getattr(self._config, "CONTEXT_RERANKING", False) is True:
-                fused = enrich_results(fused, self._opensearch_client, self._index_name,
+                fused = timed_call("context", enrich_results, fused, self._opensearch_client, self._index_name,
                                        detected_language, keywords, self._reranker.tokenizer, max_length)
                 sentence_pairs = [[r["_rerank_query"], r["_rerank_text"]] for r in fused]
                 max_length = context_token_limit(self._reranker.tokenizer, max_length)
             try:
-                rerank_scores = self._reranker.predict(
+                rerank_scores = timed_call("reranking", self._reranker.predict,
                     sentence_pairs,
                     batch_size=self._config.RERANK_BATCH_SIZE,
                     max_length=max_length,
@@ -591,6 +595,7 @@ class IndexSearcher:
                     del result[key]
         return paginated, total
 
+    @capture_timings
     def perform_vector_search(
             self, keywords: str, embedding: List[float], categories: Dict[str, List[str]],
             page_size: int, page_number: int, language: str, rerank: bool = True,
@@ -604,7 +609,7 @@ class IndexSearcher:
                                               start_year, end_year)
         log_handle.debug(f"Vector query: {query_body}")
         try:
-            response = self._opensearch_client.search(
+            response = timed_call("retrieval", self._opensearch_client.search,
                 index=self._index_name,
                 body=query_body,
                 size=initial_fetch_size,
@@ -639,12 +644,12 @@ class IndexSearcher:
             log_handle.info("--- Starting expensive reranker.predict() call... ---")
             max_length = self._config.RERANK_MAX_LENGTH
             if accuracy_mode or getattr(self._config, "CONTEXT_RERANKING", False) is True:
-                hits = enrich_hits(hits, self._opensearch_client, self._index_name, language,
+                hits = timed_call("context", enrich_hits, hits, self._opensearch_client, self._index_name, language,
                                    keywords, self._reranker.tokenizer, max_length)
                 sentence_pairs = [[h["_rerank_query"], h["_rerank_text"]] for h in hits]
                 max_length = context_token_limit(self._reranker.tokenizer, max_length)
             rerank_start_time = time.time()
-            rerank_scores = self._reranker.predict(
+            rerank_scores = timed_call("reranking", self._reranker.predict,
                 sentence_pairs,
                 batch_size=self._config.RERANK_BATCH_SIZE,
                 max_length=max_length,
@@ -718,7 +723,7 @@ class IndexSearcher:
 
             # 3. Execute the search
             log_handle.info(f"Finding similar documents for doc_id: {doc_id}")
-            response = self._opensearch_client.search(
+            response = timed_call("retrieval", self._opensearch_client.search,
                 index=self._index_name,
                 body=query_body
             )
@@ -781,7 +786,7 @@ class IndexSearcher:
                 }
             }
 
-            response = self._opensearch_client.search(index=self._index_name, body=query_body)
+            response = timed_call("retrieval", self._opensearch_client.search,index=self._index_name, body=query_body)
             neighbor_hits = self._extract_results(
                 response.get('hits', {}).get('hits', []), is_lexical=False, language=language)
             log_handle.info(

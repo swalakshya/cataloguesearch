@@ -1,3 +1,4 @@
+import { OperationTiming } from "../OperationTiming";
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { ChevronDown, Sparkles } from 'lucide-react';
@@ -166,7 +167,7 @@ const ChatPage = forwardRef(function ChatPage(
             const withQuestion = ensureRecoveredQuestion(prev, pending.question, localId);
             const hasPending = withQuestion.some(m => m.role === 'assistant' && m.pending && (!localId || m.localId === localId));
             if (hasPending) return withQuestion;
-            return [...withQuestion, { role: 'assistant', pending: true, stage: 'understanding', stageLabel: 'Understanding your question', localId }];
+            return [...withQuestion, { role: 'assistant', pending: true, stage: 'understanding', stageLabel: 'Understanding your question', startedAt: Date.now(), localId }];
         });
 
         try {
@@ -207,7 +208,7 @@ const ChatPage = forwardRef(function ChatPage(
                             const idx = localId
                                 ? updated.findIndex(m => m.localId === localId && m.pending)
                                 : updated.findIndex(m => m.role === 'assistant' && m.pending);
-                            if (idx !== -1) updated[idx] = { ...updated[idx], stage: event.stage, stageLabel: event.label };
+                            if (idx !== -1) updated[idx] = { ...updated[idx], stage: event.stage, stageLabel: event.label, startedAt: event.started_at || updated[idx].startedAt };
                             return updated;
                         });
                     },
@@ -460,6 +461,7 @@ const ChatPage = forwardRef(function ChatPage(
                 tool_trace_id: data.tool_trace_id || null,
                 question: question || '',
                 rawAnswer: data.answer || '',
+                timings: data.timings || null,
             };
             if (idx !== -1) { updated[idx] = msg; return updated; }
             if (localId) return updated; // turn already resolved — idempotent no-op
@@ -497,7 +499,7 @@ const ChatPage = forwardRef(function ChatPage(
         setChatMessages(prev => [
             ...prev,
             { role: 'user', content: message, localId },
-            { role: 'assistant', pending: true, stage: 'understanding', stageLabel: 'Understanding your question', localId }
+            { role: 'assistant', pending: true, stage: 'understanding', stageLabel: 'Understanding your question', startedAt: Date.now(), localId }
         ]);
         setChatInput('');
 
@@ -510,7 +512,8 @@ const ChatPage = forwardRef(function ChatPage(
                     updated[idx] = {
                         ...updated[idx],
                         stage: event.stage || updated[idx].stage,
-                        stageLabel: event.label || updated[idx].stageLabel
+                        stageLabel: event.label || updated[idx].stageLabel,
+                        startedAt: event.started_at || updated[idx].startedAt
                     };
                 }
                 return updated;
@@ -570,7 +573,7 @@ const ChatPage = forwardRef(function ChatPage(
                     setChatSessionId(null);
                     setChatMessages([
                         { role: 'user', content: message, localId },
-                        { role: 'assistant', pending: true, stage: 'understanding', stageLabel: 'Understanding your question', localId }
+                        { role: 'assistant', pending: true, stage: 'understanding', stageLabel: 'Understanding your question', startedAt: Date.now(), localId }
                     ]);
                 });
                 setChatNotice('Previous session expired. Starting a new session…');
@@ -783,7 +786,7 @@ const ChatPage = forwardRef(function ChatPage(
                                                     <div className="flex-1 min-w-0">
                                                         {msg.pending ? (
                                                             <div className="flex items-center text-sm text-ink-muted gap-2">
-                                                                <span>{msg.stageLabel || 'Preparing answer'}</span>
+                                                                <OperationTiming running startedAt={msg.startedAt} label={msg.stageLabel || 'Preparing answer'} />
                                                                 <span className="flex items-center text-brand" aria-hidden="true">
                                                                     <span className="inline-block animate-bounce">.</span>
                                                                     <span className="inline-block animate-bounce" style={{ animationDelay: '0.15s' }}>.</span>
@@ -797,6 +800,7 @@ const ChatPage = forwardRef(function ChatPage(
                                                                         <div className="text-sm font-bold uppercase tracking-[0.12em] text-ink">Answer</div>
                                                                     </div>
                                                                 </div>
+                                                                <OperationTiming timings={msg.timings} />
                                                                 <AnswerBody
                                                                     format={msgFormat}
                                                                     msg={msg}

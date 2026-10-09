@@ -36,3 +36,14 @@ for (const [defaultAccuracy, selected, expected] of [[true, null, true], [false,
         expect(apiMock.submitChatMessage.mock.calls[0][1].accuracy_mode).toBe(expected);
     });
 }
+
+it('renders completed chat timings through the shared component', async () => {
+    apiMock.streamChatMessageResult.mockResolvedValue({ answer: 'उत्तर', timings: { total_ms: 32600, operations: { searching: 18400, preparing: 12700 } } });
+    render(<MemoryRouter><ChatPage language="hindi" appName="swalakshya" activeCategories={['Granth']}
+        activeFilters={[]} query="विकल्प और विचार" setQuery={() => {}} answerFormat="summary" /></MemoryRouter>);
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    const timing = await screen.findByRole('button', { name: /Completed in 32.6s/ });
+    expect(timing).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(timing);
+    expect(screen.getByText('Generating answer')).toBeTruthy();
+});

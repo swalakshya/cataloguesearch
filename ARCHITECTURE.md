@@ -236,3 +236,11 @@ Search API
 ### Search effort and surrounding context
 
 High effort (`accuracy_mode=true`) retrieves 100 candidates and always attempts bounded previous/next paragraph enrichment before vector or hybrid reranking in Khoj and chat. Low effort uses the configured candidate count (default 40) and follows the admin `context_reranking` flag. The rule is request-scoped; choosing High never changes the shared admin setting or another request. Khoj PDF exports carry the same effort option. Missing or incompatible neighbours and token limits can reduce the available context; lexical-only searches do not rerank.
+
+### Operation timing disclosures
+
+Khoj and each chat answer use the shared `OperationTiming` component: a muted live elapsed timer, then a collapsed completion row with operation details on click. Old messages without timing metadata show no invented duration. Khoj measures browser elapsed time from the search request through its final SSE event; that event includes request-local retrieval, context enrichment, and reranking work measured with a monotonic clock in the backend. Searcher timing scopes pass explicitly into executor threads and never modify shared configuration.
+
+Agent search preserves its existing JSON array response and adds optional `X-Search-Timings` metadata. The chat service measures understanding, source search, and answer generation with a monotonic request-local collector, includes `timings` in completed job responses, and saves it in the existing assistant-message JSON for history (no database schema changes). Fine search timings appear nested under source search as accumulated work because parallel searches can overlap; they are not added to the wall-clock total. Chat totals describe service execution through answer completion, excluding browser transport and the decorative typing animation.
+
+Manual verification: submit a Khoj query, watch elapsed time, expand the completed row, and compare Low/High context/reranking durations. Send a chat question, expand its timing row, refresh and reopen History to confirm the recorded timing remains. Older history entries should have no timing row. Backend and chat service processes must load these changes; Vite updates the shared frontend component automatically.
