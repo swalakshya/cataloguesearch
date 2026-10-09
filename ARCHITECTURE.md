@@ -197,6 +197,18 @@ Pull/restart uses the host's existing `.env.prod` and `docker-compose.prod.yml`,
 Manual verification: select a service and run Build & Push alone; check that only its image is built/pushed. Select Pull & Restart Services alone, confirm the listed host/services, and inspect the two job commands (pull, then up). Select both and verify the build step precedes pull/restart. Clear the action or service selection and verify the image Run button is disabled. These checks deploy to the configured host; automated tests use mocks and do not perform a deployment.
 
 
+### Google Drive backups
+
+The local `/deploy?tab=backups` tab uses the shared job runner, progress/log viewer, Copy button, and history. Its backend checks `rclone` on PATH; the tab and submission are disabled with an error if it is unavailable. **Connect Google Drive** starts a separate private `rclone authorize drive` process, opens the loopback sign-in URL, and polls authorization status. Tokens never enter job logs or API responses; a dedicated rclone config is written with mode 0600 outside Git. See [rclone authorization](https://rclone.org/commands/rclone_authorize/).
+
+**Submit** archives `~/cataloguesearch`, captures consistent SQLite databases with the online backup API, generates fresh local OpenSearch snapshots using the existing snapshot helpers, and creates two streaming `.tar.zst` archives. The snapshot worker confirms the configured directory matches OpenSearch's bind mount before clearing/restarting; cancellation attempts to restart a stopped container. A backup uses the job lock to avoid overlapping indexing/deployment. Date names are fixed at run start in Asia/Kolkata.
+
+The backend uploads exactly `cataloguesearch_yyyymmdd.tar.zst` and `snapshots_yyyymmdd.tar.zst` to a temporary Drive folder, verifies sizes/checksums with `rclone check`, publishes `My Drive/snapshots/yyyymmdd`, and checks the published files again. Only then does it move excess dated folders to Google Drive trash, keeping the current folder plus the most recent other date (two total). Non-date folders, files, invalid dates, and incomplete upload folders are excluded; duplicate named backup folders stop the job. Same-date reruns replace archive files after staged verification. Local archives remain for manual recovery; incomplete staging folders are retained on failures.
+
+Settings: `BACKUP_SOURCE_DIR` (default `~/cataloguesearch`), `BACKUP_OUTPUT_DIR` (default `~/cataloguesearch-backups`, required outside the source), and `BACKUP_RCLONE_CONFIG` (default `~/.config/cataloguesearch-backup/rclone.conf`). The existing `DEPLOY_PYTHON` selects the worker interpreter and must have `zstandard` installed. Optional `RCLONE_DRIVE_CLIENT_ID` and `RCLONE_DRIVE_CLIENT_SECRET` configure your own Google OAuth client; rclone's shared client is used otherwise. The connection requires access to existing Drive files so retention can remove manually created dated folders.
+
+Manual verification: open Backups, connect Drive and finish Google sign-in, check the retention preview, then submit. Verify both archives in today's Drive folder and that only today's folder and the latest prior dated folder remain. Inspect the job logs for upload/check/publish/check/retention steps. Simulate a missing rclone executable and verify the tab/submission error. Unit tests use temporary local files and mocked OAuth/Drive/Docker; they do not upload or delete real backups.
+
 ---
 
 ## Data Flow for a Search Query

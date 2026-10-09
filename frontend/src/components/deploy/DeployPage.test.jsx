@@ -67,3 +67,12 @@ it('runs both actions in order and disables Run for empty selections', async () 
     await confirmRun();
     expect(mocks.postJson).toHaveBeenCalledWith('/deploy/runs', { actions: ['build', 'pull_restart'], build_services: ['cataloguesearch-api'] });
 });
+
+it('disables the Backups tab and explains when rclone is not installed', async () => {
+    const api = mocks.api.getMockImplementation();
+    mocks.api.mockImplementation(async path => path === '/deploy/backups/status'
+        ? { rclone_available: false, error: 'rclone is not installed.' } : api(path));
+    await setup();
+    expect(screen.getByRole('tab', { name: 'Backups' })).toBeDisabled();
+    expect(screen.getByText('rclone is not installed.')).toBeInTheDocument();
+});

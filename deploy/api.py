@@ -5,7 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from deploy import checks, compare, docker_health, docker_restart, gc, settings
+from deploy import backups, checks, compare, docker_health, docker_restart, drive, gc, settings
 from deploy.actions import ACTION_ORDER, ACTION_TITLES, start_deploy
 from deploy.runner import Busy, runner
 from deploy import db
@@ -130,6 +130,49 @@ async def gc_run(req: GcRunRequest):
         run_id = await asyncio.to_thread(gc.start_cleanup, req.target, [s.model_dump() for s in req.categories], req.confirm)
     except ValueError as exc:
         raise HTTPException(422, str(exc))
+    except Busy as busy:
+        raise HTTPException(409, f"Run {busy} is already in progress")
+    return {"run_id": run_id}
+
+
+@router.get("/backups/status")
+async def backup_status():
+    return await asyncio.to_thread(backups.status)
+
+
+@router.get("/backups/folders")
+async def backup_folders():
+    try:
+        entries = await asyncio.to_thread(drive.list_folders)
+        dates = backups.dated_folders(entries)
+        return {"folders": dates, "remove_after_upload": backups.retention_targets(entries, backups.today(), settings.BACKUP_RETENTION)}
+    except ValueError as exc:
+        raise HTTPException(503, str(exc))
+
+
+@router.post("/backups/connect", status_code=202)
+async def connect_backup_drive():
+    if runner.active_run_id():
+        raise HTTPException(409, "A job is in progress. Wait before reconnecting Google Drive.")
+    try:
+        return await asyncio.to_thread(drive.connection.start)
+    except ValueError as exc:
+        raise HTTPException(503, str(exc))
+
+
+@router.post("/backups/connect/cancel")
+async def cancel_backup_connection():
+    return await asyncio.to_thread(drive.connection.cancel)
+
+
+@router.post("/backups/runs", status_code=202)
+async def start_backup_run():
+    try:
+        await asyncio.to_thread(backups.preflight)
+        await asyncio.to_thread(_require_docker)
+        run_id = backups.start_backup()
+    except ValueError as exc:
+        raise HTTPException(503, str(exc))
     except Busy as busy:
         raise HTTPException(409, f"Run {busy} is already in progress")
     return {"run_id": run_id}

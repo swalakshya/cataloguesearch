@@ -6,7 +6,7 @@ Serves /api/eval/* (unchanged) and /api/deploy/*. Localhost only: deploy can res
 """
 from fastapi import FastAPI
 
-from deploy import guard, runner as deploy_runner
+from deploy import drive, guard, runner as deploy_runner
 from deploy.api import router as deploy_router
 from deploy.jobs_api import router as jobs_router
 from eval import api as eval_api
@@ -25,3 +25,5 @@ app.include_router(discover_router, prefix="/api")
 app.add_event_handler("startup", eval_api.startup)
 app.add_event_handler("startup", deploy_runner.startup)
 app.add_event_handler("shutdown", deploy_runner.runner.shutdown)
+
+app.add_event_handler("shutdown", drive.connection.cancel)

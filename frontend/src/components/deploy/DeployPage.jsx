@@ -5,6 +5,7 @@ import {
     useJobs, BusyNotice, RunPanel, JobHistory,
 } from '../dev/JobUI';
 import CleanupTab from './CleanupTab';
+import BackupsTab from './BackupsTab';
 import { useDevShell, DockerBlockedNotice } from '../dev/DevShell';
 import OpenSearchCompare, { useOpenSearchCompare } from './OpenSearchCompare';
 
@@ -35,7 +36,9 @@ const DANGEROUS = new Set(['restore_prod', 'pull_restart']);
 
 export default function DeployPage() {
     const [params, setParams] = useSearchParams();
-    const tab = params.get('tab') === 'cleanup' ? 'cleanup' : 'deploy';
+    const tab = ['cleanup', 'backups'].includes(params.get('tab')) ? params.get('tab') : 'deploy';
+    const [backupTools, setBackupTools] = useState(null);
+    useEffect(() => { api('/deploy/backups/status').then(setBackupTools).catch(() => {}); }, []);
     const setTab = (t) => setParams(t === 'deploy' ? {} : { tab: t }, { replace: true });
     const [config, setConfig] = useState(null);
     const [overview, setOverview] = useState(null);
@@ -118,15 +121,19 @@ export default function DeployPage() {
     return (
         <PageShell title="Deploy" subtitle={`Local dev server → registry → ${config?.prod_host || 'prod'}`}>
             <div className="flex border-b border-slate-200" role="tablist" aria-label="Deploy sections">
-                {[['deploy', 'Deploy'], ['cleanup', 'Clean up']].map(([id, label]) => (
+                {[['deploy', 'Deploy'], ['cleanup', 'Clean up'], ['backups', 'Backups']].map(([id, label]) => (
                     <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
-                        className={`cursor-pointer px-4 py-2 text-sm border-b-2 -mb-px transition-colors ${tab === id ? 'border-sky-600 text-sky-700 font-medium' : 'border-transparent text-slate-600 hover:text-slate-900'}`}>
+                        disabled={id === 'backups' && !backupTools?.rclone_available}
+                        title={id === 'backups' ? (backupTools?.error || (!backupTools ? 'Checking rclone availability…' : undefined)) : undefined}
+                        className={`cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2 text-sm border-b-2 -mb-px transition-colors ${tab === id ? 'border-sky-600 text-sky-700 font-medium' : 'border-transparent text-slate-600 hover:text-slate-900'}`}>
                         {label}
                     </button>
                 ))}
             </div>
 
+            {backupTools?.rclone_available === false && <ErrorBanner message={backupTools.error || 'rclone is not installed. Backups are disabled.'} />}
             {tab === 'cleanup' && <CleanupTab prodHost={config?.prod_host} />}
+            {tab === 'backups' && <BackupsTab />}
 
             {/* Stays mounted (just hidden) so its polling and your selections survive a visit to the other tab. */}
             <div className={tab === 'deploy' ? 'space-y-4' : 'hidden'}>

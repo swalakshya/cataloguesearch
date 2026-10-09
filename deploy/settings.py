@@ -38,3 +38,12 @@ DOCKER_TIMEOUT_SECONDS = float(os.environ.get("DEPLOY_DOCKER_TIMEOUT_SECONDS", "
 ORB_BIN = os.environ.get("DEPLOY_ORB_BIN", "")
 # The local OpenSearch container the restart waits for (when it exists).
 OPENSEARCH_CONTAINER = os.environ.get("DEPLOY_OPENSEARCH_CONTAINER", "opensearch-node")
+
+# Local backups and a dedicated Google Drive connection. Archives stay outside the source.
+BACKUP_SOURCE_DIR = Path(os.environ.get('BACKUP_SOURCE_DIR', Path.home() / 'cataloguesearch')).expanduser()
+BACKUP_OUTPUT_DIR = Path(os.environ.get('BACKUP_OUTPUT_DIR', Path.home() / 'cataloguesearch-backups')).expanduser()
+BACKUP_RCLONE_CONFIG = Path(os.environ.get('BACKUP_RCLONE_CONFIG', Path.home() / '.config' / 'cataloguesearch-backup' / 'rclone.conf')).expanduser()
+BACKUP_DRIVE_REMOTE = 'cataloguesearch_backup'
+BACKUP_DRIVE_FOLDER = 'snapshots'
+BACKUP_RETENTION = 2
+BACKUP_TIMEZONE = 'Asia/Kolkata'

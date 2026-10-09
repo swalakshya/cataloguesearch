@@ -19,6 +19,27 @@ export const postJson = (path, payload) => api(path, {
     body: JSON.stringify(payload),
 });
 
+// Bound read requests so a broken tunnel cannot leave polling stuck indefinitely.
+async function pollApi(path, controller) {
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+        return await api(path, { signal: controller.signal, cache: 'no-store' });
+    } catch (error) {
+        if (controller.signal.aborted) throw new Error('Request timed out or connection interrupted');
+        throw error;
+    } finally { clearTimeout(timeout); }
+}
+
+function Freshness({ lastUpdated, nowMs, error, onRetry }) {
+    const age = lastUpdated ? Math.max(0, Math.floor((nowMs - lastUpdated) / 1000)) : null;
+    const stale = !!error || (age !== null && age >= 10);
+    return <div role="status" className={`mb-2 text-xs ${stale ? 'text-amber-700' : 'text-slate-500'}`}>
+        {stale ? 'Connection interrupted; progress may be outdated.' : age === null ? 'Connecting for live updates…' : `Updated ${age} seconds ago.`}
+        {error && <span className="ml-1">{error}</span>}
+        {stale && <button type="button" onClick={onRetry} className="ml-2 cursor-pointer underline">Retry now</button>}
+    </div>;
+}
+
 const STATUS_STYLE = {
     pending: 'bg-slate-100 text-slate-500',
     running: 'bg-blue-100 text-blue-700',
@@ -130,6 +151,8 @@ export function ConfirmModal({ title, lines, phrase, onConfirm, onCancel, confir
 export function LogViewer({ runId, step, running }) {
     const [text, setText] = useState('');
     const [copyStatus, setCopyStatus] = useState('');
+    const [logError, setLogError] = useState('');
+    const retryRef = useRef(() => {});
     const offsetRef = useRef(0);
     const boxRef = useRef(null);
     const stickRef = useRef(true);
@@ -137,6 +160,7 @@ export function LogViewer({ runId, step, running }) {
     useEffect(() => {
         setText('');
         setCopyStatus('');
+        setLogError('');
         offsetRef.current = 0;
         stickRef.current = true;
     }, [runId, step]);
@@ -160,21 +184,32 @@ export function LogViewer({ runId, step, running }) {
         if (!runId || !step) return undefined;
         let stopped = false;
         let timer = null;
+        let controller = null;
         const poll = async () => {
+            if (stopped || controller) return;
+            clearTimeout(timer);
+            controller = new AbortController();
             let gotText = false;
+            let failed = false;
             try {
-                const data = await api(`/jobs/runs/${runId}/log?step=${encodeURIComponent(step)}&offset=${offsetRef.current}`);
+                const data = await pollApi(`/jobs/runs/${runId}/log?step=${encodeURIComponent(step)}&offset=${offsetRef.current}`, controller);
                 if (stopped) return;
+                setLogError('');
                 if (data.text) {
                     gotText = true;
                     offsetRef.current = data.offset;
                     setText((prev) => prev + data.text);
                 }
-            } catch (_) { /* transient, retry */ }
-            if (!stopped && (running || gotText)) timer = setTimeout(poll, running ? 1000 : 200);
+            } catch (error) { if (!stopped) { setLogError(error.message); failed = true; } }
+            finally { controller = null; }
+            if (!stopped && (running || gotText || failed)) timer = setTimeout(poll, running || failed ? 1000 : 200);
         };
+        const resume = () => { if (document.visibilityState !== 'hidden') poll(); };
+        retryRef.current = poll;
+        window.addEventListener('focus', resume);
+        document.addEventListener('visibilitychange', resume);
         poll();
-        return () => { stopped = true; if (timer) clearTimeout(timer); };
+        return () => { stopped = true; clearTimeout(timer); controller?.abort(); window.removeEventListener('focus', resume); document.removeEventListener('visibilitychange', resume); };
     }, [runId, step, running]);
 
     useEffect(() => {
@@ -184,6 +219,7 @@ export function LogViewer({ runId, step, running }) {
 
     return (
         <div className="rounded-md overflow-hidden bg-slate-900">
+            {logError && <div role="alert" className="px-3 py-2 text-xs text-amber-200">Log updates unavailable: {logError}. Retrying… <button type="button" onClick={() => retryRef.current()} className="ml-2 cursor-pointer underline">Retry logs</button></div>}
             <div className="flex items-center justify-end gap-2 bg-slate-800 px-3 py-1.5">
                 {copyStatus === 'failed' && <span role="alert" className="text-xs text-red-300">Could not copy output.</span>}
                 <button type="button" onClick={copyOutput} disabled={!text}
@@ -219,25 +255,49 @@ export function useJobs(kind, onFinished) {
     const finishedRef = useRef(onFinished);
     finishedRef.current = onFinished;
 
+    const [lastUpdated, setLastUpdated] = useState(null);
+    const [pollError, setPollError] = useState('');
+    const requestRef = useRef(null);
+    const generationRef = useRef(0);
     const reload = useCallback(async () => {
+        if (requestRef.current) return;
+        const controller = new AbortController();
+        requestRef.current = controller;
+        const generation = generationRef.current;
         try {
-            const data = await api(`/jobs/runs?kind=${kind}`);
+            const data = await pollApi(`/jobs/runs?kind=${kind}`, controller);
+            if (generation !== generationRef.current) return;
             setRuns(data.runs);
             setActiveRunId(data.active_run_id);
-        } catch (e) { setError(e.message); }
+            setLastUpdated(Date.now());
+            setPollError('');
+        } catch (e) {
+            if (generation === generationRef.current) setPollError(e.message);
+        } finally { if (requestRef.current === controller) requestRef.current = null; }
     }, [kind]);
 
-    useEffect(() => { reload(); }, [reload]);
     useEffect(() => {
-        const id = setInterval(reload, activeRunId ? 1500 : 10000);
+        const resume = () => { if (document.visibilityState !== 'hidden') reload(); };
+        reload();
+        window.addEventListener('focus', resume);
+        document.addEventListener('visibilitychange', resume);
+        return () => {
+            generationRef.current += 1;
+            requestRef.current?.abort();
+            requestRef.current = null;
+            window.removeEventListener('focus', resume);
+            document.removeEventListener('visibilitychange', resume);
+        };
+    }, [reload]);
+    useEffect(() => {
+        const id = setInterval(reload, activeRunId || pollError ? 1500 : 10000);
         return () => clearInterval(id);
-    }, [activeRunId, reload]);
+    }, [activeRunId, pollError, reload]);
     useEffect(() => {
         if (wasActive.current && !activeRunId && finishedRef.current) finishedRef.current();
         wasActive.current = !!activeRunId;
     }, [activeRunId]);
     useEffect(() => {
-        if (!activeRunId) return undefined;
         const id = setInterval(() => setNowMs(Date.now()), 1000);
         return () => clearInterval(id);
     }, [activeRunId]);
@@ -271,7 +331,7 @@ export function useJobs(kind, onFinished) {
 
     return {
         runs, activeRunId, activeHere, busy: !!activeRunId, selectedRun, selectedRunId, selectedStep,
-        nowMs, error, setError, reload, cancel, pickStep, selectRun: setSelectedRunId, started,
+        nowMs, error, setError, reload, cancel, pickStep, selectRun: setSelectedRunId, started, lastUpdated, pollError,
     };
 }
 
@@ -399,6 +459,7 @@ export function RunPanel({ jobs, onRetry }) {
                 </div>
             }
         >
+            {jobs.lastUpdated !== undefined && <Freshness lastUpdated={jobs.lastUpdated} nowMs={jobs.nowMs} error={jobs.pollError} onRetry={jobs.reload} />}
             {run.status === 'waiting' && (
                 <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded p-3 mb-3">
                     Not finished, but nothing failed. Some work is still running elsewhere (e.g. an LLM batch job). Come back later and start it again; it picks up where it left off.
