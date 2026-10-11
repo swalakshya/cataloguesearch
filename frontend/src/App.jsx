@@ -966,6 +966,7 @@ const AppContent = () => {
                     {currentPage === 'chat' && llmAvailable && (
                         <main>
                             <ChatPage
+                                authenticatedUserId={user?.id}
                                 ref={chatPageRef}
                                 answerFormat={answerFormat}
                                 language={language}

@@ -26,3 +26,10 @@ the bundle. Google login, reCAPTCHA, and LLM URLs retain the existing Docker
 runtime placeholder injection and Compose environment settings.
 
 Files containing JSX use `.jsx`; ordinary JavaScript helpers keep `.js`.
+
+Logged-in chats start fresh after 48 hours without a conversation exchange.
+The UI checks the server on entry, tab visibility changes and at the server's
+inactivity deadline; sending is also guarded server-side. Old History entries
+remain readable, and asking another question starts a new conversation without
+carrying over their context. Anonymous chats keep their existing behavior.
+History is sorted by the last question/answer, not when it was opened or renamed.

@@ -36,6 +36,7 @@ const ChatPage = forwardRef(function ChatPage(
     {
         language,
         appName,
+        authenticatedUserId,
         activeCategories,
         debugMode,
         activeFilters,
@@ -57,6 +58,8 @@ const ChatPage = forwardRef(function ChatPage(
 ) {
     const [llmError, setLlmError] = useState(null);
     const [chatNotice, setChatNotice] = useState(null);
+    const [inactivityNotice, setInactivityNotice] = useState(null);
+    const [historyReadOnly, setHistoryReadOnly] = useState(false);
     // Drives the one shared PdfCitationModal instance — set by either
     // StructuredAnswer's "View PDF" click or SummaryAnswer's badges/panel.
     const [activeCitation, setActiveCitation] = useState(null);
@@ -335,6 +338,10 @@ const ChatPage = forwardRef(function ChatPage(
                 .then((data) => {
                     if (cancelled) return;
                     setChatSessionId(data.session_id);
+                    const readOnly = Boolean(authenticatedUserId && data.read_only && !data.busy);
+                    setHistoryReadOnly(readOnly);
+                    setInactivityNotice(readOnly
+                        ? 'This conversation is read-only after 48 hours of inactivity. Your next question will start a new chat.' : null);
                     applyMessages(data.messages || []);
                 })
                 .catch((error) => console.warn('Could not load session from history:', error));
@@ -488,6 +495,7 @@ const ChatPage = forwardRef(function ChatPage(
         if (!message.trim()) return;
         const runId = providedRunId ?? beginChatRun();
         let activeSessionId = sessionId;
+        let creatingReplacementSession = false;
 
         setLlmLoading(true);
         setLlmError(null);
@@ -563,7 +571,7 @@ const ChatPage = forwardRef(function ChatPage(
                 data = await streamForSession(sessionId, clientMsgId);
             } catch (error) {
                 if (!isActiveChatRun(runId)) return;
-                if (error?.detail !== 'session_not_found') throw error;
+                if (!['session_not_found', 'session_inactive'].includes(error?.detail)) throw error;
 
                 // Session expired — clear stale pending key and start fresh
                 clearPendingMessage(sessionId);
@@ -576,10 +584,16 @@ const ChatPage = forwardRef(function ChatPage(
                         { role: 'assistant', pending: true, stage: 'understanding', stageLabel: 'Understanding your question', startedAt: Date.now(), localId }
                     ]);
                 });
-                setChatNotice('Previous session expired. Starting a new session…');
+                setHistoryReadOnly(false);
+                setInactivityNotice(null);
+                setChatNotice(error.detail === 'session_inactive'
+                    ? 'This chat was inactive for 48 hours. Starting a new chat…'
+                    : 'Previous session expired. Starting a new session…');
                 setTimeout(() => setChatNotice(null), 4000);
 
+                creatingReplacementSession = true;
                 const freshSession = await api.createChatSession(getChatSessionPayload());
+                creatingReplacementSession = false;
                 if (!isActiveChatRun(runId)) return;
                 activeSessionId = freshSession.session_id;
                 setChatSessionId(freshSession.session_id);
@@ -596,7 +610,15 @@ const ChatPage = forwardRef(function ChatPage(
             clearPendingMessage(activeSessionId);
         } catch (error) {
             if (!isActiveChatRun(runId)) return;
-            if (error?.detail === 'session_not_found') {
+            if (creatingReplacementSession) {
+                // No job exists to recover yet. Preserve the draft and unlock
+                // the composer instead of polling the expired session forever.
+                setChatSessionId(null);
+                setChatMessages(prev => prev.filter(item => !(item.role === 'assistant' && item.pending)));
+                setChatInput(message);
+                setChatNotice(null);
+                setLlmError('Could not start a new chat. Please try again.');
+            } else if (error?.detail === 'session_not_found') {
                 clearPersistedChatSession();
                 clearPendingMessage(activeSessionId);
                 setChatSessionId(null);
@@ -622,6 +644,9 @@ const ChatPage = forwardRef(function ChatPage(
     }
 
     async function handleChatStart(firstQuestion) {
+        setHistoryReadOnly(false);
+        setInactivityNotice(null);
+        setChatSessionId(null);
         const runId = beginChatRun();
         setLlmLoading(true);
         setLlmError(null);
@@ -637,6 +662,7 @@ const ChatPage = forwardRef(function ChatPage(
             await handleChatSend(session.session_id, firstQuestion, { runId });
         } catch (error) {
             if (!isActiveChatRun(runId)) return;
+            setQuery?.(firstQuestion);
             setLlmError('Could not start chat. Please try again.');
         } finally {
             if (isActiveChatRun(runId)) setLlmLoading(false);
@@ -654,6 +680,8 @@ const ChatPage = forwardRef(function ChatPage(
     }, []);
 
     const handleEndChat = useCallback(async () => {
+        setHistoryReadOnly(false);
+        setInactivityNotice(null);
         invalidateChatRuns();
         // Used to call api.closeChatSession (DELETE) here, which permanently
         // removed the session from the server -- fine before History existed,
@@ -677,6 +705,54 @@ const ChatPage = forwardRef(function ChatPage(
         setChatContentTypes(chatDefaultCategories || activeCategories || ['Pravachan', 'Granth']);
         setAccuracyMode(chatDefaultAccuracyMode);
     }, [activeCategories, chatDefaultCategories, chatDefaultAccuracyMode, chatSessionId, clearPendingMessage, clearPersistedChatSession, clearRecoveryTimer, invalidateChatRuns, resetTypingState]);
+
+    // Ask the server on entry, at its deadline, and when a tab wakes up.
+    // Its timestamp includes activity on other devices. Reads never renew it.
+    useEffect(() => {
+        if (!authenticatedUserId || !chatSessionId || llmLoading || hasPendingChatMessage) return;
+        let cancelled = false;
+        let timer;
+        let checkVersion = 0;
+        const check = async () => {
+            clearTimeout(timer);
+            const version = ++checkVersion;
+            try {
+                const data = await api.getChatSession(chatSessionId);
+                if (cancelled || version !== checkVersion || activeStreamLocalIdRef.current) return;
+                if (data.read_only && !data.busy) {
+                    if (remoteSessionId === chatSessionId) {
+                        setHistoryReadOnly(true);
+                        setInactivityNotice('This conversation is read-only after 48 hours of inactivity. Your next question will start a new chat.');
+                    } else {
+                        void handleEndChat();
+                        setInactivityNotice('Your previous chat was inactive for 48 hours. A new chat is ready; the previous conversation remains in History.');
+                    }
+                    return;
+                }
+                setHistoryReadOnly(false);
+                setInactivityNotice(null);
+                // Busy sessions are checked again after processing; a null
+                // deadline belongs to an anonymous session and needs no timer.
+                if (data.busy || data.inactivity_remaining_ms != null) {
+                    timer = setTimeout(check, data.busy ? 60_000 : Math.max(1000, data.inactivity_remaining_ms));
+                }
+            } catch (error) {
+                if (cancelled || version !== checkVersion) return;
+                // A temporary network failure must not discard the chat.
+                // The message endpoint also enforces the cutoff before a send.
+                timer = setTimeout(check, 60_000);
+            }
+        };
+        const onVisible = () => { if (document.visibilityState === 'visible') void check(); };
+        void check();
+        document.addEventListener('visibilitychange', onVisible);
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+            document.removeEventListener('visibilitychange', onVisible);
+        };
+    }, [authenticatedUserId, chatSessionId, remoteSessionId, remoteSessionNavKey,
+        llmLoading, hasPendingChatMessage, handleEndChat]);
 
     // AuthContext dispatches this right after logout — reuses the same
     // local-only reset as "New Chat" (no server delete), so a currently-open
@@ -710,6 +786,8 @@ const ChatPage = forwardRef(function ChatPage(
 
     return (
         <>
+            {llmError && <p role="alert" className="max-w-4xl mx-auto mb-3 px-4 text-sm" style={{ color: 'var(--color-danger)' }}>{llmError}</p>}
+            {inactivityNotice && <p role="status" className="max-w-4xl mx-auto mb-3 px-4 text-sm text-ink-muted">{inactivityNotice}</p>}
             <PdfCitationModal citation={activeCitation} onClose={() => setActiveCitation(null)} />
 
             {/* Empty state — centered search bar */}
@@ -860,7 +938,6 @@ const ChatPage = forwardRef(function ChatPage(
                                 );
                             });
                         })()}
-                        {llmError && <div className="text-sm" style={{ color: 'var(--color-danger)' }}>{llmError}</div>}
                         <div ref={messagesEndRef} />
                         {/* Spacer while loading so the new user bubble can always reach the top of the viewport */}
                         {llmLoading && <div style={{ height: '70vh', flexShrink: 0 }} aria-hidden="true" />}
@@ -897,7 +974,7 @@ const ChatPage = forwardRef(function ChatPage(
                         <ChatComposer
                             query={chatInput}
                             setQuery={setChatInput}
-                            onSend={() => chatInput.trim() && !llmLoading && handleChatSend(chatSessionId, chatInput)}
+                            onSend={() => chatInput.trim() && !llmLoading && (historyReadOnly || !chatSessionId ? handleChatStart(chatInput) : handleChatSend(chatSessionId, chatInput))}
                             language={language}
                             disabled={llmLoading || hasPendingChatMessage}
                             loading={llmLoading}
@@ -908,7 +985,7 @@ const ChatPage = forwardRef(function ChatPage(
                             compact
                             accuracyMode={accuracyMode}
                             setAccuracyMode={setAccuracyMode}
-                            placeholder="Ask a follow-up question..."
+                            placeholder={historyReadOnly ? "Ask a question in a new chat..." : "Ask a follow-up question..."}
                         />
                     </div>
                 </div>
