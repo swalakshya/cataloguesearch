@@ -511,8 +511,11 @@ export function RunPanel({ jobs, onRetry }) {
 export function JobHistory({ jobs }) {
     if (jobs.runs.length === 0) return null;
     return (
-        <Card title="History">
-            <div className="divide-y divide-slate-100">
+        <details className="bg-white border border-slate-200 rounded-lg p-4">
+            <summary className="cursor-pointer text-sm font-semibold text-slate-700">
+                History <span className="font-normal text-slate-400">({jobs.runs.length})</span>
+            </summary>
+            <div className="mt-3 divide-y divide-slate-100">
                 {jobs.runs.map((r) => (
                     <div
                         key={r.id}
@@ -526,6 +529,6 @@ export function JobHistory({ jobs }) {
                     </div>
                 ))}
             </div>
-        </Card>
+        </details>
     );
 }
