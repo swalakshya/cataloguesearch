@@ -268,6 +268,52 @@ The **Docker light** in the Dev bar (every dev page) shows how Docker (OrbStack)
 
 Tests for this tooling: `python -m pytest tests/dev -o log_cli=false` (no Docker or OpenSearch needed).
 
+The Deploy page's **Production** tab (`/deploy?tab=production`) reads system and HTTPS health through
+`GET /api/deploy/production`. Opening the tab or clicking Refresh runs a bounded, read-only Python
+probe over the existing `DEPLOY_PROD_HOST` SSH connection. Production needs Python 3, OpenSSL,
+systemd and apt; the SSH account needs permission to read certificate metadata, renewal configuration
+and the Certbot journal. Individual check failures are displayed without hiding the other results.
+No software is installed on the VM by the status probe. The probe never reads private keys, runs Certbot, refreshes apt
+lists, restarts services or upgrades the OS.
+
+The tab shows Ubuntu version, reboot requirement, pending packages from **cached** apt lists, disk
+certificate expiry and covered domains, and live TLS validation for `swalakshya.me`,
+`www.swalakshya.me` and `chat.swalakshya.me` from the VM. Fingerprints compare served certificates
+with disk certificates to flag a possible missed Nginx reload. Renewal status includes the timer,
+next attempt, last result, authentication method and recent service logs; failed renewal is highlighted
+even when HTTPS is still valid. Dates use the viewer's timezone. Expiry turns amber below 30 full
+days (inclusive) and red below 10; green is strictly more than 30 days. These checks run while the dev
+UI is open, so this is not an always-on expiry monitor.
+
+The **HTTPS pill** beside Docker checks production every minute (the API shares a 60-second cache).
+Its color uses the earliest live endpoint expiry and exact elapsed time, with a separate warning icon
+for renewal/TLS errors. Unavailable status is grey. Hover shows expiry; click opens details and
+**Renew credentials**. Confirming with `prod` navigates immediately to Production and starts a
+`certificates` job through `POST /api/deploy/production/renew`. Progress, logs and history use the
+shared job runner, so renewal cannot overlap another maintenance/deploy job.
+
+The confirmed job prepares the existing shared `/etc/letsencrypt/webroot` for HTTP validation,
+checks every domain, tests/saves Certbot's webroot settings, starts `certbot.service`, gracefully
+reloads Nginx and verifies live certificates and HTTPS. It does not force renewal when not due.
+The first run installs a persistent pre-hook which updates only the two HTTP redirect blocks in
+the running frontend if necessary; Nginx validation/reload failure restores the original file.
+The committed production Nginx configuration already includes the challenge routes for future
+image builds. A deploy hook replaces the old Compose `up -d` hook with Nginx validation/reload;
+old hook contents are backed up as non-executable files. The twice-daily Certbot timer uses these
+same hooks after setup. Staging API missing-resource errors (`Certificate not found` or
+`No such authorization`) get at most three attempts, with 15- and 30-second pauses. These share
+one retry budget even if the error changes between attempts. Domain validation errors fail
+immediately, without bypassing the staging test.
+
+**Production logs** on the same tab reads Docker output for Chat (default), API, Frontend or
+OpenSearch through `GET /api/deploy/production/logs?service=chat&lines=200&since=15m`.
+Choose 5 minutes, 15 minutes, 1 hour or 24 hours and up to 500 lines. Output includes stdout
+and stderr, UTC timestamps, and is capped at 256 KiB per response. Manual refresh fetches a
+snapshot; optional Live updates fetches every 3 seconds without overlapping requests, and
+stops when the tab closes. The selected output remains visible with an error/freshness label
+when a later fetch fails. Remote reads have timeouts and permit only the four known containers;
+they do not restart containers or require the local Docker engine.
+
 ---
 
 ## Ingesting New Content

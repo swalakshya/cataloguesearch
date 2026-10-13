@@ -105,7 +105,7 @@ describe('restarting from the light', () => {
         expect(posts).toEqual([]);
         fireEvent.click(within(pop).getByRole('button', { name: 'Restart Docker (OrbStack)' }));
         fireEvent.click(within(pop).getByRole('button', { name: 'Yes, restart' }));
-        await waitFor(() => expect(posts).toEqual(['/api/deploy/docker/restart']));
+        await waitFor(() => expect(posts.map(url => new URL(url, 'http://localhost').pathname)).toEqual(['/api/deploy/docker/restart']));
     });
 
     test('while it restarts, the popover says which step it is on', async () => {
@@ -199,7 +199,7 @@ describe('buttons go grey while Docker is yellow, red or restarting', () => {
         const all = await screen.findByRole('button', { name: 'Docker is not ready' });
         expect(all).toBeDisabled();
         expect(screen.getByTestId('docker-blocked')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('tab', { name: /Prod/ }));
+        fireEvent.click(within(screen.getByRole('tablist', { name: 'Machine' })).getByRole('tab', { name: /Prod/ }));
         expect(await screen.findByRole('button', { name: /Clean all safe/ })).toBeEnabled();
         expect(screen.queryByTestId('docker-blocked')).toBeNull();
     });
@@ -209,4 +209,3 @@ describe('buttons go grey while Docker is yellow, red or restarting', () => {
         expect(await screen.findByRole('button', { name: /Clean all safe/ })).toBeEnabled();
     });
 });
-

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useRef, useState,
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { api } from './JobUI';
 import { useOutsideClick } from '../../hooks/useOutsideClick';
+import HttpsPill, { useHttpsStatus } from './HttpsStatus';
 
 // One layout for every local dev page (/dev, /discover, /deploy, /eval): a slim dark bar with the dev sections and a
 // live "job running" pill, instead of the public site's navigation. Eval fills the whole window below it.
@@ -203,7 +204,7 @@ export function JobPill() {
     if (!state.run) return null;
     const { kind, created_at: createdAt } = state.run;
     const name = kind === 'gc' ? 'Cleanup' : kind === 'docker' ? 'Docker restart' : kind ? kind[0].toUpperCase() + kind.slice(1) : 'A job';
-    const to = kind === 'gc' ? '/deploy?tab=cleanup' : kind === 'deploy' ? '/deploy' : kind === 'discover' ? '/discover' : '/dev';
+    const to = kind === 'certificates' ? '/deploy?tab=production' : kind === 'gc' ? '/deploy?tab=cleanup' : kind === 'deploy' ? '/deploy' : kind === 'discover' ? '/discover' : '/dev';
     return (
         <Link to={to}
             className="flex items-center gap-2 text-xs px-2.5 py-1 rounded-full bg-blue-500/20 text-blue-100 hover:bg-blue-500/30" data-testid="job-pill">
@@ -213,7 +214,7 @@ export function JobPill() {
     );
 }
 
-function DevNav({ docker }) {
+function DevNav({ docker, https }) {
     const link = ({ isActive }) => `px-3 h-full inline-flex items-center text-sm border-b-2 transition-colors ${
         isActive ? 'border-sky-400 text-white' : 'border-transparent text-slate-300 hover:text-white hover:bg-white/5'}`;
     return (
@@ -224,7 +225,7 @@ function DevNav({ docker }) {
                 Dev <span className="ml-1.5 text-[10px] font-semibold tracking-wide px-1 rounded bg-amber-400 text-slate-900">LOCAL</span>
             </NavLink>
             {SECTIONS.map((s) => <NavLink key={s.to} to={s.to} className={link}>{s.label}</NavLink>)}
-            <div className="ml-auto flex items-center gap-2"><DockerLight docker={docker} /><JobPill /></div>
+            <div className="ml-auto flex items-center gap-2"><DockerLight docker={docker} /><HttpsPill https={https} /><JobPill /></div>
         </header>
     );
 }
@@ -254,13 +255,14 @@ export default function DevShell() {
     }, [focus, setFocus]);
 
     const docker = useDockerStatus();
-    const value = useMemo(() => ({ focus, setFocus, inShell: true, docker }), [focus, setFocus, docker]);
+    const https = useHttpsStatus();
+    const value = useMemo(() => ({ focus, setFocus, inShell: true, docker, https }), [focus, setFocus, docker, https]);
     return (
         <DevShellContext.Provider value={value}>
             {/* The Eval tools take their card colours from these two variables, which the public site sets on its own root. */}
             <div className="h-screen flex flex-col text-ink font-sans"
                 style={{ backgroundColor: 'var(--color-bg)', '--bg-card': 'var(--color-surface)', '--bg-surface': 'var(--color-bg)' }}>
-                {!focus && <DevNav docker={docker} />}
+                {!focus && <DevNav docker={docker} https={https} />}
                 <main className={`flex-1 min-h-0 ${isEval ? 'overflow-hidden' : 'overflow-auto'}`} data-testid="dev-main">
                     <Outlet />
                 </main>

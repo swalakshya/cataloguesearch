@@ -1,11 +1,11 @@
 """FastAPI router for the deploy page. Mounted at /api/deploy by dev.py."""
 import asyncio
-from typing import List, Optional
+from typing import List, Optional, Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from deploy import backups, checks, compare, docker_health, docker_restart, drive, gc, settings
+from deploy import backups, checks, compare, docker_health, docker_restart, drive, gc, production, production_logs, certificates, settings
 from deploy.actions import ACTION_ORDER, ACTION_TITLES, start_deploy
 from deploy.runner import Busy, runner
 from deploy import db
@@ -43,6 +43,34 @@ async def overview():
 @router.get("/prod")
 async def prod():
     return await asyncio.to_thread(checks.prod_status)
+
+
+@router.get("/production")
+async def production_status(fresh: bool = False):
+    return await asyncio.to_thread(production.status, fresh)
+
+
+@router.get("/production/logs")
+async def production_log_snapshot(
+    service: Literal['chat', 'api', 'frontend', 'opensearch'] = 'chat',
+    lines: int = Query(200, ge=1, le=500),
+    since: Literal['5m', '15m', '1h', '24h'] = '15m',
+):
+    return await asyncio.to_thread(production_logs.snapshot, service, lines, since)
+
+
+class RenewCertificateRequest(BaseModel):
+    confirmation: str
+
+
+@router.post("/production/renew", status_code=202)
+async def renew_certificate(req: RenewCertificateRequest):
+    if req.confirmation != "prod":
+        raise HTTPException(422, "Confirm production certificate renewal with prod")
+    try:
+        return {"run_id": certificates.start_renewal()}
+    except Busy as busy:
+        raise HTTPException(409, f"Run {busy} is in progress. Wait for it to finish before renewing.")
 
 
 @router.get("/compare")
