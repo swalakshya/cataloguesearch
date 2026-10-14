@@ -89,8 +89,9 @@ function CategoryRow({ cat, checked, onCheck, busy, onClean, variant, onVariant 
     );
 }
 
-export default function CleanupTab({ prodHost }) {
-    const [target, setTarget] = useState('local');
+export default function CleanupTab({ prodHost, fixedTarget }) {
+    const [chosenTarget, setTarget] = useState('local');
+    const target = fixedTarget || chosenTarget;
     const [scan, setScan] = useState(null);
     const [scanError, setScanError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -176,14 +177,14 @@ export default function CleanupTab({ prodHost }) {
     return (
         <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="inline-flex rounded-md border border-slate-300 overflow-hidden" role="tablist" aria-label="Machine">
+                {fixedTarget ? <p className="text-sm font-semibold">{fixedTarget === 'prod' ? `🌍 Production${prodHost ? ` · ${prodHost}` : ''}` : '🧑‍💻 This laptop'}</p> : <div className="inline-flex rounded-md border border-slate-300 overflow-hidden" role="tablist" aria-label="Machine">
                     {TARGETS.map(([id, label]) => (
                         <button key={id} role="tab" aria-selected={target === id} onClick={() => setTarget(id)}
                             className={`cursor-pointer px-4 py-1.5 text-sm ${target === id ? 'bg-sky-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
                             {id === 'prod' && prodHost ? `${label} (${prodHost})` : label}
                         </button>
                     ))}
-                </div>
+                </div>}
                 <div className="flex items-center gap-3 text-xs">
                     {scan && <span className="text-slate-400">scanned {timeAgo(scan.generated_at)}</span>}
                     <button onClick={() => load(target)} disabled={loading} className="cursor-pointer text-blue-600 hover:underline disabled:opacity-50">

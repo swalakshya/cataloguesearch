@@ -53,10 +53,11 @@ async def production_status(fresh: bool = False):
 @router.get("/production/logs")
 async def production_log_snapshot(
     service: Literal['chat', 'api', 'frontend', 'opensearch'] = 'chat',
-    lines: int = Query(200, ge=1, le=500),
+    lines: int = Query(10000, ge=1, le=10000),
     since: Literal['5m', '15m', '1h', '24h'] = '15m',
+    cursor: Optional[str] = Query(None, max_length=4096),
 ):
-    return await asyncio.to_thread(production_logs.snapshot, service, lines, since)
+    return await asyncio.to_thread(production_logs.snapshot, service, lines, since, cursor)
 
 
 class RenewCertificateRequest(BaseModel):
@@ -112,7 +113,7 @@ async def start_run(req: StartRunRequest):
     unknown = [a for a in req.actions if a not in ACTION_ORDER]
     if unknown:
         raise HTTPException(422, f"Unknown action(s): {', '.join(unknown)}")
-    if any(a in ("build", "pull_restart") for a in req.actions) and req.build_services == []:
+    if any(a in ("build", "pull_restart", "restart_services") for a in req.actions) and req.build_services == []:
         raise HTTPException(422, "Select at least one service")
     if req.build_services:
         allowed = await asyncio.to_thread(checks.build_services)

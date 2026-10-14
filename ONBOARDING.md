@@ -238,6 +238,115 @@ Access it at http://localhost:3000/eval (via the frontend).
 
 ### Dev server: `/dev` homepage, Discover and Deploy
 
+**Standalone dashboard (recommended):** the dev UI and its API share
+`http://localhost:4000/dev`. It runs from the existing Python virtualenv without Docker,
+OpenSearch, the application API/chat, a Vite server or any application UI process. Initial UI
+compilation needs the frontend's installed Node/npm build tools; normal startup does not.
+
+```bash
+cd /Users/rjain/github/swalakshya/cataloguesearch
+/Users/rjain/venv/3.13_swalakshya/bin/python dashboard.py --build
+/Users/rjain/venv/3.13_swalakshya/bin/python dashboard.py
+```
+
+Build once, then use only the final command on subsequent starts. Stop with Ctrl+C. The launcher
+owns one Uvicorn child (no `--reload`), binds only to `127.0.0.1`, and rejects a second launcher.
+The application remains separate at port 3000. The same virtualenv and local dev data used by
+the old port-8001 server are reused; stop that old server before running the new launcher so two
+servers do not manage the same jobs. Existing npm/Vite development remains supported separately.
+
+Saving Python or frontend source changes shows **Update available** in the Dev bar within a few
+seconds. Nothing updates until you click. The update pauses new work, waits for deployment,
+discovery, maintenance, queued/running Eval OCR jobs, load tests, Drive authorization and in-flight API requests to finish,
+then rebuilds changed UI assets and gracefully restarts the dashboard. Status and cancellation
+remain available while waiting. Open tabs reload after reconnecting to the new server instance.
+Python-only updates do not invoke npm. Updating UI code requires Node/npm to be available on PATH;
+it never installs packages automatically. A failed UI build or backend syntax/import validation leaves the old dashboard running and
+allows retry. Editing code during a build also aborts the update so a mixed version is not applied.
+
+Bundles, the current-release pointer, update state and a launcher lock live under the ignored
+`.dashboard/` folder. Assets use versioned URLs so older browser tabs can still load their files
+after an update. Bundles are kept until explicitly removed; their size depends on the compiled UI.
+Missing `/api/*` routes return API errors rather than the dashboard HTML. Docker and external
+service checks can report unavailable independently while the dashboard itself remains usable.
+Automatic macOS startup is separate follow-up work.
+
+### Dashboard navigation
+
+The dashboard separates **🧑‍💻 Dev** (laptop tools) from **🌍 Prod** (the production VM).
+Dev contains Local services, Discovery, Deploy, Cleanup and Eval tools. Laptop/Google Drive backups
+are linked from the Dev home page. Prod contains Overview, Services, Certificates, Backups & restore,
+Cleanup and Host maintenance. Old `/services`, `/discover`, `/eval` and `/deploy?tab=…` URLs redirect
+and preserve evaluation/discovery query parameters.
+
+Production overview reads a short CPU sample, available-memory usage, root disk usage, uptime,
+container image tags/IDs and the last deployment job. Host maintenance shows Ubuntu, kernel, Docker,
+cached package updates and reboot-required state. These checks do not update or restart the VM.
+Production service controls distinguish restart with current images from pull & recreate; both require
+explicit typed confirmation in the UI. Snapshot visibility lists registered OpenSearch repositories;
+restore uses the existing staged-snapshot workflow and its production confirmation. These snapshots do
+not cover application databases or VM backups. Cleanup pages are fixed to their Dev or Prod target.
+
+### Local service controls
+
+Open `http://localhost:4000/services` (Services in the Dev bar). **Start development** starts
+OrbStack/Docker, the existing `opensearch` Compose service, the native Python API, native Node
+chat service, then the built application UI at port 3000. Dependencies are checked for readiness
+before continuing. Docker and the OpenSearch image must already be installed locally; this page
+does not pull/build images, fetch Git changes or install Python/Node packages. The API uses the
+dashboard's virtualenv; chat uses the sibling repo's `service/` and its installed Node dependencies.
+
+Individual Start/Stop/Restart controls share the existing job runner with deployment and maintenance.
+Stopping a dependency stops its managed dependents first. Restart restores the target and previously
+running dependents. **Stop development** leaves Docker and unrelated containers running and preserves
+all stored data. Stopping/restarting Docker requires confirmation because other local containers are
+affected. Docker commands reject remote Docker contexts. Processes started manually are shown as
+external and may be reused when healthy; they are never killed/adopted automatically. Stop those in
+their terminal before managing them here.
+
+API runs on 127.0.0.1:8000 without `--reload`, points to local OpenSearch, and connects its chat-admin
+client to localhost:8012. Chat binds to 127.0.0.1:8012, points to the local API, and shares the API's
+JWT/admin configuration from the root `.env.local`. Chat-specific settings additionally come from
+the sibling `service/.env.local`. The application UI is built with the local API/chat addresses and
+dev dashboard routes disabled, then served on 127.0.0.1:3000 by Python. This avoids Vite hot reload
+applying changes before an explicit update. Refresh the application browser tab after updating UI.
+
+API/UI/chat show **Update available** when local source/config differs from their running revision.
+**Update immediately restarts that service**; in-flight HTTP calls and chat responses can terminate.
+There is no request-draining in this phase. UI Update rebuilds the UI; API/chat Update restarts with
+current source/config. Detached per-service supervisors and verified process-group records survive
+dashboard restarts; a stale/reused PID is never treated as a managed process.
+
+Logs and read-only configuration are available for all five services. Configuration shows the next
+start's values and source files, not a live introspection of an external process. Secret fields are
+masked server-side; Show retrieves one field explicitly, uses no-store responses, and hides it again
+after 30 seconds or closing the view. Configurations are not editable here. Search settings by name;
+the selected service is highlighted and each dependency control describes its impact. Log retrieval
+times show freshness. Logs refresh automatically every three seconds; scrolling up pauses automatic
+scrolling, and Latest resumes it. Copy logs copies the retained text. Services receive a fixed
+startup environment from the configuration files, without stale app settings inherited from the dashboard.
+UI updates build a separate release before stopping the running UI; failed builds keep it available.
+Only the two newest UI builds are retained after a successful start. Startup failures stay visible
+until retried or stopped. Native console logs rotate at 4 MiB with one backup each (about 8 MiB per service); the viewer retains at most 10,000 lines or 5 MB in memory.
+Managed console logs mask configured secrets, credential URLs and token fields before saving.
+Application libraries may also maintain their own existing logs. Docker logs read the existing
+OrbStack host runtime log without starting the VM; OpenSearch logs come from the local container.
+
+Implementation: `deploy/services/base.py` defines the service contract and common configuration,
+masking and action metadata. `DockerService` and `OpenSearchService` implement runtime/container
+operations; `ProcessService` owns the shared native lifecycle, with API/Chat/UI implementations in
+`applications.py`. Register implementations in dependency order in `deploy/services/__init__.py`.
+`deploy/local_services.py` coordinates dependencies and jobs and retains verified process ownership.
+The existing HTTP routes are unchanged; status responses include names, capabilities, action availability,
+disabled reasons, confirmation text and dependency impact. The UI renders this metadata through shared
+components and polling/action hooks in `frontend/src/components/dev/services/`; adding a backend
+implementation does not require service-specific UI branches.
+
+Manual verification: open Services with Docker stopped and confirm the dashboard remains available;
+click Start development and watch the Services job, test search/chat at localhost:3000, edit a local
+API/UI/chat file and confirm Update available appears, then Update and inspect logs. Open Configuration,
+verify secrets are masked until Show, then Hide. Stop development and verify port 4000 remains available.
+
 `dev.py` serves the eval, discover and deploy APIs from one process. Use it instead of `eval.api:app`. Open http://localhost:3000/dev for a homepage linking to everything: **Discover** (`/discover`), **Deploy** (`/deploy`) and each Eval tool.
 
 ```bash
@@ -305,14 +414,16 @@ same hooks after setup. Staging API missing-resource errors (`Certificate not fo
 one retry budget even if the error changes between attempts. Domain validation errors fail
 immediately, without bypassing the staging test.
 
-**Production logs** on the same tab reads Docker output for Chat (default), API, Frontend or
-OpenSearch through `GET /api/deploy/production/logs?service=chat&lines=200&since=15m`.
-Choose 5 minutes, 15 minutes, 1 hour or 24 hours and up to 500 lines. Output includes stdout
-and stderr, UTC timestamps, and is capped at 256 KiB per response. Manual refresh fetches a
-snapshot; optional Live updates fetches every 3 seconds without overlapping requests, and
-stops when the tab closes. The selected output remains visible with an error/freshness label
-when a later fetch fails. Remote reads have timeouts and permit only the four known containers;
-they do not restart containers or require the local Docker engine.
+**Production logs** under Prod → Services reads Docker output for Chat (default), API, Frontend or
+OpenSearch through `GET /api/deploy/production/logs?service=chat&lines=10000&since=15m`.
+Choose 5 minutes, 15 minutes, 1 hour or 24 hours for initial history. Updates resume from a timestamp
+cursor and append new output automatically every three seconds while the view is mounted. Local
+file logs resume from byte/inode cursors and account for rotation. Responses are bounded to 5 MB;
+the shared viewer retains at most 10,000 lines or 5 MB, dropping oldest entries as needed. Scrolling
+up pauses automatic scrolling while new logs continue arriving; Latest returns to the bottom, and
+Copy logs copies retained text. Selected output remains visible with an error/freshness label when
+a later fetch fails. Remote reads have timeouts and permit only the four known containers; they do
+not restart containers or require the local Docker engine.
 
 ---
 

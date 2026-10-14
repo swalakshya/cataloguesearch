@@ -97,12 +97,12 @@ export default function HttpsPill({ https }) {
             <p className="text-xs text-slate-500">Last checked: {expiryDate(https.report?.checked_at)}</p>
             <div className="flex gap-3 items-center">
                 <button disabled={https.starting} onClick={() => { setOpen(false); setConfirm(true); }} className="rounded bg-blue-600 text-white text-xs px-3 py-1.5 disabled:opacity-50">Renew credentials</button>
-                <Link to="/deploy?tab=production" onClick={() => setOpen(false)} className="text-xs text-blue-700">View production</Link>
+                <Link to="/prod/certificates" onClick={() => setOpen(false)} className="text-xs text-blue-700">View production</Link>
             </div>
         </div>}
         {confirm && <RenewalConfirmation onCancel={() => setConfirm(false)} onConfirm={() => {
             setConfirm(false); setOpen(false);
-            navigate('/deploy?tab=production');
+            navigate('/prod/certificates');
             https.renew();
         }} />}
     </div>;

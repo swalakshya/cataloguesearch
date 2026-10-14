@@ -12,7 +12,7 @@ afterEach(() => { cleanup(); vi.useRealTimers(); });
 it('opens chat logs by default and can select a different service and time range', async () => {
     render(<ProductionLogs />);
     await screen.findByText(result.text);
-    expect(mocks.api.mock.calls[0][0]).toBe('/deploy/production/logs?service=chat&lines=200&since=15m');
+    expect(mocks.api.mock.calls[0][0]).toBe('/deploy/production/logs?service=chat&lines=10000&since=15m');
     mocks.api.mockResolvedValue({ ...result, text: 'API ready' });
     fireEvent.change(screen.getByLabelText('Log service'), { target: { value: 'api' } });
     expect(await screen.findByText('API ready')).toBeInTheDocument();
@@ -28,28 +28,24 @@ it('keeps previous output and labels a failed refresh', async () => {
     fireEvent.click(screen.getByRole('button', { name: 'Refresh logs' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('SSH unavailable');
     expect(screen.getByText(result.text)).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Previous results');
+    expect(screen.getByRole('status')).toHaveTextContent('Showing last successful result');
 });
 
 it('shows empty and truncated output explicitly', async () => {
     mocks.api.mockResolvedValue({ ...result, text: '', truncated: true });
     render(<ProductionLogs />);
     expect(await screen.findByText('No logs in this time range.')).toBeInTheDocument();
-    expect(screen.getByText(/Output limited to the most recent 256 KiB/)).toBeInTheDocument();
+    expect(screen.getByText(/History limit reached/)).toBeInTheDocument();
 });
 
-it('polls only with live updates enabled and stops on unmount', async () => {
+it('polls automatically and stops on unmount', async () => {
     vi.useFakeTimers();
     const { unmount } = render(<ProductionLogs />);
     await act(async () => {});
     expect(mocks.api).toHaveBeenCalledTimes(1);
     await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
-    expect(mocks.api).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByLabelText('Live updates'));
-    await act(async () => {});
-    const calls = mocks.api.mock.calls.length;
-    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
-    expect(mocks.api).toHaveBeenCalledTimes(calls + 1);
+    expect(mocks.api).toHaveBeenCalledTimes(3);
+    expect(screen.queryByLabelText('Live updates')).toBeNull();
     unmount();
     const stopped = mocks.api.mock.calls.length;
     await act(async () => { await vi.advanceTimersByTimeAsync(6000); });

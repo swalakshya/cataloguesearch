@@ -60,6 +60,9 @@ def test_partial_failure_and_disk_mismatch(monkeypatch):
     monkeypatch.setattr(probe, 'renewal', lambda: {'service': {'Result': 'exit-code'}})
     monkeypatch.setattr(probe, 'disk_certificates', lambda: [{'domains': ['swalakshya.me'], 'fingerprint': 'new'}])
     monkeypatch.setattr(probe, 'served', lambda host: {'domain': host, 'fingerprint': 'old', 'valid': True})
+    monkeypatch.setattr(probe, 'resources', lambda: {})
+    monkeypatch.setattr(probe, 'containers', lambda: [])
+    monkeypatch.setattr(probe, 'snapshots', lambda: {})
     report = probe.collect()
     assert report['updates']['error'] == 'denied'
     assert report['system']['ubuntu'] == 'Ubuntu 24.04'
@@ -93,3 +96,38 @@ def test_served_validation_failure_still_reads_expiry(monkeypatch):
     assert result['valid'] is False
     assert result['expired'] is True
     assert 'certificate expired' in result['validation_error']
+
+
+def test_resource_usage_uses_available_memory_and_cpu_deltas(monkeypatch):
+    from types import SimpleNamespace
+    samples = iter(['cpu 100 0 0 100 0 0 0 0', 'cpu 125 0 0 175 0 0 0 0'])
+    def read(path):
+        if str(path) == '/proc/stat':
+            return next(samples)
+        if str(path) == '/proc/meminfo':
+            return 'MemTotal: 1000 kB\nMemAvailable: 400 kB\nMemFree: 100 kB\n'
+        if str(path) == '/proc/uptime':
+            return '7200.0 1000.0'
+        raise AssertionError(path)
+    monkeypatch.setattr(probe.Path, 'read_text', read)
+    monkeypatch.setattr(probe.time, 'sleep', lambda _: None)
+    monkeypatch.setattr(probe.shutil, 'disk_usage', lambda _: SimpleNamespace(total=1000, used=250))
+    result = probe.resources()
+    assert result['cpu_percent'] == 25
+    assert result['memory_used'] == 600 * 1024
+    assert result['disk_used'] == 250
+    assert result['uptime_seconds'] == 7200
+
+
+def test_snapshot_inventory_only_reads_local_opensearch(monkeypatch):
+    import io
+    paths = []
+    def urlopen(url, **kwargs):
+        paths.append(url)
+        payload = {'local_backup': {}} if url.endswith('_snapshot/_all') else {'snapshots': [
+            {'snapshot': 'snapshot-1', 'state': 'SUCCESS', 'indices': ['catalogue'], 'end_time': '2026-10-14T10:00:00Z'}]}
+        return io.BytesIO(json.dumps(payload).encode())
+    monkeypatch.setattr(probe.urllib.request, 'urlopen', urlopen)
+    result = probe.snapshots()
+    assert result['repositories'][0]['snapshots'][0]['state'] == 'SUCCESS'
+    assert all(url.startswith('http://127.0.0.1:9200/_snapshot/') for url in paths)

@@ -22,7 +22,7 @@ it('keeps renewal warnings independent of expiry color', () => {
 it('shows expiry on hover and click, confirms renewal, then opens Production and starts the job', () => {
     const renew = vi.fn();
     render(<MemoryRouter initialEntries={['/dev']}><HttpsPill https={{ report: report(60), renew }} />
-        <Routes><Route path="/dev" element={null} /><Route path="/deploy" element={<p>Production page</p>} /></Routes>
+        <Routes><Route path="/dev" element={null} /><Route path="/prod/certificates" element={<p>Production page</p>} /></Routes>
     </MemoryRouter>);
     expect(screen.getByTestId('https-pill').title).toContain('HTTPS expires');
     fireEvent.click(screen.getByTestId('https-pill'));

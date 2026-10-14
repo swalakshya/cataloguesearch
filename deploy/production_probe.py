@@ -8,6 +8,12 @@ import configparser
 import hashlib
 import json
 import math
+import os
+import platform
+import shutil
+import time
+import urllib.request
+import urllib.parse
 from pathlib import Path
 import socket
 import ssl
@@ -107,8 +113,13 @@ def renewal():
 
 def system():
     release = dict(line.split("=", 1) for line in Path("/etc/os-release").read_text().splitlines() if "=" in line)
-    return {"ubuntu": release.get("PRETTY_NAME", "Unknown").strip('"'),
-            "reboot_required": Path("/var/run/reboot-required").exists()}
+    result = {"ubuntu": release.get("PRETTY_NAME", "Unknown").strip('"'),
+              "reboot_required": Path("/var/run/reboot-required").exists(), "kernel": platform.release()}
+    try:
+        result['docker'] = command(['docker', 'version', '--format', '{{.Server.Version}}'])
+    except Exception as exc:
+        result['docker_error'] = str(exc)[:500]
+    return result
 
 
 def updates():
@@ -118,9 +129,63 @@ def updates():
             "source": "Cached apt package lists; no update was run"}
 
 
+def resources():
+    def cpu():
+        values = [int(value) for value in Path('/proc/stat').read_text().splitlines()[0].split()[1:9]]
+        return sum(values), values[3] + values[4]
+    before = cpu()
+    time.sleep(.2)
+    after = cpu()
+    total = after[0] - before[0]
+    memory = {line.split(':')[0]: int(line.split()[1]) * 1024 for line in Path('/proc/meminfo').read_text().splitlines()}
+    disk = shutil.disk_usage('/')
+    available = memory.get('MemAvailable', memory.get('MemFree', 0))
+    return {'cpu_percent': round(100 * (1 - (after[1] - before[1]) / total), 1) if total else None,
+            'cpu_count': os.cpu_count(), 'load_average': list(os.getloadavg()),
+            'memory_total': memory['MemTotal'], 'memory_used': memory['MemTotal'] - available,
+            'disk_total': disk.total, 'disk_used': disk.used,
+            'uptime_seconds': float(Path('/proc/uptime').read_text().split()[0])}
+
+
+def containers():
+    rows = command(['docker', 'ps', '-a', '--no-trunc', '--format', '{{json .}}'])
+    result = []
+    for line in rows.splitlines():
+        item = json.loads(line)
+        result.append({'name': item['Names'], 'image': item['Image'], 'status': item['Status'],
+                       'state': item.get('State'), 'created_at': item.get('CreatedAt'), 'id': item['ID']})
+    if result:
+        images = command(['docker', 'inspect', '--format', '{{.Name}}|{{.Image}}', *[item['id'] for item in result]])
+        ids = dict(line.lstrip('/').split('|', 1) for line in images.splitlines())
+        for item in result:
+            item['image_id'] = ids.get(item['name'])
+    return result
+
+
+def snapshots():
+    def get(path):
+        with urllib.request.urlopen('http://127.0.0.1:9200/' + path, timeout=4) as response:
+            data = response.read(1048577)
+            if len(data) > 1048576:
+                raise RuntimeError('Snapshot inventory is too large to display')
+            return json.loads(data)
+    repositories = get('_snapshot/_all')
+    results = []
+    for name in sorted(repositories)[:10]:
+        item = {'name': name}
+        try:
+            payload = get('_snapshot/' + urllib.parse.quote(name, safe='') + '/_all')
+            item['snapshots'] = [{key: value.get(key) for key in ('snapshot', 'state', 'start_time', 'end_time', 'indices')}
+                                 for value in payload.get('snapshots', [])][-50:]
+        except Exception as exc:
+            item['error'] = str(exc)[:500]
+        results.append(item)
+    return {'repositories': results}
+
+
 def collect():
     report = {"checked_at": datetime.now(timezone.utc).isoformat()}
-    for name, probe in [("system", system), ("updates", updates), ("certificates", disk_certificates), ("renewal", renewal)]:
+    for name, probe in [("system", system), ("updates", updates), ("resources", resources), ("containers", containers), ("snapshots", snapshots), ("certificates", disk_certificates), ("renewal", renewal)]:
         try:
             report[name] = probe()
         except Exception as exc:

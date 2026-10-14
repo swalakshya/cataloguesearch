@@ -23,7 +23,7 @@ const renderAt = (path) => render(
         <Routes>
             <Route path="/" element={<div data-testid="site-home">regular home</div>} />
             <Route element={<DevShell />}>
-                {['/dev', '/discover', '/deploy', '/eval'].map((p) => <Route key={p} path={p} element={<Page name={p} />} />)}
+                {['/dev', '/discover', '/deploy', '/eval', '/dev/services', '/dev/discover', '/dev/deploy', '/dev/cleanup', '/dev/eval', '/prod', '/prod/services'].map((p) => <Route key={p} path={p} element={<Page name={p} />} />)}
             </Route>
         </Routes>
     </MemoryRouter>);
@@ -37,11 +37,13 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); });
 
-test('the Dev bar replaces the public site navigation: Home, Dev, Discover, Deploy, Eval', () => {
-    renderAt('/discover');
-    const links = within(nav()).getAllByRole('link').map((a) => a.textContent.replace(/\s+/g, ' ').trim());
-    expect(links.slice(0, 5)).toEqual(['← Home', 'Dev LOCAL', 'Discover', 'Deploy', 'Eval']);
-    expect(within(nav()).queryByText(/Ask AI|Aagam Khoj|Feedback/i)).not.toBeInTheDocument();
+test('the dashboard separates Dev and Prod, with local tools beneath Dev', () => {
+    renderAt('/dev/discover');
+    const environment = within(nav()).getByRole('navigation', { name: 'Environment' });
+    expect(within(environment).getByRole('link', { name: 'Dev' })).toHaveAttribute('aria-current', 'page');
+    expect(within(environment).getByRole('link', { name: 'Prod' })).not.toHaveAttribute('aria-current');
+    const tools = within(nav()).getByRole('navigation', { name: 'Dev tools' });
+    expect(within(tools).getAllByRole('link').map(link => link.getAttribute('href'))).toEqual(['/dev/services', '/dev/discover', '/dev/deploy', '/dev/cleanup', '/dev/eval']);
 });
 
 test('Home is the only way back to the regular site', () => {
@@ -51,19 +53,28 @@ test('Home is the only way back to the regular site', () => {
 });
 
 test.each([
-    ['/dev', 'Dev LOCAL'], ['/discover', 'Discover'], ['/deploy', 'Deploy'], ['/eval', 'Eval'],
-])('on %s exactly one section is highlighted: %s', (path, label) => {
+    ['/dev/services', 'Local services'], ['/dev/discover', 'Discovery'], ['/dev/deploy', 'Deploy'], ['/dev/eval', 'Eval tools'],
+])('on %s the correct Dev tool is highlighted: %s', (path, label) => {
     renderAt(path);
-    const active = within(nav()).getAllByRole('link').filter((a) => a.getAttribute('aria-current') === 'page');
-    expect(active.map((a) => a.textContent.replace(/\s+/g, ' ').trim())).toEqual([label]);
+    const tools = within(nav()).getByRole('navigation', { name: 'Dev tools' });
+    expect(within(tools).getByRole('link', { name: label, exact: true })).toHaveAttribute('aria-current', 'page');
+    expect(within(tools).getAllByRole('link').filter(link => link.getAttribute('aria-current') === 'page')).toHaveLength(1);
+});
+
+test('Prod has separate service, certificate, backup, cleanup and host sections', () => {
+    renderAt('/prod/services');
+    const tools = within(nav()).getByRole('navigation', { name: 'Prod tools' });
+    expect(within(tools).getByRole('link', { name: 'Services' })).toHaveAttribute('aria-current', 'page');
+    expect(within(tools).getByRole('link', { name: 'Cleanup' })).toHaveAttribute('href', '/prod/cleanup');
+    expect(within(tools).queryByRole('link', { name: 'Local services' })).toBeNull();
 });
 
 test('the browser tab title follows the section', () => {
     const { unmount } = renderAt('/deploy');
-    expect(document.title).toBe('Swalakshya · Deploy');
+    expect(document.title).toBe('Swalakshya · Dev · Deploy');
     unmount();
     renderAt('/eval');
-    expect(document.title).toBe('Swalakshya · Eval');
+    expect(document.title).toBe('Swalakshya · Dev · Eval tools');
 });
 
 test('the shell supplies the card colours the Eval tools rely on, and scrolls everything but Eval itself', () => {
@@ -83,13 +94,13 @@ describe('running-job pill', () => {
         renderAt('/eval');
         const pill = await screen.findByTestId('job-pill');
         expect(pill).toHaveTextContent('Discover running · 12m');
-        expect(pill).toHaveAttribute('href', '/discover');
+        expect(pill).toHaveAttribute('href', '/dev/discover');
     });
 
     test('a deploy links to the Deploy page', async () => {
-        runs = { runs: [{ id: 'r2', kind: 'deploy', created_at: new Date().toISOString() }], active_run_id: 'r2' };
+        runs = { runs: [{ id: 'r2', kind: 'deploy', params: { actions: ['build'] }, created_at: new Date().toISOString() }], active_run_id: 'r2' };
         renderAt('/discover');
-        expect(await screen.findByTestId('job-pill')).toHaveAttribute('href', '/deploy');
+        expect(await screen.findByTestId('job-pill')).toHaveAttribute('href', '/dev/deploy');
     });
 
     test('nothing when idle', async () => {

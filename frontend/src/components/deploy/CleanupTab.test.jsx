@@ -247,3 +247,10 @@ test('if the server refuses to start it, the reason is shown and the selection i
     expect(await screen.findByText(/already in progress/)).toBeInTheDocument();
     expect(screen.getByLabelText('Select Dangling images')).toBeChecked();
 });
+
+test('production cleanup stays scoped to production without a machine switch', async () => {
+    render(<CleanupTab fixedTarget="prod" prodHost="test-prod" />);
+    await waitFor(() => expect(global.fetch.mock.calls.some(([url]) => String(url).includes('target=prod'))).toBe(true));
+    expect(screen.queryByRole('tablist', { name: 'Machine' })).toBeNull();
+    expect(global.fetch.mock.calls.some(([url]) => String(url).includes('target=local'))).toBe(false);
+});

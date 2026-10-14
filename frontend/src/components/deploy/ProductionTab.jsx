@@ -14,7 +14,7 @@ function Problem({ children }) {
     return <p role="alert" className="text-sm text-red-700 break-words">{children}</p>;
 }
 
-export default function ProductionTab() {
+export default function ProductionTab({ section = 'all' }) {
     const [report, setReport] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -46,7 +46,7 @@ export default function ProductionTab() {
     return <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-                <h2 className="font-semibold text-slate-800">Production health</h2>
+                <h2 className="font-semibold text-slate-800">{section === 'certificates' ? '🔐 HTTPS certificates' : 'Production health'}</h2>
                 <p className="text-xs text-slate-500">Read-only checks{report?.host ? ` · ${report.host}` : ''}. Refresh to fetch current status.</p>
                 {report && <p className="text-xs text-slate-500">Last checked: {date(report.checked_at)}{loading || error ? ' · Previous results' : ''}</p>}
             </div>
@@ -68,12 +68,12 @@ export default function ProductionTab() {
         {loading && <p role="status" className="text-sm text-slate-500">Checking certificates, renewal and system status…</p>}
         {error && <Problem>Could not refresh production: {error}</Problem>}
         {report?.reachable === false && <Problem>Production checks unavailable: {report.error}</Problem>}
-        <ProductionLogs />
+        {section === 'all' && <ProductionLogs />}
         {report?.reachable && <>
             {renewalFailed && <div role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-red-800 text-sm">
                 Automatic certificate renewal failed. HTTPS may still work until the current certificate expires.
             </div>}
-            <div className="grid md:grid-cols-2 gap-4">
+            {section === 'all' && <div className="grid md:grid-cols-2 gap-4">
                 <Card title="Ubuntu">
                     {report.system.error ? <Problem>{report.system.error}</Problem> : <div className="text-sm space-y-2">
                         <p>{report.system.ubuntu}</p>
@@ -86,7 +86,7 @@ export default function ProductionTab() {
                         <p className="text-xs text-slate-500">{report.updates.source}</p>
                     </div>}
                 </Card>
-            </div>
+            </div>}
             <Card title="HTTPS certificates on disk">
                 {report.certificates.error && <Problem>{report.certificates.error}</Problem>}
                 <div className="space-y-4">{certificates.map(cert => <div key={cert.name} className="text-sm space-y-1">

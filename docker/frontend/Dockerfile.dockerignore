@@ -21,6 +21,7 @@ frontend/src/components/eval
 frontend/src/components/dev
 frontend/src/components/deploy
 frontend/src/components/discover
+frontend/src/dashboard.jsx
 **/*.test.js
 **/*.test.jsx
 frontend/src/setupTests.js

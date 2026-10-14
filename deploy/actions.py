@@ -8,12 +8,14 @@ from deploy.runner import Cmd, StepCtx, StepSpec, runner
 
 BUILD = "build"
 PULL_RESTART = "pull_restart"
+RESTART_SERVICES = "restart_services"
 COPY_SNAPSHOTS = "copy_snapshots"
 RESTORE_PROD = "restore_prod"
-ACTION_ORDER = [BUILD, PULL_RESTART, COPY_SNAPSHOTS, RESTORE_PROD]
+ACTION_ORDER = [BUILD, RESTART_SERVICES, PULL_RESTART, COPY_SNAPSHOTS, RESTORE_PROD]
 ACTION_TITLES = {
     BUILD: "Build & push images",
     PULL_RESTART: "Pull & restart services",
+    RESTART_SERVICES: "Restart services",
     COPY_SNAPSHOTS: "Create snapshots & copy to prod",
     RESTORE_PROD: "Restore snapshots on prod",
 }
@@ -38,7 +40,7 @@ def commands_for(action: str, params: Dict) -> List[Cmd]:
                             f"{settings.CHAT_SERVICE}: docker compose build --push",
                             cwd=settings.CHAT_REPO_DIR, progress_parser=DockerBuildProgress()))
         return cmds
-    if action == PULL_RESTART:
+    if action in (PULL_RESTART, RESTART_SERVICES):
         selected = params.get("build_services")
         if selected is None:
             selected = settings.DEFAULT_BUILD_SERVICES
@@ -54,6 +56,8 @@ def commands_for(action: str, params: Dict) -> List[Cmd]:
             remote_dir = shlex.quote(prod_dir)
         base = f"cd {remote_dir} && docker-compose --env-file .env.prod -f docker-compose.prod.yml"
         services = shlex.join(selected)
+        if action == RESTART_SERVICES:
+            return [Cmd(_ssh(f"{base} restart {services}"), f"prod: restart {services}")]
         return [
             Cmd(_ssh(f"{base} pull {services}"), f"prod: pull {services}"),
             Cmd(_ssh(f"{base} up -d --no-deps --no-build --force-recreate {services}"),
@@ -108,4 +112,4 @@ def start_deploy(actions: List[str], params: Dict) -> str:
     if not ordered:
         raise ValueError("No valid actions selected")
     label = _run_label(ordered)
-    return runner.start("deploy", label, [_spec(a, params) for a in ordered], params)
+    return runner.start("deploy", label, [_spec(a, params) for a in ordered], {**params, "actions": ordered})

@@ -46,13 +46,13 @@ export default function DevHome() {
         <div>
             <div className="max-w-7xl mx-auto px-4 md:px-6 py-5 space-y-4">
                 <div>
-                    <h1 className="text-xl font-semibold text-slate-800">Dev</h1>
+                    <h1 className="text-xl font-semibold text-slate-800"><span aria-hidden="true">🧑‍💻 </span>Dev</h1>
                     <p className="text-xs text-slate-500">Local tools: ingest, deploy and evaluation. Served by the dev server on this machine.</p>
                 </div>
 
                 {offline && (
                     <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded p-3">
-                        The dev server isn't reachable. Start it with <code className="font-mono">uvicorn dev:app --host 127.0.0.1 --port 8001</code>.
+                        The dev server isn't reachable. Start it with <code className="font-mono">{import.meta.env.REACT_APP_STANDALONE_DASHBOARD ? 'python dashboard.py' : 'uvicorn dev:app --host 127.0.0.1 --port 8001'}</code>.
                     </div>
                 )}
                 {active && (
@@ -63,22 +63,25 @@ export default function DevHome() {
                 )}
 
                 <div className="grid md:grid-cols-2 gap-4">
-                    <BigLink to="/discover" title="Discover" desc="Crawl and index PDFs that aren't in OpenSearch yet. Waits for LLM batch jobs on its own.">
+                    <BigLink to="/dev/services" title="⚙️ Local services" desc="Start Docker, OpenSearch, API, application UI and chat. View configuration, logs and local code updates." />
+                    <BigLink to="/dev/discover" title="🔎 Discovery" desc="Crawl and index PDFs that aren't in OpenSearch yet. Waits for LLM batch jobs on its own.">
                         {pending !== null && (
                             <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${pending > 0 ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
                                 {pending > 0 ? `${pending} file${pending === 1 ? '' : 's'} to ingest` : 'everything indexed'}
                             </span>
                         )}
                     </BigLink>
-                    <BigLink to="/deploy" title="Deploy" desc="Build and push images, copy snapshots to prod, restore and restart services." />
+                    <BigLink to="/dev/deploy" title="🚀 Deploy" desc="Build and push images, copy snapshots to prod, restore and restart services." />
+                    <BigLink to="/dev/cleanup" title="🧹 Cleanup" desc="Review and remove unused local images, caches and temporary files." />
+                    <BigLink to="/dev/backups" title="💾 Laptop backups" desc="Back up local data and snapshots to Google Drive." />
                 </div>
 
-                <Card title="Eval tools" right={<Link to="/eval" className="text-xs text-blue-600 hover:underline">open Eval home</Link>}>
+                <Card title="🧪 Eval tools" right={<Link to="/dev/eval" className="text-xs text-blue-600 hover:underline">open Eval home</Link>}>
                     <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
                         {EVAL_TOOLS.map((t) => (
                             <Link
                                 key={t.tab}
-                                to={`/eval?tab=${t.tab}`}
+                                to={`/dev/eval?tab=${t.tab}`}
                                 className="block border border-slate-200 rounded-md p-3 hover:border-blue-300 hover:bg-blue-50/30 transition cursor-pointer"
                             >
                                 <div className="text-sm font-medium text-slate-800">{t.name}</div>

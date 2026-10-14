@@ -7,11 +7,11 @@ from fastapi.responses import JSONResponse
 
 ALLOWED_ORIGINS = [
     o.strip() for o in os.environ.get(
-        "DEV_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",") if o.strip()
+        "DEV_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:4000,http://127.0.0.1:4000").split(",") if o.strip()
 ]
 
 # Routes that can deploy to prod, run indexing, or cancel a running job.
-GUARDED_PREFIXES = ("/api/deploy", "/api/discover", "/api/jobs")
+GUARDED_PREFIXES = ("/api/deploy", "/api/discover", "/api/jobs", "/api/dashboard", "/api/eval", "/api/local-services")
 
 
 def install(app: FastAPI) -> None:

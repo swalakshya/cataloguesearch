@@ -1,6 +1,7 @@
 """Bounded, read-only Docker log snapshots over production SSH."""
 from datetime import datetime, timezone
 import json
+from pathlib import Path
 import shlex
 import subprocess
 
@@ -13,33 +14,26 @@ SERVICES = {
     'opensearch': 'opensearch-node',
 }
 WINDOWS = ('5m', '15m', '1h', '24h')
-MAX_BYTES = 256 * 1024
+MAX_BYTES = 5 * 1024 * 1024
 
 # Docker sends application stderr logs to stderr even on success. Merge both
 # streams remotely and use Docker's exit code to distinguish actual failures.
-_REMOTE_PROBE = '''import json, subprocess, sys
-container, lines, since = json.loads(sys.argv[1])
+_REMOTE_PROBE = Path(__file__).with_name('log_stream.py').read_text() + """
+import sys
+container, lines, since, cursor = json.loads(sys.argv[1])
 try:
-    proc = subprocess.run(['docker', 'logs', '--timestamps', '--tail', str(lines),
-                           '--since', since, container], stdout=subprocess.PIPE,
-                          stderr=subprocess.STDOUT, timeout=15)
-    output = proc.stdout
-    if proc.returncode:
-        print(json.dumps({'error': output[-1000:].decode('utf-8', 'replace')}))
-    else:
-        print(json.dumps({'text': output[-262144:].decode('utf-8', 'replace'),
-                          'truncated': len(output) > 262144}))
+    print(json.dumps(docker_feed(container, cursor, since, lines)))
 except Exception as exc:
     print(json.dumps({'error': str(exc)[:1000]}))
-'''
+"""
 
 
-def snapshot(service='chat', lines=200, since='15m'):
-    if service not in SERVICES or type(lines) is not int or not 1 <= lines <= 500 or since not in WINDOWS:
+def snapshot(service='chat', lines=10000, since='15m', cursor=None):
+    if service not in SERVICES or type(lines) is not int or not 1 <= lines <= 10000 or since not in WINDOWS:
         raise ValueError('Invalid production log selection')
     result = {'service': service, 'container': SERVICES[service], 'host': settings.PROD_HOST,
               'checked_at': datetime.now(timezone.utc).isoformat(), 'lines': lines, 'since': since}
-    args = shlex.quote(json.dumps([SERVICES[service], lines, since]))
+    args = shlex.quote(json.dumps([SERVICES[service], lines, since, cursor]))
     try:
         proc = subprocess.run(['ssh', *settings.SSH_OPTS, settings.PROD_HOST, 'python3 - ' + args],
                               input=_REMOTE_PROBE, capture_output=True, text=True, timeout=30)

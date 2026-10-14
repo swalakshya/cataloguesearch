@@ -111,4 +111,6 @@ eval/
 deploy/
 ingest/
 dev.py
+dashboard.py
+.dashboard/
 scripts/

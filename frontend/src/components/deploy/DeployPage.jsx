@@ -35,9 +35,9 @@ const CARDS = [
 // Actions that change prod and therefore need a typed confirmation.
 const DANGEROUS = new Set(['restore_prod', 'pull_restart']);
 
-export default function DeployPage() {
+export default function DeployPage({ embedded = false }) {
     const [params, setParams] = useSearchParams();
-    const tab = ['cleanup', 'backups', 'production'].includes(params.get('tab')) ? params.get('tab') : 'deploy';
+    const tab = embedded ? 'deploy' : ['cleanup', 'backups', 'production'].includes(params.get('tab')) ? params.get('tab') : 'deploy';
     const [backupTools, setBackupTools] = useState(null);
     useEffect(() => { api('/deploy/backups/status').then(setBackupTools).catch(() => {}); }, []);
     const setTab = (t) => setParams(t === 'deploy' ? {} : { tab: t }, { replace: true });
@@ -121,7 +121,7 @@ export default function DeployPage() {
 
     return (
         <PageShell title="Deploy" subtitle={`Local dev server → registry → ${config?.prod_host || 'prod'}`}>
-            <div className="flex border-b border-slate-200" role="tablist" aria-label="Deploy sections">
+            {!embedded && <div className="flex border-b border-slate-200" role="tablist" aria-label="Deploy sections">
                 {[['deploy', 'Deploy'], ['production', 'Production'], ['cleanup', 'Clean up'], ['backups', 'Backups']].map(([id, label]) => (
                     <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
                         disabled={id === 'backups' && !backupTools?.rclone_available}
@@ -130,9 +130,8 @@ export default function DeployPage() {
                         {label}
                     </button>
                 ))}
-            </div>
-
-            {backupTools?.rclone_available === false && <ErrorBanner message={backupTools.error || 'rclone is not installed. Backups are disabled.'} />}
+            </div>}
+            {!embedded && backupTools?.rclone_available === false && <ErrorBanner message={backupTools.error || 'rclone is not installed. Backups are disabled.'} />}
             {tab === 'cleanup' && <CleanupTab prodHost={config?.prod_host} />}
             {tab === 'backups' && <BackupsTab />}
             {tab === 'production' && <ProductionTab />}

@@ -58,3 +58,21 @@ def test_pull_only_does_not_require_local_docker(monkeypatch):
     assert result == {'run_id': 'run'}
     assert start.call_args.args[1]['build_services'] == ['cataloguesearch-api']
     health.assert_not_called()
+
+
+def test_restart_services_uses_existing_images_only(monkeypatch):
+    commands = actions.commands_for('restart_services', {'build_services': ['cataloguesearch-api']})
+    assert len(commands) == 1
+    remote = commands[0].argv[-1]
+    assert ' restart cataloguesearch-api' in remote
+    assert ' pull ' not in remote
+    assert ' up ' not in remote
+
+
+def test_restart_services_requires_valid_selection_without_local_docker(monkeypatch):
+    monkeypatch.setattr(api.checks, 'build_services', lambda: ['cataloguesearch-api'])
+    monkeypatch.setattr(api, '_require_docker', Mock(side_effect=AssertionError('No local Docker needed')))
+    monkeypatch.setattr(api, 'start_deploy', Mock(return_value='run'))
+    with pytest.raises(HTTPException):
+        asyncio.run(api.start_run(api.StartRunRequest(actions=['restart_services'], build_services=[])))
+    assert asyncio.run(api.start_run(api.StartRunRequest(actions=['restart_services'], build_services=['cataloguesearch-api']))) == {'run_id': 'run'}

@@ -1,19 +1,16 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 import { api } from './JobUI';
 import { useOutsideClick } from '../../hooks/useOutsideClick';
 import HttpsPill, { useHttpsStatus } from './HttpsStatus';
+import DashboardUpdate from './DashboardUpdate';
+import { AREAS, areaFor, toolFor } from './navigation';
 
-// One layout for every local dev page (/dev, /discover, /deploy, /eval): a slim dark bar with the dev sections and a
-// live "job running" pill, instead of the public site's navigation. Eval fills the whole window below it.
+// Shared Dev/Prod layout with environment navigation, tool sections and global health/job indicators.
+// Eval fills the remaining window and can hide navigation in focus mode.
 
 const FOCUS_KEY = 'eval_focus';
-const TITLES = { '/dev': 'Dev', '/discover': 'Discover', '/deploy': 'Deploy', '/eval': 'Eval' };
-const SECTIONS = [
-    { to: '/discover', label: 'Discover' },
-    { to: '/deploy', label: 'Deploy' },
-    { to: '/eval', label: 'Eval' },
-];
+
 
 const DevShellContext = createContext({ focus: false, setFocus: () => {}, inShell: false, docker: null });
 export const useDevShell = () => useContext(DevShellContext);
@@ -125,7 +122,7 @@ function DockerLight({ docker }) {
             <button onClick={() => setOpen((o) => !o)} aria-haspopup="dialog" aria-expanded={open} data-testid="docker-light" data-state={state}
                 className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/20 text-slate-100">
                 <span className={`inline-block w-2 h-2 rounded-full ${light.dot}`} aria-hidden="true" />
-                {light.label(info)}
+                <span aria-hidden="true">🐳</span>{light.label(info)}
             </button>
             {open && (
                 <div role="dialog" aria-label="Docker" data-esc-owner
@@ -204,7 +201,11 @@ export function JobPill() {
     if (!state.run) return null;
     const { kind, created_at: createdAt } = state.run;
     const name = kind === 'gc' ? 'Cleanup' : kind === 'docker' ? 'Docker restart' : kind ? kind[0].toUpperCase() + kind.slice(1) : 'A job';
-    const to = kind === 'certificates' ? '/deploy?tab=production' : kind === 'gc' ? '/deploy?tab=cleanup' : kind === 'deploy' ? '/deploy' : kind === 'discover' ? '/discover' : '/dev';
+    const actions = state.run.params?.actions || state.run.steps?.map(step => step.name) || [];
+    const to = kind === 'services' || kind === 'docker' ? '/dev/services' : kind === 'certificates' ? '/prod/certificates'
+        : kind === 'gc' ? (state.run.params?.target === 'prod' ? '/prod/cleanup' : '/dev/cleanup')
+        : kind === 'backup' ? '/dev/backups' : kind === 'deploy' ? (actions.includes('restore_prod') ? '/prod/backups' : actions.includes('build') ? '/dev/deploy' : '/prod/services')
+        : kind === 'discover' ? '/dev/discover' : '/dev';
     return (
         <Link to={to}
             className="flex items-center gap-2 text-xs px-2.5 py-1 rounded-full bg-blue-500/20 text-blue-100 hover:bg-blue-500/30" data-testid="job-pill">
@@ -215,24 +216,34 @@ export function JobPill() {
 }
 
 function DevNav({ docker, https }) {
-    const link = ({ isActive }) => `px-3 h-full inline-flex items-center text-sm border-b-2 transition-colors ${
-        isActive ? 'border-sky-400 text-white' : 'border-transparent text-slate-300 hover:text-white hover:bg-white/5'}`;
-    return (
-        <header className="h-11 shrink-0 flex items-center gap-1 px-3 bg-slate-900 text-slate-200" data-testid="dev-nav">
-            <Link to="/" className="text-sm text-slate-300 hover:text-white pr-2" title="Back to the regular site">← Home</Link>
-            <span className="h-5 w-px bg-slate-700 mr-1" aria-hidden="true" />
-            <NavLink to="/dev" end className={link} title="Overview: pending files and running jobs">
-                Dev <span className="ml-1.5 text-[10px] font-semibold tracking-wide px-1 rounded bg-amber-400 text-slate-900">LOCAL</span>
-            </NavLink>
-            {SECTIONS.map((s) => <NavLink key={s.to} to={s.to} className={link}>{s.label}</NavLink>)}
-            <div className="ml-auto flex items-center gap-2"><DockerLight docker={docker} /><HttpsPill https={https} /><JobPill /></div>
-        </header>
-    );
+    const { pathname } = useLocation();
+    const area = areaFor(pathname);
+    const tool = toolFor(pathname);
+    return <header className="shrink-0 bg-slate-900 text-slate-200" data-testid="dev-nav">
+        <div className="min-h-12 flex flex-wrap items-center gap-2 px-3 py-1">
+            {import.meta.env.REACT_APP_STANDALONE_DASHBOARD
+                ? <a href="http://localhost:3000" className="text-sm text-slate-300 hover:text-white pr-2" title="Open the application when it is running">← Application</a>
+                : <Link to="/" className="text-sm text-slate-300 hover:text-white pr-2">← Home</Link>}
+            <nav aria-label="Environment" className="flex gap-1">
+                {Object.entries(AREAS).map(([key, value]) => <Link key={key} to={value.home} aria-current={area === key ? 'page' : undefined}
+                    className={`rounded-lg px-4 py-1.5 text-sm font-semibold ${area === key ? key === 'prod' ? 'bg-emerald-500/20 text-emerald-200' : 'bg-sky-500/20 text-sky-200' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
+                    <span aria-hidden="true" className="mr-2">{value.icon}</span>{value.label}
+                </Link>)}
+            </nav>
+            <div className="ml-auto flex flex-wrap items-center gap-2"><DashboardUpdate /><DockerLight docker={docker} /><HttpsPill https={https} /><JobPill /></div>
+        </div>
+        <nav aria-label={`${AREAS[area].label} tools`} className="flex gap-1 px-3 border-t border-white/10 overflow-x-auto">
+            {AREAS[area].sections.map(([to, label, icon]) => <Link key={to} to={to} aria-current={tool === to ? 'page' : undefined}
+                className={`shrink-0 px-3 py-2 text-xs border-b-2 ${tool === to ? 'border-sky-400 text-white' : 'border-transparent text-slate-300 hover:text-white hover:bg-white/5'}`}>
+                <span aria-hidden="true" className="mr-1.5">{icon}</span>{label}
+            </Link>)}
+        </nav>
+    </header>;
 }
 
 export default function DevShell() {
     const { pathname } = useLocation();
-    const isEval = pathname.startsWith('/eval');
+    const isEval = toolFor(pathname).startsWith('/dev/eval');
     const [focusPref, setFocusPref] = useState(readFocus);
     const focus = isEval && focusPref;
 
@@ -242,8 +253,9 @@ export default function DevShell() {
     }, []);
 
     useEffect(() => {
-        const key = Object.keys(TITLES).find((p) => pathname.startsWith(p));
-        document.title = `Swalakshya · ${key ? TITLES[key] : 'Dev'}`;
+        const area = AREAS[areaFor(pathname)];
+        const section = area.sections.find(([to]) => to === toolFor(pathname));
+        document.title = `Swalakshya · ${area.label}${section ? ` · ${section[1]}` : ''}`;
     }, [pathname]);
 
     // Esc brings the Dev bar back, unless a dialog / popover / menu is open and owns the key.
