@@ -15,6 +15,10 @@ Search combines BM25 keyword matching, vector embeddings, and a reranking model 
 
 See [ONBOARDING.md](ONBOARDING.md) for step-by-step instructions to have cataloguesearch working on your laptop.
 
+## Local test dashboard
+
+See [DEV_TESTING.md](DEV_TESTING.md) for running all test suites, per-file logs and source coverage from **Dev → Tests & Coverage**.
+
 ## Indexing a new PDF
 
 See [INDEXING_GUIDE.md](INDEXING_GUIDE.md) for a step-by-step guide to adding a new document: choosing an OCR engine, configuring crop, multi-page spreads, sub-sections, Q&A prefixes, stop words, and running the indexing commands.

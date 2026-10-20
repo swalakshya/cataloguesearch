@@ -1,4 +1,5 @@
 """ONNX reranker module for reranking sentence pairs."""
+import json
 import logging
 import os
 import time
@@ -28,7 +29,16 @@ class ONNXReranker:
         onnx_file = os.path.join(model_path, "model.onnx")
         log_handle.info("Loading ONNX model from '%s'...", onnx_file)
         self.session = ort.InferenceSession(onnx_file, providers=["CPUExecutionProvider"])
-        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+        tokenizer_options = {}
+        config_path = os.path.join(model_path, "config.json")
+        if os.path.isfile(config_path):
+            with open(config_path, encoding="utf-8") as stream:
+                model_type = json.load(stream).get("model_type")
+            if model_type == "xlm-roberta":
+                # Transformers can misidentify local XLM-R tokenizers as Mistral.
+                # Keep XLM-R's Metaspace pre-tokenizer, without the Mistral regex patch.
+                tokenizer_options["fix_mistral_regex"] = False
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path, **tokenizer_options)
 
         # Read the graph's actual input names instead of hardcoding them
         # (e.g. bge-reranker-base has no token_type_ids input at all) -- keeps

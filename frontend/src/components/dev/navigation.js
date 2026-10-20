@@ -1,6 +1,6 @@
 export const AREAS = {
     dev: { label: 'Dev', icon: '🧑‍💻', home: '/dev', sections: [
-        ['/dev/services', 'Local services', '⚙️'], ['/dev/discover', 'Discovery', '🔎'],
+        ['/dev/services', 'Local services', '⚙️'], ['/dev/tests', 'Tests & Coverage', '🧪'], ['/dev/discover', 'Discovery', '🔎'],
         ['/dev/deploy', 'Deploy', '🚀'], ['/dev/cleanup', 'Cleanup', '🧹'], ['/dev/eval', 'Eval tools', '🧪'],
     ] },
     prod: { label: 'Prod', icon: '🌍', home: '/prod', sections: [

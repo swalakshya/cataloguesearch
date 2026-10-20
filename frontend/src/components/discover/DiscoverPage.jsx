@@ -11,13 +11,32 @@ const STATUS = {
     indexed: { label: 'Indexed', className: 'bg-green-100 text-green-800' },
 };
 
-function Pill({ status, count }) {
+const STATUS_ORDER = { ocred: 0, not_indexed: 1, indexed: 2 };
+const folderRank = (folder) => Math.min(...folder.files.map((file) => STATUS_ORDER[file.status]));
+
+function Pill({ status, count, onClick, active, filterLabel }) {
     const cfg = STATUS[status];
+    const Tag = onClick ? 'button' : 'span';
     return (
-        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${cfg.className}`}>
+        <Tag
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${cfg.className} ${onClick ? 'cursor-pointer hover:brightness-95' : ''} ${active ? 'ring-2 ring-blue-600 ring-offset-1' : ''}`}
+            onClick={onClick}
+            aria-pressed={onClick ? active : undefined}
+            aria-label={filterLabel}
+            title={onClick ? (active ? 'Clear this status filter' : filterLabel) : undefined}
+        >
             {cfg.label}<span className="font-semibold">{count}</span>
-        </span>
+        </Tag>
     );
+}
+
+function StatusFilters({ counts, filter, onFilter, category = null }) {
+    return Object.keys(STATUS_ORDER).map((status) => (
+        <Pill key={status} status={status} count={counts[status]}
+            active={filter?.status === status && filter.category === category}
+            onClick={() => onFilter(status, category)}
+            filterLabel={`Filter ${category ? `${category} ` : ''}${STATUS[status].label} files`} />
+    ));
 }
 
 // Open the file straight in an Eval tool. PDF Parser works on the PDF itself (it OCRs a page on demand and picks up
@@ -98,8 +117,8 @@ function FolderRow({ folder, busy, dockerOff, onRun, onCleanup, selected, onTogg
                 <div className="flex-1 min-w-[12rem]">
                     <div className="text-sm text-slate-800 truncate" title={name}>{name}</div>
                     <div className="flex flex-wrap gap-1.5 mt-1">
-                        {c.not_indexed > 0 && <Pill status="not_indexed" count={c.not_indexed} />}
                         {c.ocred > 0 && <Pill status="ocred" count={c.ocred} />}
+                        {c.not_indexed > 0 && <Pill status="not_indexed" count={c.not_indexed} />}
                         {c.indexed > 0 && <Pill status="indexed" count={c.indexed} />}
                     </div>
                 </div>
@@ -145,9 +164,9 @@ function FolderRow({ folder, busy, dockerOff, onRun, onCleanup, selected, onTogg
     );
 }
 
-// A category opens by itself when something in it needs ingesting; otherwise it stays folded but one click away,
-// so already-indexed files can still be opened in Eval for a spot check.
-function CategoryCard({ cat, busy, dockerOff, onRun, onCleanup, selected, onToggle }) {
+// Pending categories open automatically; completed categories are available
+// for inspection when the user enables "Show indexed files".
+function CategoryCard({ cat, busy, dockerOff, onRun, onCleanup, selected, onToggle, filter, onFilter }) {
     const pending = cat.counts.not_indexed + cat.counts.ocred;
     const [open, setOpen] = useState(pending > 0);
     return (
@@ -160,9 +179,7 @@ function CategoryCard({ cat, busy, dockerOff, onRun, onCleanup, selected, onTogg
             }
             right={
                 <div className="flex gap-1.5">
-                    {cat.counts.not_indexed > 0 && <Pill status="not_indexed" count={cat.counts.not_indexed} />}
-                    {cat.counts.ocred > 0 && <Pill status="ocred" count={cat.counts.ocred} />}
-                    <Pill status="indexed" count={cat.counts.indexed} />
+                    <StatusFilters counts={cat.counts} filter={filter} onFilter={onFilter} category={cat.name} />
                 </div>
             }
         >
@@ -208,6 +225,8 @@ export default function DiscoverPage() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [cleanup, setCleanup] = useState(null);
+    const [showIndexed, setShowIndexed] = useState(false);
+    const [statusFilter, setStatusFilter] = useState(null);
     const [selected, setSelected] = useState(() => new Set());
     const jobsRef = useRef(null);
 
@@ -233,22 +252,41 @@ export default function DiscoverPage() {
         } catch (e) { jobs.setError(e.message); return false; }
     };
 
-    const allFolders = useMemo(() => (data ? data.categories.flatMap((c) => c.folders) : []), [data]);
-    const selectedFolders = useMemo(() => allFolders.filter((f) => selected.has(f.dir)), [allFolders, selected]);
+    const toggleStatusFilter = (status, category) => {
+        if (status === 'indexed') setShowIndexed(true);
+        setStatusFilter((current) => current?.status === status && current.category === category
+            ? null : { status, category });
+    };
+
+    const visibleCategories = useMemo(() => (data?.categories || [])
+        .filter((cat) => !statusFilter?.category || cat.name === statusFilter.category)
+        .map((cat) => ({
+        ...cat,
+        folders: cat.folders.map((folder) => ({
+            ...folder,
+            files: folder.files
+                .filter((file) => (showIndexed || file.status !== 'indexed')
+                    && (!statusFilter || file.status === statusFilter.status))
+                .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || a.filename.localeCompare(b.filename)),
+        })).filter((folder) => folder.files.length > 0)
+            .sort((a, b) => folderRank(a) - folderRank(b) || a.dir.localeCompare(b.dir)),
+    })).filter((cat) => cat.folders.length > 0), [data, showIndexed, statusFilter]);
+    const visibleFolders = useMemo(() => visibleCategories.flatMap((cat) => cat.folders), [visibleCategories]);
+    const selectedFolders = useMemo(() => visibleFolders.filter((f) => selected.has(f.dir)), [visibleFolders, selected]);
     const toggleSelected = (dir) => setSelected((cur) => {
         const next = new Set(cur);
         if (next.has(dir)) next.delete(dir); else next.add(dir);
         return next;
     });
-    const selectPending = () => setSelected(new Set(allFolders.filter((f) => f.runnable && f.pending > 0).map((f) => f.dir)));
+    const selectPending = () => setSelected(new Set(visibleFolders.filter((f) => f.runnable && f.files.some((file) => file.status !== 'indexed')).map((f) => f.dir)));
     const runSelected = async (mode) => { if (await start(selectedFolders.map((f) => f.dir), mode)) setSelected(new Set()); };
 
-    // A rescan can remove a folder (e.g. after cleanup); never keep selecting something that is no longer listed.
+    // A rescan or filter change can hide a folder; never act on a hidden selection.
     useEffect(() => {
         if (!data) return;
-        const known = new Set(allFolders.map((f) => f.dir));
+        const known = new Set(visibleFolders.map((f) => f.dir));
         setSelected((cur) => (cur.size && [...cur].some((d) => !known.has(d)) ? new Set([...cur].filter((d) => known.has(d))) : cur));
-    }, [data, allFolders]);
+    }, [data, visibleFolders]);
 
     const runCleanup = async (folder) => {
         jobs.setError('');
@@ -273,9 +311,7 @@ export default function DiscoverPage() {
                     </p>
                     {totals && (
                         <div className="flex flex-wrap gap-2 mt-3">
-                            <Pill status="not_indexed" count={totals.not_indexed} />
-                            <Pill status="ocred" count={totals.ocred} />
-                            <Pill status="indexed" count={totals.indexed} />
+                            <StatusFilters counts={totals} filter={statusFilter} onFilter={toggleStatusFilter} />
                         </div>
                     )}
                 </div>
@@ -307,10 +343,17 @@ export default function DiscoverPage() {
                 <SelectionBar folders={selectedFolders} busy={jobs.busy} dockerOff={dockerOff} onRun={runSelected} onClear={() => setSelected(new Set())} />
             )}
 
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-slate-700">Files</h2>
-                <div className="flex items-center gap-4 text-xs">
-                    <button onClick={selectPending} disabled={!allFolders.some((f) => f.runnable && f.pending > 0)}
+                <div className="flex flex-wrap items-center gap-4 text-xs">
+                    <label className="cursor-pointer flex items-center gap-1.5 text-slate-600">
+                        <input type="checkbox" checked={showIndexed} onChange={(e) => {
+                            setShowIndexed(e.target.checked);
+                            if (!e.target.checked && statusFilter?.status === 'indexed') setStatusFilter(null);
+                        }} />
+                        Show indexed files
+                    </label>
+                    <button onClick={selectPending} disabled={!visibleFolders.some((f) => f.runnable && f.files.some((file) => file.status !== 'indexed'))}
                         className="cursor-pointer text-blue-600 hover:underline disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed">Select pending</button>
                     {data && <span className="text-slate-400">scanned {timeAgo(data.generated_at)}</span>}
                     <button onClick={load} disabled={loading} className="cursor-pointer text-blue-600 hover:underline disabled:opacity-50">
@@ -319,10 +362,21 @@ export default function DiscoverPage() {
                 </div>
             </div>
 
+            {statusFilter && (
+                <div className="flex items-center gap-3 text-xs text-slate-600">
+                    <span>Showing {STATUS[statusFilter.status].label} files{statusFilter.category ? ` in ${statusFilter.category}` : ''}</span>
+                    <button onClick={() => setStatusFilter(null)} className="cursor-pointer text-blue-600 hover:underline">Clear status filter</button>
+                </div>
+            )}
             {!data && <p className="text-sm text-slate-400">Loading…</p>}
-            {data && data.categories.map((cat) => (
+            {data && visibleCategories.length === 0 && (
+                <p className="text-sm text-slate-400">
+                    {statusFilter ? 'No files match this status filter.' : showIndexed ? 'No PDF files found.' : 'No pending files. Enable Show indexed files to inspect completed work.'}
+                </p>
+            )}
+            {data && visibleCategories.map((cat) => (
                 <CategoryCard key={cat.name} cat={cat} busy={jobs.busy} dockerOff={dockerOff}
-                    onRun={(d, mode) => start([d], mode)} onCleanup={(d) => setCleanup(d)} selected={selected} onToggle={toggleSelected} />
+                    onRun={(d, mode) => start([d], mode)} onCleanup={(d) => setCleanup(d)} selected={selected} onToggle={toggleSelected} filter={statusFilter} onFilter={toggleStatusFilter} />
             ))}
 
             <JobHistory jobs={jobs} />

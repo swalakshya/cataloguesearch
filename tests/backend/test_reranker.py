@@ -17,7 +17,7 @@ def test_reranker_initialization(initialise):  # pylint: disable=unused-argument
     model_path = config.RERANKER_ONNX_PATH
     reranker = ONNXReranker(model_path)
     
-    assert reranker.model is not None
+    assert reranker.session is not None
     assert reranker.tokenizer is not None
 
 

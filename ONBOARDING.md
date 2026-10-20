@@ -269,7 +269,24 @@ Bundles, the current-release pointer, update state and a launcher lock live unde
 after an update. Bundles are kept until explicitly removed; their size depends on the compiled UI.
 Missing `/api/*` routes return API errors rather than the dashboard HTML. Docker and external
 service checks can report unavailable independently while the dashboard itself remains usable.
-Automatic macOS startup is separate follow-up work.
+For automatic startup at boot, install the macOS system service once:
+
+```bash
+/Users/rjain/venv/3.13_swalakshya/bin/python /Users/rjain/github/swalakshya/cataloguesearch/scripts/install_dashboard_service.py
+```
+
+The installer prompts for the Mac administrator password. It registers
+`com.swalakshya.dashboard` in `/Library/LaunchDaemons`, runs the dashboard as your
+regular account, and restarts it if it exits. The dashboard can remain available
+while your account is logged out or another account is in use. This starts only
+the dashboard UI and dev API; application services remain browser-controlled.
+Logs are `.dashboard/service.stdout.log` and `.dashboard/service.stderr.log`.
+
+For a supervised service limited to the current login, use the same command with
+`--session` (no administrator password). That service ends at logout and is
+replaced automatically when the system installer runs. A manual foreground
+`python dashboard.py` process must be stopped before installing either service;
+these commands never kill an unrelated listener on port 4000.
 
 ### Dashboard navigation
 

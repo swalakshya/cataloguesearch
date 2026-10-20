@@ -205,7 +205,7 @@ export function JobPill() {
     const to = kind === 'services' || kind === 'docker' ? '/dev/services' : kind === 'certificates' ? '/prod/certificates'
         : kind === 'gc' ? (state.run.params?.target === 'prod' ? '/prod/cleanup' : '/dev/cleanup')
         : kind === 'backup' ? '/dev/backups' : kind === 'deploy' ? (actions.includes('restore_prod') ? '/prod/backups' : actions.includes('build') ? '/dev/deploy' : '/prod/services')
-        : kind === 'discover' ? '/dev/discover' : '/dev';
+        : kind === 'testing' ? '/dev/tests' : kind === 'discover' ? '/dev/discover' : '/dev';
     return (
         <Link to={to}
             className="flex items-center gap-2 text-xs px-2.5 py-1 rounded-full bg-blue-500/20 text-blue-100 hover:bg-blue-500/30" data-testid="job-pill">

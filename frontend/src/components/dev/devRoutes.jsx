@@ -7,6 +7,7 @@ import DeployPage from '../deploy/DeployPage';
 import CleanupTab from '../deploy/CleanupTab';
 import BackupsTab from '../deploy/BackupsTab';
 import UIEval from '../eval/UIEval';
+import TestingPage from './testing/TestingPage';
 import LocalServices from './LocalServices';
 import ProductionPage from './ProductionPage';
 import { PageShell } from './JobUI';
@@ -21,6 +22,7 @@ function LegacyTool({ to }) {
 export default (
     <Route element={<DevShell />}>
         <Route path="/dev" element={<DevHome />} />
+        <Route path="/dev/tests" element={<TestingPage />} />
         <Route path="/dev/services" element={<LocalServices />} />
         <Route path="/dev/discover" element={<DiscoverPage />} />
         <Route path="/dev/deploy" element={<DeployPage embedded />} />

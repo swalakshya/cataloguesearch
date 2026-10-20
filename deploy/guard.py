@@ -11,7 +11,7 @@ ALLOWED_ORIGINS = [
 ]
 
 # Routes that can deploy to prod, run indexing, or cancel a running job.
-GUARDED_PREFIXES = ("/api/deploy", "/api/discover", "/api/jobs", "/api/dashboard", "/api/eval", "/api/local-services")
+GUARDED_PREFIXES = ("/api/deploy", "/api/discover", "/api/jobs", "/api/dashboard", "/api/eval", "/api/local-services", "/api/testing")
 
 
 def install(app: FastAPI) -> None:

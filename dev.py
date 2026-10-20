@@ -13,6 +13,7 @@ from eval import api as eval_api
 from ingest.api import router as discover_router
 from deploy import dashboard_updates, dashboard_static
 from deploy.local_services_api import router as local_services_router
+from deploy.testing.api import router as testing_router
 
 app = FastAPI(title="Catalogue Dev Server (eval + deploy)", version="1.0.0")
 guard.install(app)
@@ -30,6 +31,7 @@ app.add_event_handler("shutdown", deploy_runner.runner.shutdown)
 
 app.add_event_handler("shutdown", drive.connection.cancel)
 
+app.include_router(testing_router)
 app.include_router(local_services_router)
 dashboard_updates.install(app)
 # Register the SPA fallback last so missing API routes never return HTML.

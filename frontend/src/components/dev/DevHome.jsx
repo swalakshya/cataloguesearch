@@ -64,6 +64,7 @@ export default function DevHome() {
 
                 <div className="grid md:grid-cols-2 gap-4">
                     <BigLink to="/dev/services" title="⚙️ Local services" desc="Start Docker, OpenSearch, API, application UI and chat. View configuration, logs and local code updates." />
+                    <BigLink to="/dev/tests" title="🧪 Tests & Coverage" desc="Run all local suites, inspect results and logs by test file, and find uncovered source lines." />
                     <BigLink to="/dev/discover" title="🔎 Discovery" desc="Crawl and index PDFs that aren't in OpenSearch yet. Waits for LLM batch jobs on its own.">
                         {pending !== null && (
                             <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${pending > 0 ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>

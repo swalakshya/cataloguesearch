@@ -43,7 +43,7 @@ test('the dashboard separates Dev and Prod, with local tools beneath Dev', () =>
     expect(within(environment).getByRole('link', { name: 'Dev' })).toHaveAttribute('aria-current', 'page');
     expect(within(environment).getByRole('link', { name: 'Prod' })).not.toHaveAttribute('aria-current');
     const tools = within(nav()).getByRole('navigation', { name: 'Dev tools' });
-    expect(within(tools).getAllByRole('link').map(link => link.getAttribute('href'))).toEqual(['/dev/services', '/dev/discover', '/dev/deploy', '/dev/cleanup', '/dev/eval']);
+    expect(within(tools).getAllByRole('link').map(link => link.getAttribute('href'))).toEqual(['/dev/services', '/dev/tests', '/dev/discover', '/dev/deploy', '/dev/cleanup', '/dev/eval']);
 });
 
 test('Home is the only way back to the regular site', () => {
