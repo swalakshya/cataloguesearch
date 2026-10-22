@@ -25,7 +25,7 @@ it('disables submission and shows an error when rclone is missing', async () => 
     mockStatus({ rclone_available: false, connected: false, error: 'rclone is not installed.' });
     render(<BackupsTab />);
     await screen.findByText('rclone is not installed.');
-    expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Back up to Google Drive' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Connect Google Drive' })).toBeDisabled();
     expect(mocks.postJson).not.toHaveBeenCalled();
 });
@@ -34,13 +34,13 @@ it('previews retention of two dated folders and starts the backend backup', asyn
     await screen.findByText('20260919');
     expect(screen.getByText('cataloguesearch_20261009.tar.zst')).toBeInTheDocument();
     expect(screen.getByText('snapshots_20261009.tar.zst')).toBeInTheDocument();
-    const submit=screen.getByRole('button', { name: 'Submit' });
+    const submit=screen.getByRole('button', { name: 'Back up to Google Drive' });
     await waitFor(() => expect(submit).not.toBeDisabled());
     fireEvent.click(submit);
     await waitFor(() => expect(mocks.postJson).toHaveBeenCalledWith('/deploy/backups/runs', {}));
     expect(mocks.started).toHaveBeenCalledWith('run');
 });
-it('connects through the backend and provides the Google sign-in link before enabling Submit', async () => {
+it('connects through the backend and provides the Google sign-in link before enabling backup', async () => {
     mockStatus({ connected: false });
     mocks.postJson.mockResolvedValue({ ...base, connected: false, connection_state: 'connecting', auth_url: 'http://127.0.0.1:53682/auth?state=test' });
     render(<BackupsTab />);
@@ -48,13 +48,13 @@ it('connects through the backend and provides the Google sign-in link before ena
     fireEvent.click(screen.getByRole('button', { name: 'Connect Google Drive' }));
     await waitFor(() => expect(mocks.postJson).toHaveBeenCalledWith('/deploy/backups/connect', {}));
     expect(await screen.findByRole('link', { name: 'Open Google sign-in' })).toHaveAttribute('href', 'http://127.0.0.1:53682/auth?state=test');
-    expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Back up to Google Drive' })).toBeDisabled();
 });
 
 it('shows preparation status while the start request is pending', async () => {
     mocks.postJson.mockReturnValue(new Promise(() => {}));
     render(<BackupsTab />);
-    const submit = await screen.findByRole('button', { name: 'Submit' });
+    const submit = await screen.findByRole('button', { name: 'Back up to Google Drive' });
     await waitFor(() => expect(submit).not.toBeDisabled());
     fireEvent.click(submit);
     expect(screen.getByRole('status')).toHaveTextContent('Preparing backup job');

@@ -93,7 +93,7 @@ export default function BackupsTab() {
                 {dockerBlocked && <p className="text-amber-700">Local Docker must be ready to generate fresh snapshots.</p>}
                 {submitting && <p role="status" className="text-sm text-slate-600">Preparing backup job… Checking local tools and Docker. Live step progress and logs will appear below.</p>}
                 <button type="button" onClick={submit} disabled={blocked}
-                    className="cursor-pointer rounded bg-blue-600 px-5 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">{submitting ? 'Starting…' : 'Submit'}</button>
+                    className="cursor-pointer rounded bg-blue-600 px-5 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">{submitting ? 'Starting…' : 'Back up to Google Drive'}</button>
             </div>}
         </Card>
         <RunPanel jobs={jobs} />

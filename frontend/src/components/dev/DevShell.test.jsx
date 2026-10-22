@@ -23,7 +23,7 @@ const renderAt = (path) => render(
         <Routes>
             <Route path="/" element={<div data-testid="site-home">regular home</div>} />
             <Route element={<DevShell />}>
-                {['/dev', '/discover', '/deploy', '/eval', '/dev/services', '/dev/discover', '/dev/deploy', '/dev/cleanup', '/dev/eval', '/prod', '/prod/services'].map((p) => <Route key={p} path={p} element={<Page name={p} />} />)}
+                {['/dev', '/discover', '/deploy', '/eval', '/dev/services', '/dev/discover', '/dev/deploy', '/dev/backups', '/dev/cleanup', '/dev/eval', '/prod', '/prod/services'].map((p) => <Route key={p} path={p} element={<Page name={p} />} />)}
             </Route>
         </Routes>
     </MemoryRouter>);
@@ -43,7 +43,7 @@ test('the dashboard separates Dev and Prod, with local tools beneath Dev', () =>
     expect(within(environment).getByRole('link', { name: 'Dev' })).toHaveAttribute('aria-current', 'page');
     expect(within(environment).getByRole('link', { name: 'Prod' })).not.toHaveAttribute('aria-current');
     const tools = within(nav()).getByRole('navigation', { name: 'Dev tools' });
-    expect(within(tools).getAllByRole('link').map(link => link.getAttribute('href'))).toEqual(['/dev/services', '/dev/tests', '/dev/discover', '/dev/deploy', '/dev/cleanup', '/dev/eval']);
+    expect(within(tools).getAllByRole('link').map(link => link.getAttribute('href'))).toEqual(['/dev/services', '/dev/tests', '/dev/discover', '/dev/deploy', '/dev/backups', '/dev/cleanup', '/dev/eval']);
 });
 
 test('Home is the only way back to the regular site', () => {
@@ -53,7 +53,7 @@ test('Home is the only way back to the regular site', () => {
 });
 
 test.each([
-    ['/dev/services', 'Local services'], ['/dev/discover', 'Discovery'], ['/dev/deploy', 'Deploy'], ['/dev/eval', 'Eval tools'],
+    ['/dev/services', 'Local services'], ['/dev/discover', 'Discovery'], ['/dev/deploy', 'Deploy'], ['/dev/backups', 'Backups'], ['/dev/cleanup', 'Cleanup'], ['/dev/eval', 'Eval tools'],
 ])('on %s the correct Dev tool is highlighted: %s', (path, label) => {
     renderAt(path);
     const tools = within(nav()).getByRole('navigation', { name: 'Dev tools' });

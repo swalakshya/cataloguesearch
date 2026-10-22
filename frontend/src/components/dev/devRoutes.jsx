@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigate, Route, useLocation } from 'react-router-dom';
+import { Link, Navigate, Route, useLocation } from 'react-router-dom';
 import DevShell from './DevShell';
 import DevHome from './DevHome';
 import DiscoverPage from '../discover/DiscoverPage';
@@ -26,7 +26,7 @@ export default (
         <Route path="/dev/services" element={<LocalServices />} />
         <Route path="/dev/discover" element={<DiscoverPage />} />
         <Route path="/dev/deploy" element={<DeployPage embedded />} />
-        <Route path="/dev/cleanup" element={<PageShell title="🧹 Local cleanup" subtitle="🧑‍💻 This laptop"><CleanupTab fixedTarget="local" /></PageShell>} />
+        <Route path="/dev/cleanup" element={<PageShell title="🧹 Local cleanup" subtitle="🧑‍💻 This laptop"><p className="mb-4 text-sm"><Link to="/dev/backups" className="text-blue-700 hover:underline">Back up before cleanup →</Link></p><CleanupTab fixedTarget="local" /></PageShell>} />
         <Route path="/dev/backups" element={<PageShell title="💾 Laptop backups" subtitle="🧑‍💻 Local data → Google Drive"><BackupsTab /></PageShell>} />
         <Route path="/dev/eval" element={<UIEval />} />
         <Route path="/prod" element={<ProductionPage />} />
