@@ -19,7 +19,7 @@ export default function LocalServices() {
             <button disabled={busy} onClick={() => perform('all', { id: 'stop' })} className="border rounded px-4 py-2 text-sm disabled:opacity-40">Stop development</button>
             <a href="http://localhost:3000" target="_blank" rel="noreferrer" className="text-sm text-blue-700">Open application ↗</a>
         </div>
-        <p className="text-xs text-slate-500">Stop development preserves Docker and stored data. Restart and Update terminate active requests immediately. Dependencies start first; stopping a dependency also stops its managed dependents.</p>
+        <p className="text-sm text-slate-600">Start, Restart and Update automatically prepare required services and wait for readiness. Healthy services are reused. Stop development preserves Docker and stored data. Restart and Update terminate active requests immediately; stopping a dependency also stops its managed dependents.</p>
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
         {pollError && <p role="alert" className="text-sm text-orange-700">Status refresh failed: {pollError}. Showing the last known status.</p>}
         <BusyNotice jobs={jobs} />

@@ -87,7 +87,7 @@ def test_service_update_restarts_immediately(manager, monkeypatch):
     monkeypatch.setattr(manager, '_stop_one', lambda service, ctx: events.append(('stop', service)))
     monkeypatch.setattr(manager, '_start_one', lambda service, ctx: events.append(('start', service)))
     manager.perform('chat', 'update', Mock(cancelled=False))
-    assert events == [('stop', 'chat'), ('start', 'chat')]
+    assert events == [('start', 'docker'), ('start', 'opensearch'), ('start', 'api'), ('stop', 'chat'), ('start', 'chat')]
 
 
 def test_logs_redact_secrets(manager):
@@ -232,6 +232,7 @@ def test_startup_timeout_reports_failed(manager, monkeypatch):
 
 
 def test_ui_build_failure_keeps_running_ui(manager, monkeypatch):
+    monkeypatch.setattr(manager, 'ensure_ready', Mock())
     stop = Mock()
     monkeypatch.setattr(manager, '_stop_one', stop)
     monkeypatch.setattr(manager, '_command', Mock(side_effect=RuntimeError('Build failed')))
@@ -241,6 +242,7 @@ def test_ui_build_failure_keeps_running_ui(manager, monkeypatch):
 
 
 def test_ui_build_precedes_stop_and_uses_prepared_release(manager, monkeypatch):
+    monkeypatch.setattr(manager, 'ensure_ready', Mock())
     events = []
     prepared = ({'command': ['serve', 'release']}, 'revision')
     monkeypatch.setattr(manager.service('ui'), 'prepare', lambda ctx: events.append('build') or prepared)
@@ -254,6 +256,7 @@ def test_ui_build_precedes_stop_and_uses_prepared_release(manager, monkeypatch):
 
 def test_real_lifecycle_update_stop_and_persisted_log_masking(manager, monkeypatch):
     """Real detached supervisor and HTTP process on an ephemeral loopback port."""
+    monkeypatch.setattr(manager, 'ensure_ready', Mock())
     import os
     from pathlib import Path
     import socket
@@ -409,3 +412,45 @@ def test_real_ui_launch_from_frontend_directory_finds_dashboard_modules(tmp_path
     finally:
         if manager._owned('ui'):
             manager._stop_one('ui', ctx)
+
+
+@pytest.mark.parametrize('service,expected', [
+    ('opensearch', ['docker', 'opensearch']),
+    ('api', ['docker', 'opensearch', 'api']),
+    ('chat', ['docker', 'opensearch', 'api', 'chat']),
+    ('ui', ['docker', 'opensearch', 'api', 'chat', 'ui']),
+])
+def test_individual_start_includes_only_required_services(manager, monkeypatch, service, expected):
+    starts = []
+    monkeypatch.setattr(manager, '_start_one', lambda target, ctx: starts.append(target))
+    manager.perform(service, 'start', Mock(cancelled=False))
+    assert starts == expected
+
+
+def test_dependency_failure_prevents_starting_consumers(manager, monkeypatch):
+    starts = []
+    def start(service, ctx):
+        starts.append(service)
+        if service == 'opensearch':
+            raise RuntimeError('OpenSearch not ready')
+    monkeypatch.setattr(manager, '_start_one', start)
+    with pytest.raises(RuntimeError, match='OpenSearch not ready'):
+        manager.ensure_ready('ui', ctx=Mock(cancelled=False))
+    assert starts == ['docker', 'opensearch']
+
+
+def test_cancelled_dependency_startup_does_not_launch_services(manager, monkeypatch):
+    start = Mock()
+    monkeypatch.setattr(manager, '_start_one', start)
+    with pytest.raises(RuntimeError, match='cancelled'):
+        manager.ensure_ready('ui', ctx=Mock(cancelled=True))
+    start.assert_not_called()
+
+
+def test_ready_opensearch_is_reused_without_compose_changes(manager, monkeypatch):
+    monkeypatch.setattr(manager, '_local_docker', Mock())
+    monkeypatch.setattr(manager, '_health', lambda _: True)
+    command = Mock()
+    monkeypatch.setattr(manager, '_command', command)
+    manager._start_one('opensearch', Mock(cancelled=False))
+    command.assert_not_called()

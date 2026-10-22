@@ -3,7 +3,6 @@ import {
     api, postJson, timeAgo, Card, PageShell, ErrorBanner, ConfirmModal,
     useJobs, BusyNotice, RunPanel, JobHistory,
 } from '../dev/JobUI';
-import { useDevShell, DockerBlockedNotice } from '../dev/DevShell';
 
 const STATUS = {
     not_indexed: { label: 'Not indexed', className: 'bg-red-100 text-red-800' },
@@ -99,8 +98,7 @@ function ActionButton({ children, onClick, disabled, title, tone = 'blue' }) {
     );
 }
 
-// `dockerOff`: Docker is yellow / red, so everything that touches OpenSearch is off (OCR alone still works).
-function FolderRow({ folder, busy, dockerOff, onRun, onCleanup, selected, onToggle }) {
+function FolderRow({ folder, busy, onRun, onCleanup, selected, onToggle }) {
     const [open, setOpen] = useState(folder.pending > 0 && folder.files.length <= 6); // pending includes OCRed, so folders awaiting review open up
     const name = folder.dir || '(no scan_config folder)';
     const c = folder.counts;
@@ -131,7 +129,7 @@ function FolderRow({ folder, busy, dockerOff, onRun, onCleanup, selected, onTogg
                         OCR only
                     </ActionButton>
                     <ActionButton
-                        disabled={off || dockerOff || folder.pending === 0}
+                        disabled={off || folder.pending === 0}
                         onClick={() => onRun(folder.dir, 'index')}
                         title="OCR (if needed), wait for LLM batch jobs, then index"
                     >
@@ -139,7 +137,7 @@ function FolderRow({ folder, busy, dockerOff, onRun, onCleanup, selected, onTogg
                     </ActionButton>
                     <ActionButton
                         tone="slate"
-                        disabled={off || dockerOff || c.indexed === 0}
+                        disabled={off || c.indexed === 0}
                         onClick={() => onRun(folder.dir, 'reindex')}
                         title="Force the index step again for files already indexed (no re-OCR)"
                     >
@@ -147,7 +145,7 @@ function FolderRow({ folder, busy, dockerOff, onRun, onCleanup, selected, onTogg
                     </ActionButton>
                     <ActionButton
                         tone="red"
-                        disabled={off || dockerOff || c.indexed + c.ocred === 0}
+                        disabled={off || c.indexed + c.ocred === 0}
                         onClick={() => onCleanup(folder.dir)}
                         title="Remove this folder's documents from OpenSearch and its index state (keeps the ocr/text folders)"
                     >
@@ -166,7 +164,7 @@ function FolderRow({ folder, busy, dockerOff, onRun, onCleanup, selected, onTogg
 
 // Pending categories open automatically; completed categories are available
 // for inspection when the user enables "Show indexed files".
-function CategoryCard({ cat, busy, dockerOff, onRun, onCleanup, selected, onToggle, filter, onFilter }) {
+function CategoryCard({ cat, busy, onRun, onCleanup, selected, onToggle, filter, onFilter }) {
     const pending = cat.counts.not_indexed + cat.counts.ocred;
     const [open, setOpen] = useState(pending > 0);
     return (
@@ -185,7 +183,7 @@ function CategoryCard({ cat, busy, dockerOff, onRun, onCleanup, selected, onTogg
         >
             {open ? (
                 <div className="space-y-2">
-                    {cat.folders.map((f) => <FolderRow key={f.dir || '(none)'} folder={f} busy={busy} dockerOff={dockerOff} onRun={onRun} onCleanup={onCleanup} selected={selected} onToggle={onToggle} />)}
+                    {cat.folders.map((f) => <FolderRow key={f.dir || '(none)'} folder={f} busy={busy} onRun={onRun} onCleanup={onCleanup} selected={selected} onToggle={onToggle} />)}
                 </div>
             ) : (
                 <p className="text-sm text-slate-400">
@@ -198,7 +196,7 @@ function CategoryCard({ cat, busy, dockerOff, onRun, onCleanup, selected, onTogg
 }
 
 // Appears once folders are ticked: run OCR / Index / Re-index across all of them in one job (one shared wait for LLM batches).
-function SelectionBar({ folders, busy, dockerOff, onRun, onClear }) {
+function SelectionBar({ folders, busy, onRun, onClear }) {
     const n = folders.length;
     const needOcr = folders.filter((f) => f.counts.not_indexed > 0).length;
     const toIndex = folders.filter((f) => f.pending > 0).length;
@@ -212,9 +210,9 @@ function SelectionBar({ folders, busy, dockerOff, onRun, onClear }) {
             </div>
             <button disabled={busy || needOcr === 0} onClick={() => onRun('ocr')} className={`${btn} border-blue-300 text-blue-700 hover:bg-blue-50`}
                 title="OCR the selected folders that still need it (no indexing)">OCR only</button>
-            <button disabled={busy || dockerOff || toIndex === 0} onClick={() => onRun('index')} className={`${btn} border-blue-600 bg-blue-600 text-white hover:bg-blue-700`}
+            <button disabled={busy || toIndex === 0} onClick={() => onRun('index')} className={`${btn} border-blue-600 bg-blue-600 text-white hover:bg-blue-700`}
                 title="OCR (if needed), wait for LLM batch jobs once, then index the selected folders">Index</button>
-            <button disabled={busy || dockerOff || hasIndexed === 0} onClick={() => onRun('reindex')} className={`${btn} border-slate-300 text-slate-700 hover:bg-slate-50`}
+            <button disabled={busy || hasIndexed === 0} onClick={() => onRun('reindex')} className={`${btn} border-slate-300 text-slate-700 hover:bg-slate-50`}
                 title="Force the index step again for the selected folders that are already indexed">Re-index</button>
             <button onClick={onClear} className="cursor-pointer text-xs text-blue-600 hover:underline">Clear</button>
         </div>
@@ -238,7 +236,6 @@ export default function DiscoverPage() {
 
     // When a run ends, rescan so files that just got indexed drop out of the pending list.
     const jobs = useJobs('discover', load);
-    const dockerOff = !!useDevShell().docker?.blocked;
     jobsRef.current = jobs;
 
     useEffect(() => { load(); }, [load]);
@@ -317,11 +314,11 @@ export default function DiscoverPage() {
                 </div>
                 <div className="flex flex-col items-stretch gap-2">
                     <button
-                        disabled={jobs.busy || dockerOff || !totals || totals.pending === 0}
+                        disabled={jobs.busy || !totals || totals.pending === 0}
                         onClick={() => start(null, 'index')}
                         className="cursor-pointer px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-semibold shadow-md hover:shadow-lg transition disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none whitespace-nowrap"
                     >
-                        {jobs.busy ? 'A job is in progress…' : dockerOff ? 'Docker is not ready' : `Discover all pending${pendingFolders ? ` (${pendingFolders} folder${pendingFolders === 1 ? '' : 's'})` : ''}  ▶`}
+                        {jobs.busy ? 'A job is in progress…' : `Discover all pending${pendingFolders ? ` (${pendingFolders} folder${pendingFolders === 1 ? '' : 's'})` : ''}  ▶`}
                     </button>
                     <button
                         disabled={jobs.busy || !totals || totals.not_indexed === 0}
@@ -336,11 +333,11 @@ export default function DiscoverPage() {
 
             <ErrorBanner message={jobs.error} onClose={() => jobs.setError('')} />
             <BusyNotice jobs={jobs} />
-            <DockerBlockedNotice />
+            <p className="text-sm text-slate-600">Docker and OpenSearch start automatically when needed. Each run waits for them to be ready before processing files.</p>
             <RunPanel jobs={jobs} />
 
             {selectedFolders.length > 0 && (
-                <SelectionBar folders={selectedFolders} busy={jobs.busy} dockerOff={dockerOff} onRun={runSelected} onClear={() => setSelected(new Set())} />
+                <SelectionBar folders={selectedFolders} busy={jobs.busy} onRun={runSelected} onClear={() => setSelected(new Set())} />
             )}
 
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -375,7 +372,7 @@ export default function DiscoverPage() {
                 </p>
             )}
             {data && visibleCategories.map((cat) => (
-                <CategoryCard key={cat.name} cat={cat} busy={jobs.busy} dockerOff={dockerOff}
+                <CategoryCard key={cat.name} cat={cat} busy={jobs.busy}
                     onRun={(d, mode) => start([d], mode)} onCleanup={(d) => setCleanup(d)} selected={selected} onToggle={toggleSelected} filter={statusFilter} onFilter={toggleStatusFilter} />
             ))}
 

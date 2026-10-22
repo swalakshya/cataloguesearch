@@ -65,6 +65,12 @@ class OpenSearchService(Service):
 
     def start(self, ctx, prepared=None):
         self.manager._local_docker()
+        try:
+            if self.manager._health(self.id):
+                ctx.log('OpenSearch is already ready; reusing it.')
+                return
+        except Exception:
+            pass
         self.manager._command(['docker', 'compose', '--env-file', str(settings.REPO_ROOT / '.env.local'),
                               '-f', str(settings.REPO_ROOT / 'docker-compose.yml'), 'up', '-d', '--no-build', '--pull', 'never', 'opensearch'], timeout=90)
         self.manager._wait(self.id, ctx)

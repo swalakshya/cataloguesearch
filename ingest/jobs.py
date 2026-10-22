@@ -8,7 +8,8 @@
   3. Index  `--index`  -> OCRed -> Indexed, only for folders whose OCR is complete.
 
 Modes: "ocr" = phases 1-2 (then evaluate the output by hand), "index" = phases 1-3, "reindex" = force the
-index step again on already-OCRed folders. Cleanup is a separate one-step job.
+index step again on already-OCRed folders. Every run prepares Docker and OpenSearch first;
+cleanup is a separate job with the same preparation step.
 """
 import os
 import sys
@@ -16,6 +17,7 @@ import time
 from typing import List, Optional
 
 from deploy.runner import EXIT_WAITING, Cmd, StepCtx, StepSpec, runner
+from deploy.local_services import manager
 from ingest import status
 
 POLL_SECONDS = int(os.environ.get("DISCOVER_POLL_SECONDS", "30"))
@@ -23,6 +25,23 @@ POLL_SECONDS = int(os.environ.get("DISCOVER_POLL_SECONDS", "30"))
 MAX_WAIT_SECONDS = int(float(os.environ.get("DISCOVER_MAX_WAIT_MINUTES", "120")) * 60)
 
 MODES = ("ocr", "index", "reindex")
+
+
+def prepare_services(ctx: StepCtx) -> int:
+    """Even the OCR CLI initializes an OpenSearch client before crawling."""
+    try:
+        manager.ensure_ready('opensearch', ctx=ctx)
+        ctx.summary('Docker and OpenSearch are ready')
+        return 0
+    except Exception as exc:
+        message = manager.redact(str(exc))
+        ctx.log(message)
+        ctx.summary(message[:180])
+        return 130 if ctx.cancelled else 1
+
+
+def _services_step() -> StepSpec:
+    return StepSpec('services', 'Prepare Docker and OpenSearch', prepare_services)
 
 
 def _cli(rel_dir: str, *flags: str, label: str) -> Cmd:
@@ -284,7 +303,7 @@ def start_discover(folders: Optional[List[str]], mode: str = "index") -> str:
 
     verb = {"ocr": "OCR", "index": "Discover", "reindex": "Re-index"}[mode]
     label = f"{verb} {targets[0]}" if len(targets) == 1 else f"{verb} {n}"
-    return runner.start("discover", label, specs, {"folders": targets, "mode": mode})
+    return runner.start("discover", label, [_services_step(), *specs], {"folders": targets, "mode": mode})
 
 
 def start_cleanup(folder: str) -> str:
@@ -293,4 +312,4 @@ def start_cleanup(folder: str) -> str:
     if folder not in {f["dir"] for c in data["categories"] for f in c["folders"] if f["runnable"]}:
         raise ValueError(f"Not a known scan_config folder: {folder}")
     spec = StepSpec("cleanup", f"Cleanup {folder}", lambda ctx: ctx.run(_cli(folder, "--cleanup", label="cleanup")))
-    return runner.start("discover", f"Cleanup {folder}", [spec], {"folders": [folder], "mode": "cleanup"})
+    return runner.start("discover", f"Cleanup {folder}", [_services_step(), spec], {"folders": [folder], "mode": "cleanup"})

@@ -184,6 +184,20 @@ class Manager:
         (self.directory / f'{service}.failure.json').unlink(missing_ok=True)
         ctx.log(f'{service} stopped.')
 
+    def ensure_ready(self, *services, ctx):
+        """Start required local services in dependency order inside the caller's job."""
+        for service in services:
+            self.service(service)  # Validate all targets before starting anything.
+        needed = {target for target in ORDER if any(self._depends_on(service, target) for service in services)}
+        try:
+            for target in ORDER:
+                if target in needed:
+                    if ctx.cancelled:
+                        raise RuntimeError('Service startup cancelled. Services already started are left running.')
+                    self._start_one(target, ctx)
+        finally:
+            self._cache_at = 0
+
     def perform(self, service, action, ctx):
         if service not in (*ORDER, 'all') or action not in ('start', 'stop', 'restart', 'update'):
             raise ValueError('Unknown local service action')
@@ -191,6 +205,7 @@ class Manager:
             raise ValueError('Only API, UI and chat have local code updates')
         try:
             if action == 'update':
+                self.ensure_ready(*DEPS[service], ctx=ctx)
                 self.service(service).update(ctx)
                 return
             targets = ORDER if service == 'all' else tuple(s for s in ORDER if self._depends_on(s, service))
@@ -205,11 +220,7 @@ class Manager:
                 needed = set(ORDER) if service == 'all' else {s for s in ORDER if self._depends_on(service, s)}
                 if action == 'restart':
                     needed.update(restore)
-                for target in ORDER:
-                    if target in needed:
-                        if ctx.cancelled:
-                            raise RuntimeError('Service action cancelled')
-                        self._start_one(target, ctx)
+                self.ensure_ready(*needed, ctx=ctx)
         finally:
             self._cache_at = 0
 

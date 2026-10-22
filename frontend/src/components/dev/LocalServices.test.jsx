@@ -2,6 +2,7 @@ import React from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import LocalServices, { ServiceDetails } from './LocalServices';
+import ServiceCard from './services/ServiceCard';
 
 const mocks = vi.hoisted(() => ({ api: vi.fn(), post: vi.fn(), started: vi.fn() }));
 vi.mock('./JobUI', async () => ({ ...await vi.importActual('./JobUI'), api: mocks.api, postJson: mocks.post,
@@ -117,4 +118,19 @@ it('renders disabled Start controls for ready services', async () => {
     const controls = screen.getAllByRole('button', { name: 'Start', exact: true });
     expect(controls).toHaveLength(5);
     controls.forEach(control => expect(control).toBeDisabled());
+});
+
+
+it.each([
+    ['ready', 'Ready', 'bg-emerald-700'],
+    ['starting', 'Starting', 'bg-orange-200'],
+    ['stopped', 'Stopped', 'bg-orange-200'],
+    ['unhealthy', 'Not ready', 'bg-red-700'],
+    ['failed', 'Failed', 'bg-red-700'],
+])('shows a prominent, labeled badge for %s', (status, label, color) => {
+    render(<ServiceCard service={{ id: 'api', name: 'API', status, dependencies: ['opensearch'] }} onSelect={vi.fn()} />);
+    const badge = screen.getByLabelText(`API: ${label}`);
+    expect(badge).toHaveTextContent(label);
+    expect(badge).toHaveClass(color);
+    expect(screen.getByText('Starts with: OpenSearch')).toBeInTheDocument();
 });

@@ -313,6 +313,28 @@ before continuing. Docker and the OpenSearch image must already be installed loc
 does not pull/build images, fetch Git changes or install Python/Node packages. The API uses the
 dashboard's virtualenv; chat uses the sibling repo's `service/` and its installed Node dependencies.
 
+The local dependency graph (arrows run from prerequisite to consumer) is:
+
+```mermaid
+graph LR
+    Docker[Docker / OrbStack] --> OpenSearch
+    OpenSearch --> API
+    API --> Chat
+    API --> UI[Application UI]
+    Chat --> UI
+    OpenSearch --> Discovery[Discovery / Re-index / Discovery cleanup]
+```
+
+Individual Start, Restart and Update actions prepare their dependencies first. Discovery jobs have a
+visible **Prepare Docker and OpenSearch** step before any file processing, including OCR-only runs:
+the current OCR CLI initializes and checks OpenSearch even without indexing. If startup fails or is
+cancelled, subsequent discovery steps do not run. Startup reuses healthy services and leaves them
+running after the job finishes. Missing Docker/images and readiness timeouts appear in the job logs;
+startup does not restart a healthy stack or build/pull container images.
+
+Service cards use solid green **Ready**, orange **Starting / Stopped**, and red **Not ready / Failed**
+badges, with explicit labels and direct dependencies shown on each card.
+
 Individual Start/Stop/Restart controls share the existing job runner with deployment and maintenance.
 Stopping a dependency stops its managed dependents first. Restart restores the target and previously
 running dependents. **Stop development** leaves Docker and unrelated containers running and preserves

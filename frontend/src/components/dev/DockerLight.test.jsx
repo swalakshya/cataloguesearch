@@ -15,7 +15,7 @@ const OK = { status: 'ok', seconds: 0.4, message: 'docker ps answers in 0.4s.', 
 const SLOW = { ...OK, status: 'slow', seconds: 6.2, message: 'docker ps took 6.2s. Docker is struggling.' };
 const DOWN = { ...OK, status: 'down', seconds: 12, message: 'docker ps did not answer within 12s. Docker is stuck.' };
 
-const FOLDER = { dir: 'Granth/A', runnable: true, pending: 2, counts: { not_indexed: 1, ocred: 1, indexed: 1 }, files: [] };
+const FOLDER = { dir: 'Granth/A', runnable: true, pending: 2, counts: { not_indexed: 1, ocred: 1, indexed: 1 }, files: [{ filename: 'A.pdf', relative_path: 'Granth/A/A.pdf', status: 'not_indexed' }] };
 
 const mockServer = () => {
     posts = [];
@@ -173,16 +173,18 @@ describe('buttons go grey while Docker is yellow, red or restarting', () => {
         expect(screen.queryByTestId('docker-blocked')).toBeNull();
     });
 
-    test('Discover: indexing, re-indexing and cleanup go off, OCR alone stays on', async () => {
+    test('Discover stays available while Docker is down so the job can start dependencies', async () => {
         docker = DOWN;
         renderAt('/discover', <DiscoverPage />);
-        await screen.findByTestId('docker-blocked');
         const folder = (await screen.findByText('Granth/A')).closest('div.border');
-        await waitFor(() => expect(within(folder).getByRole('button', { name: 'Index' })).toBeDisabled());
-        expect(within(folder).getByRole('button', { name: 'Re-index' })).toBeDisabled();
-        expect(within(folder).getByRole('button', { name: /Cleanup/ })).toBeDisabled();
+        await settled();
+        expect(within(folder).getByRole('button', { name: 'Index' })).toBeEnabled();
+        expect(within(folder).getByRole('button', { name: 'Re-index' })).toBeEnabled();
+        expect(within(folder).getByRole('button', { name: /Cleanup/ })).toBeEnabled();
         expect(within(folder).getByRole('button', { name: 'OCR only' })).toBeEnabled();
-        expect(screen.getByRole('button', { name: 'Docker is not ready' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /Discover all pending/ })).toBeEnabled();
+        expect(screen.queryByTestId('docker-blocked')).toBeNull();
+        expect(screen.getByText(/Docker and OpenSearch start automatically/)).toBeInTheDocument();
     });
 
     test('Discover: green leaves everything on', async () => {

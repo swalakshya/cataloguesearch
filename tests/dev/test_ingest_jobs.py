@@ -1,9 +1,17 @@
 """Discover: OCR -> shared wait -> index, with a fake world of folders instead of the real crawler."""
 import pytest
+from unittest.mock import Mock
 
 from deploy import db, runner as r
 from ingest import jobs, status
 from tests.dev.conftest import wait_done
+
+
+@pytest.fixture(autouse=True)
+def service_startup(monkeypatch):
+    ensure = Mock()
+    monkeypatch.setattr(jobs.manager, 'ensure_ready', ensure)
+    return ensure
 
 
 class World:
@@ -74,11 +82,11 @@ def test_shared_wait_gives_up_then_run_is_waiting_and_finished_folders_are_still
                             "C": dict(kind="batch", ni=1, oc=0, ix=0, ready_after=999)})
     monkeypatch.setattr(jobs, "MAX_WAIT_SECONDS", 6)
     result = run(jobs_env, ["A", "B", "C"])
-    assert result["status"] == "waiting" and statuses(result) == ["succeeded", "waiting", "waiting"]
+    assert result["status"] == "waiting" and statuses(result) == ["succeeded", "succeeded", "waiting", "waiting"]
     assert (w.f["A"]["ix"], w.f["B"]["ix"], w.f["C"]["ix"]) == (1, 1, 0)
     indexed = [c for c in w.calls if c[1] == "index"]
     assert [c[3] for c in indexed] == ["skip_post", ""]    # series refresh / catalogue rebuild only after the last folder
-    assert "Come back later" in result["steps"][1]["detail"]
+    assert "Come back later" in result["steps"][2]["detail"]
 
     # ...and clicking again later resumes: nothing is redone for folders that already finished
     w.f["C"].update(ready_after=0, polls=0)
@@ -91,7 +99,7 @@ def test_shared_wait_gives_up_then_run_is_waiting_and_finished_folders_are_still
 def test_ocr_only_mode_stops_before_indexing(jobs_env, monkeypatch):
     w = World(monkeypatch, {"A": dict(kind="tesseract", ni=2, oc=0, ix=0)})
     result = run(jobs_env, ["A"], "ocr")
-    assert [s["name"] for s in result["steps"]] == ["ocr", "wait"] and result["status"] == "succeeded"
+    assert [s["name"] for s in result["steps"]] == ["services", "ocr", "wait"] and result["status"] == "succeeded"
     assert w.f["A"]["oc"] == 2 and w.f["A"]["ix"] == 0
 
 
@@ -115,7 +123,7 @@ def test_cancel_while_waiting_on_a_batch_job(jobs_env, monkeypatch):
     time.sleep(2.5)
     jobs_env.runner.cancel(rid)
     result = wait_done(rid, 10)
-    assert result["status"] == "cancelled" and statuses(result) == ["succeeded", "cancelled", "skipped"]
+    assert result["status"] == "cancelled" and statuses(result) == ["succeeded", "succeeded", "cancelled", "skipped"]
 
 
 def test_start_rejects_unknown_modes_and_folders(jobs_env, monkeypatch):
@@ -206,3 +214,38 @@ def test_reindex_reports_per_folder_too(jobs_env, monkeypatch):
     World(monkeypatch, {"F": dict(kind="tesseract", ni=0, oc=0, ix=3), "G": dict(kind="tesseract", ni=0, oc=0, ix=1)})
     result = run(jobs_env, ["F", "G"], "reindex")
     assert items(result, "index") == {"F": ("done", "re-indexed"), "G": ("done", "re-indexed")}
+
+
+@pytest.mark.parametrize('mode', ['ocr', 'index', 'reindex'])
+def test_service_preparation_precedes_discovery(jobs_env, monkeypatch, service_startup, mode):
+    world = World(monkeypatch, {'A': dict(kind='tesseract', ni=1, oc=0, ix=1)})
+    def ensure(service, *, ctx):
+        assert service == 'opensearch'
+        assert world.calls == []
+    service_startup.side_effect = ensure
+    result = run(jobs_env, ['A'], mode)
+    assert result['status'] == 'succeeded'
+    assert result['steps'][0]['name'] == 'services'
+    service_startup.assert_called_once()
+
+
+@pytest.mark.parametrize('mode', ['ocr', 'index', 'reindex'])
+def test_startup_failure_skips_all_discovery_work(jobs_env, monkeypatch, service_startup, mode):
+    world = World(monkeypatch, {'A': dict(kind='tesseract', ni=1, oc=0, ix=1)})
+    service_startup.side_effect = RuntimeError('OpenSearch did not become ready')
+    result = run(jobs_env, ['A'], mode)
+    assert result['status'] == 'failed'
+    assert result['steps'][0]['status'] == 'failed'
+    assert all(step['status'] == 'skipped' for step in result['steps'][1:])
+    assert world.calls == []
+
+
+def test_cleanup_prepares_services_before_removing_documents(jobs_env, monkeypatch, service_startup):
+    monkeypatch.setattr(status, 'scan', lambda: {'categories': [{'folders': [{'dir': 'A', 'runnable': True}]}]})
+    def command(*args, **kwargs):
+        service_startup.assert_called_once()
+        return r.Cmd(['echo', 'cleanup'], 'cleanup')
+    monkeypatch.setattr(jobs, '_cli', command)
+    result = wait_done(jobs.start_cleanup('A'))
+    assert result['status'] == 'succeeded'
+    assert [step['name'] for step in result['steps']] == ['services', 'cleanup']

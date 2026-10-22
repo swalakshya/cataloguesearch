@@ -3,7 +3,7 @@ import json
 import os
 from pathlib import Path
 import shutil
-from deploy import docker_health, settings
+from deploy import docker_health, docker_restart, settings
 from deploy.services.base import Service
 from deploy.log_stream import file_feed
 
@@ -31,7 +31,7 @@ class DockerService(Service):
         return 'Stop/Restart affects every local container and dependent service.'
 
     def health(self):
-        return bool(self.manager._command(['docker', 'info', '--format', '{{.ServerVersion}}'], timeout=3))
+        return docker_health.get()['status'] == docker_health.OK
 
     def status(self):
         try:
@@ -41,13 +41,20 @@ class DockerService(Service):
 
     def start(self, ctx, prepared=None):
         self.manager._local_docker()
-        try:
-            if self.manager._health(self.id):
-                return
-        except Exception:
-            pass
-        self.manager._command([settings.ORB_BIN or shutil.which('orb') or 'orb', 'start'], timeout=90)
-        self.manager._wait(self.id, ctx)
+        if ctx.cancelled:
+            raise RuntimeError('Docker startup cancelled')
+        ctx.log('Checking Docker responsiveness…')
+        result = docker_health.check()
+        ctx.log(result['message'])
+        if result['status'] == docker_health.OK:
+            docker_health.forget()
+            return
+        ctx.log('Docker is not ready; recovering OrbStack using the navbar restart procedure.')
+        # Run inside the current service/Discover job, preserving its logs and cancellation.
+        # `orb start` alone cannot recover a running but unresponsive VM.
+        if docker_restart._restart(ctx) != 0:
+            raise RuntimeError('Docker startup cancelled' if ctx.cancelled else
+                               'OrbStack recovery failed. See the startup log for details.')
 
     def stop(self, ctx):
         self.manager._local_docker()

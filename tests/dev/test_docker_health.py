@@ -115,9 +115,6 @@ def no_real_jobs(monkeypatch):
     ("post", "/api/deploy/runs", {"actions": ["build"]}),
     ("post", "/api/deploy/runs", {"actions": ["copy_snapshots", "restore_prod"]}),
     ("post", "/api/deploy/gc/run", {"target": "local", "categories": [{"id": "dangling_images"}]}),
-    ("post", "/api/discover/runs", {"mode": "index"}),
-    ("post", "/api/discover/runs", {"mode": "reindex", "folders": ["Granth/A"]}),
-    ("post", "/api/discover/cleanup", {"folder": "Granth/A", "confirm": True}),
 ])
 def test_jobs_that_need_docker_are_refused_when_it_is_yellow_or_red(client, monkeypatch, no_real_jobs, state, request_):
     set_docker(monkeypatch, state)
@@ -130,7 +127,7 @@ def test_jobs_that_need_docker_are_refused_when_it_is_yellow_or_red(client, monk
 @pytest.mark.parametrize("request_", [
     ("post", "/api/deploy/runs", {"actions": ["restore_prod"]}),                              # only ssh to prod
     ("post", "/api/deploy/gc/run", {"target": "prod", "categories": [{"id": "dangling_images"}], "confirm": True}),
-    ("post", "/api/discover/runs", {"mode": "ocr", "folders": ["Granth/A"]}),                 # OCR does not touch OpenSearch
+    ("post", "/api/discover/runs", {"mode": "ocr", "folders": ["Granth/A"]}),                 # Discovery prepares its services inside the job
 ])
 def test_jobs_that_do_not_need_local_docker_are_not_blocked(client, monkeypatch, no_real_jobs, request_):
     set_docker(monkeypatch, "down")
@@ -259,3 +256,14 @@ def test_run_kills_a_command_that_outlives_its_time_limit(tmp_path):
     assert docker_restart._run(ctx, ["sleep", "30"], timeout=0.5) is None
     assert time.monotonic() - started < 5
     assert docker_restart._run(ctx, ["echo", "hello"], timeout=5) == 0 and "hello" in ctx.logs
+
+
+@pytest.mark.parametrize("state", ["down", "slow"])
+@pytest.mark.parametrize("path,body", [
+    ("/api/discover/runs", {"mode": "index"}),
+    ("/api/discover/runs", {"mode": "reindex", "folders": ["Granth/A"]}),
+    ("/api/discover/cleanup", {"folder": "Granth/A", "confirm": True}),
+])
+def test_discovery_accepts_jobs_to_prepare_missing_services(client, monkeypatch, no_real_jobs, state, path, body):
+    set_docker(monkeypatch, state)
+    assert client.post(path, json=body).status_code == 202
