@@ -588,6 +588,7 @@ const AppContent = () => {
     // browse-everything state). This is a pure derivation (not stored in `contentTypes`
     // state) so it can't trigger the "clear filters when contentTypes changes" effect
     // below and wipe what was just set.
+    // Explicit selections enable their category even when Settings defaults it off.
     const effectiveContentTypes = useMemo(() => {
         // "Name" is shared between the Granth and Books filters (both are valid
         // per-category on the backend), so each pick must be checked against its own
@@ -600,11 +601,11 @@ const AppContent = () => {
         const hasAnyCategoryFilter = hasPravachanFilter || hasGranthFilter || hasBooksFilter;
         return {
             ...contentTypes,
-            pravachans: contentTypes.pravachans && (hasPravachanFilter || !hasAnyCategoryFilter),
-            granths: contentTypes.granths && (hasGranthFilter || !hasAnyCategoryFilter),
-            books: contentTypes.books && (hasBooksFilter || !hasAnyCategoryFilter),
+            pravachans: activeCategories.includes('Pravachan') && (hasPravachanFilter || (contentTypes.pravachans && !hasAnyCategoryFilter)),
+            granths: activeCategories.includes('Granth') && (hasGranthFilter || (contentTypes.granths && !hasAnyCategoryFilter)),
+            books: activeCategories.includes('Books') && (hasBooksFilter || (contentTypes.books && !hasAnyCategoryFilter)),
         };
-    }, [activeFilters, contentTypes, allMetadata, language]);
+    }, [activeFilters, contentTypes, allMetadata, language, activeCategories]);
 
     // Single source of truth for building search payload
     const buildSearchPayload = useCallback((pravachanPage = 1, granthPage = 1) => {
@@ -1050,6 +1051,7 @@ const AppContent = () => {
                                                         authorsError={authorsError}
                                                         allMetadata={allMetadata}
                                                         activeFilters={activeFilters}
+                                                        onUpdateFilters={setActiveFilters}
                                                         onAddFilter={addFilter}
                                                         onRemoveFilter={removeFilter}
                                                         contentTypes={effectiveContentTypes}

@@ -10,7 +10,7 @@ const TABS = [
     { category: 'Books', key: '_books_authors', label: 'Contemporary Jain Scholars' },
 ];
 
-export default function AuthorFilter({ authorGroups, authorsError, activeCategories, language, activeFilters, onAddFilter, onRemoveFilter }) {
+export default function AuthorFilter({ authorGroups, authorsError, activeCategories, language, activeFilters, onAddFilter, onRemoveFilter, onApplyAuthors, catalogueReady = true }) {
     const [isOpen, setIsOpen] = useState(false);
     const [tab, setTab] = useState('Granth');
     const [pending, setPending] = useState({});
@@ -31,7 +31,15 @@ export default function AuthorFilter({ authorGroups, authorsError, activeCategor
         const names = previous[current.key] || [];
         return { ...previous, [current.key]: names.includes(name) ? names.filter(value => value !== name) : [...names, name] };
     });
+    const cannotApply = !catalogueReady && TABS.some(item => activeCategories.includes(item.category) && (pending[item.key] || []).length > 0);
     const apply = () => {
+        if (cannotApply) return;
+        if (onApplyAuthors) {
+            onApplyAuthors(TABS.filter(item => activeCategories.includes(item.category)).flatMap(item =>
+                (pending[item.key] || []).map(value => ({ key: item.key, value }))));
+            setIsOpen(false);
+            return;
+        }
         activeFilters.map((f, index) => TABS.some(item => item.key === f.key) ? index : -1)
             .filter(index => index >= 0).reverse().forEach(onRemoveFilter);
         TABS.filter(item => activeCategories.includes(item.category)).forEach(item => {
@@ -75,9 +83,10 @@ export default function AuthorFilter({ authorGroups, authorsError, activeCategor
                         </label>)}
                 </div>
             </div>
+            {cannotApply && <p role="status" className="px-4 pb-2 text-sm text-ink-muted">Author–work relationships are unavailable or still loading. Please reload if this persists.</p>}
             <div className="p-4 border-t border-border flex justify-between gap-3">
                 <button className="filter-trigger" onClick={() => { setPending({}); setSearch(''); }}>Clear</button>
-                <button className="rounded-lg bg-brand text-white px-5 py-2 font-semibold" onClick={apply}>Apply{selectedCount ? ` (${selectedCount})` : ''}</button>
+                <button className="rounded-lg bg-brand text-white px-5 py-2 font-semibold" onClick={apply} disabled={cannotApply}>Apply{selectedCount ? ` (${selectedCount})` : ''}</button>
             </div>
         </OverlayBackdrop>}
     </>;

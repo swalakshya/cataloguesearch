@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { ChevronDown, ChevronRight, ChevronLeft, Check, Info } from 'lucide-react';
 import TransliterationInput from './TransliterationInput';
 import AuthorFilter from './AuthorFilter';
+import useCatalogue from '../hooks/useCatalogue';
+import { eligibleWorkNames, applyAuthorFilters } from '../utils/workFilters';
 import { Badge, Button, Input } from './ui';
 import { CATEGORY_EMOJI_SRC } from './chat/categoryEmoji';
 import { useOverlayBehavior } from './ui/Modal';
@@ -589,13 +591,13 @@ const GridToggle = ({ value, selected, onToggle }) => (
 
 // Standard Clear/Apply footer for filter dialogs (PravachanFilter, GranthFilter, MetadataFilters) —
 // single source of truth for their color/shape so the three don't drift from each other again.
-const FilterFooter = ({ onClear, clearLabel = 'Clear', onApply, applyLabel = 'Apply' }) => (
+const FilterFooter = ({ onClear, clearLabel = 'Clear', onApply, applyLabel = 'Apply', applyDisabled = false }) => (
     <div className="p-4 border-t border-border flex gap-2 sticky bottom-0 bg-surface rounded-b-lg">
         <Button variant="secondary" onClick={onClear} className="text-sm py-1.5 px-4">
             {clearLabel}
         </Button>
         <div className="flex-1" />
-        <Button onClick={onApply} className="text-sm py-1.5 px-4">
+        <Button onClick={onApply} disabled={applyDisabled} className="text-sm py-1.5 px-4">
             {applyLabel}
         </Button>
     </div>
@@ -1035,7 +1037,7 @@ const PravachanFilter = ({
 
 // ─── GranthFilter ────────────────────────────────────────────────────────────
 
-const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, language, disabled }) => {
+const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, language, disabled, catalogue, catalogueLoading }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [pending, setPending]   = useState([]);
     const [search, setSearch]     = useState('');
@@ -1048,7 +1050,10 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
         return [...(allMetadata?.Granth?.[language]?.Name || [])].sort();
     }, [allMetadata, language]);
 
-    const filtered = allNames.filter(n => n.toLowerCase().includes(search.toLowerCase()));
+    const selectedAuthors = useMemo(() => activeFilters.filter(f => f.key === '_granth_authors').map(f => f.value), [activeFilters]);
+    const eligibleNames = useMemo(() => eligibleWorkNames(allNames, catalogue, language, selectedAuthors, 'Granth'), [allNames, catalogue, language, selectedAuthors]);
+    const catalogueUnavailable = selectedAuthors.length > 0 && (catalogueLoading || !catalogue.length);
+    const filtered = catalogueUnavailable ? [] : eligibleNames.filter(n => n.toLowerCase().includes(search.toLowerCase()));
 
     // "Name" is shared with the Books filter (both are valid per-category on the
     // backend — see _CATEGORY_FILTER_FIELDS) — a Books title picked over there is
@@ -1057,9 +1062,9 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
     // applying one picker would silently wipe out the other's selections.
     useEffect(() => {
         if (!isOpen) return;
-        setPending(activeFilters.filter(f => f.key === 'Name' && allNames.includes(f.value)).map(f => f.value));
+        setPending(activeFilters.filter(f => f.key === 'Name' && eligibleNames.includes(f.value)).map(f => f.value));
         setSearch('');
-    }, [isOpen]); // eslint-disable-line
+    }, [isOpen, activeFilters, eligibleNames]);
 
     const toggle = (name) =>
         setPending(prev => prev.includes(name) ? prev.filter(x => x !== name) : [...prev, name]);
@@ -1118,7 +1123,8 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
                             {/* List */}
                             <div className="overflow-y-auto flex-1 px-4 pb-2">
                                 <div className="border border-border rounded-lg overflow-hidden">
-                                    {filtered.length === 0 && (
+                                    {catalogueUnavailable && <p role="status" className="p-4 text-sm text-ink-muted">{catalogueLoading ? 'Loading granths...' : 'Could not load author–Granth relationships. Please reload to retry.'}</p>}
+                                    {!catalogueUnavailable && filtered.length === 0 && (
                                         <p className="p-4 text-sm text-ink-muted text-center">No granths found</p>
                                     )}
                                     {filtered.map((name) => (
@@ -1144,6 +1150,7 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
                             <FilterFooter
                                 onClear={handleClear}
                                 onApply={handleApply}
+                                applyDisabled={catalogueUnavailable}
                                 applyLabel={`Apply${pending.length > 0 ? ` (${pending.length})` : ''}`}
                             />
                     </OverlayBackdrop>
@@ -1152,7 +1159,7 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
     );
 };
 
-const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, language, disabled }) => {
+const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, language, disabled, catalogue, catalogueLoading }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [pending, setPending]   = useState([]);
     const [search, setSearch]     = useState('');
@@ -1165,7 +1172,10 @@ const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, 
         return [...(allMetadata?.Books?.[language]?.Name || [])].sort();
     }, [allMetadata, language]);
 
-    const filtered = allNames.filter(n => n.toLowerCase().includes(search.toLowerCase()));
+    const selectedAuthors = useMemo(() => activeFilters.filter(f => f.key === '_books_authors').map(f => f.value), [activeFilters]);
+    const eligibleNames = useMemo(() => eligibleWorkNames(allNames, catalogue, language, selectedAuthors, 'Books'), [allNames, catalogue, language, selectedAuthors]);
+    const catalogueUnavailable = selectedAuthors.length > 0 && (catalogueLoading || !catalogue.length);
+    const filtered = catalogueUnavailable ? [] : eligibleNames.filter(n => n.toLowerCase().includes(search.toLowerCase()));
 
     // "Name" is shared with the Granth filter (both are valid per-category on the
     // backend — see _CATEGORY_FILTER_FIELDS) — every read/write here must check the
@@ -1173,9 +1183,9 @@ const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, 
     // picker would silently wipe out the other's selections.
     useEffect(() => {
         if (!isOpen) return;
-        setPending(activeFilters.filter(f => f.key === 'Name' && allNames.includes(f.value)).map(f => f.value));
+        setPending(activeFilters.filter(f => f.key === 'Name' && eligibleNames.includes(f.value)).map(f => f.value));
         setSearch('');
-    }, [isOpen]); // eslint-disable-line
+    }, [isOpen, activeFilters, eligibleNames]);
 
     const toggle = (name) =>
         setPending(prev => prev.includes(name) ? prev.filter(x => x !== name) : [...prev, name]);
@@ -1234,7 +1244,8 @@ const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, 
                             {/* List */}
                             <div className="overflow-y-auto flex-1 px-4 pb-2">
                                 <div className="border border-border rounded-lg overflow-hidden">
-                                    {filtered.length === 0 && (
+                                    {catalogueUnavailable && <p role="status" className="p-4 text-sm text-ink-muted">{catalogueLoading ? 'Loading books...' : 'Could not load author–book relationships. Please reload to retry.'}</p>}
+                                    {!catalogueUnavailable && filtered.length === 0 && (
                                         <p className="p-4 text-sm text-ink-muted text-center">No books found</p>
                                     )}
                                     {filtered.map((name) => (
@@ -1260,6 +1271,7 @@ const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, 
                             <FilterFooter
                                 onClear={handleClear}
                                 onApply={handleApply}
+                                applyDisabled={catalogueUnavailable}
                                 applyLabel={`Apply${pending.length > 0 ? ` (${pending.length})` : ''}`}
                             />
                     </OverlayBackdrop>
@@ -1295,7 +1307,7 @@ const pravachanGroupChipLabel = (jsonValue) => {
 };
 
 export const SearchFilters = ({
-    authorGroups, authorsError, allMetadata, activeFilters, onAddFilter, onRemoveFilter,
+    authorGroups, authorsError, allMetadata, activeFilters, onAddFilter, onRemoveFilter, onUpdateFilters,
     language, startYear, setStartYear, endYear, setEndYear,
     activeCategories = ['Pravachan', 'Granth'],
     // contentTypes is auto-derived by App.js from activeFilters (disabling the side
@@ -1303,8 +1315,33 @@ export const SearchFilters = ({
     // the disabled state; setContentTypes itself isn't called from this component.
     contentTypes, setContentTypes,
 }) => {
+    const { rows: catalogue, loading: catalogueLoading } = useCatalogue();
+    const [authorNotice, setAuthorNotice] = useState('');
+    const applyAuthors = authors => {
+        const categories = [['Books', '_books_authors'], ['Granth', '_granth_authors']];
+        const allNames = [];
+        const eligibleNames = [];
+        categories.forEach(([category, key]) => {
+            const names = allMetadata?.[category]?.[language]?.Name || [];
+            const selected = authors.filter(f => f.key === key).map(f => f.value);
+            allNames.push(...names);
+            // Preserve titles if relationships are unavailable when a chip is removed.
+            eligibleNames.push(...(catalogueLoading || !catalogue.length
+                ? names : eligibleWorkNames(names, catalogue, language, selected, category)));
+        });
+        const removed = activeFilters.some(f => f.key === 'Name' && allNames.includes(f.value) && !eligibleNames.includes(f.value));
+        onUpdateFilters(previous => applyAuthorFilters(previous, authors, allNames, eligibleNames));
+        setAuthorNotice(removed ? 'Work selections outside the selected authors were removed.' : '');
+    };
     const hasYearFilter = startYear || endYear;
     const hasAnyFilter  = activeFilters.length > 0 || hasYearFilter;
+    const removeChip = index => {
+        if (['_books_authors', '_granth_authors'].includes(activeFilters[index].key)) {
+            applyAuthors(activeFilters.filter((f, i) => i !== index && ['_books_authors', '_granth_authors'].includes(f.key)));
+        } else {
+            onRemoveFilter(index);
+        }
+    };
 
     // Pravachan, Granth and Books each register themselves with the shared overlay
     // registry directly now (via useOverlayBehavior), so the mobile Home/Feedback
@@ -1341,6 +1378,7 @@ export const SearchFilters = ({
                         onRemoveFilter={onRemoveFilter}
                         language={language}
                         disabled={contentTypes && !contentTypes.granths}
+                        catalogue={catalogue} catalogueLoading={catalogueLoading}
                     />
                 )}
                 {activeCategories.includes('Books') && (
@@ -1351,14 +1389,18 @@ export const SearchFilters = ({
                         onRemoveFilter={onRemoveFilter}
                         language={language}
                         disabled={contentTypes && !contentTypes.books}
+                        catalogue={catalogue} catalogueLoading={catalogueLoading}
                     />
                 )}
                 {activeCategories.some(category => category === 'Granth' || category === 'Books') && (
                     <AuthorFilter authorGroups={authorGroups} authorsError={authorsError}
                         activeCategories={activeCategories} language={language} activeFilters={activeFilters}
-                        onAddFilter={onAddFilter} onRemoveFilter={onRemoveFilter} />
+                        onAddFilter={onAddFilter} onRemoveFilter={onRemoveFilter}
+                        onApplyAuthors={applyAuthors} catalogueReady={!catalogueLoading && catalogue.length > 0} />
                 )}
             </div>
+
+            {authorNotice && <p role="status" className="text-xs text-ink-muted">{authorNotice}</p>}
 
             {/* Active filter chips */}
             {hasAnyFilter && (
@@ -1372,7 +1414,7 @@ export const SearchFilters = ({
                         return (
                             <Badge key={i} variant={variant}>
                                 {label}
-                                <button onClick={() => onRemoveFilter(i)} className="opacity-60 hover:opacity-100 font-bold leading-none">&times;</button>
+                                <button onClick={() => removeChip(i)} className="opacity-60 hover:opacity-100 font-bold leading-none">&times;</button>
                             </Badge>
                         );
                     })}
