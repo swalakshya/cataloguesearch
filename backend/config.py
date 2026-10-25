@@ -17,6 +17,7 @@ ADMIN_PARAM_DEFAULTS = {
     "page_size_pravachan":  20,
     "page_size_granth":     10,
     "page_size_books":      20,
+    "page_size_magazine":   20,
     "spelling_min_score":   0.6,
     "enable_reranking":     True,
     "context_reranking":    False,
@@ -174,8 +175,8 @@ class Config:
             if "active_categories" in self._overrides:
                 return self._overrides["active_categories"]
             if os.environ.get("DEBUG", "").lower() == "true":
-                return ["Pravachan", "Granth", "Books"]
-            return self._settings.get("search", {}).get("active_categories", ["Pravachan", "Granth"])
+                return ["Pravachan", "Granth", "Books", "Magazine"]
+            return self._settings.get("search", {}).get("active_categories", ["Pravachan", "Granth", "Books", "Magazine"])
         elif name == "RERANK_BATCH_SIZE":
             return self._overrides.get("rerank_batch_size", ADMIN_PARAM_DEFAULTS["rerank_batch_size"])
         elif name == "RERANK_MAX_LENGTH":
@@ -194,6 +195,8 @@ class Config:
             return self._overrides.get("page_size_granth", ADMIN_PARAM_DEFAULTS["page_size_granth"])
         elif name == "PAGE_SIZE_BOOKS":
             return self._overrides.get("page_size_books", ADMIN_PARAM_DEFAULTS["page_size_books"])
+        elif name == "PAGE_SIZE_MAGAZINE":
+            return self._overrides.get("page_size_magazine", ADMIN_PARAM_DEFAULTS["page_size_magazine"])
         elif name == "SPELLING_MIN_SCORE":
             return self._overrides.get("spelling_min_score", ADMIN_PARAM_DEFAULTS["spelling_min_score"])
         elif name == "ENABLE_RERANKING":
@@ -335,11 +338,11 @@ class Config:
         """Return admin param defaults (from ADMIN_PARAM_DEFAULTS + config.yaml active_categories)."""
         defaults = dict(ADMIN_PARAM_DEFAULTS)
         if os.environ.get("DEBUG", "").lower() == "true":
-            defaults["active_categories"] = ["Pravachan", "Granth", "Books"]
+            defaults["active_categories"] = ["Pravachan", "Granth", "Books", "Magazine"]
         else:
             defaults["active_categories"] = self._settings.get(
                 "search", {}
-            ).get("active_categories", ["Pravachan", "Granth"])
+            ).get("active_categories", ["Pravachan", "Granth", "Books", "Magazine"])
         return defaults
 
     def settings(self):

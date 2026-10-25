@@ -103,7 +103,7 @@ class LLMIndexGenerator(IndexGenerator):
         """
         for page_num, data in raw_data:
             if not isinstance(data, list):
-                return  # plain-text OCR — not block format, nothing to do
+                continue  # Auto Tesseract envelopes have no LLM-typed verses.
             verses = [b for b in data if b.get("type") in _VERSE_BLOCK_TYPES]
             if not verses:
                 continue

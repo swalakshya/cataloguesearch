@@ -1,0 +1,17 @@
+{
+  "source_url": "https://www.vitragvani.com/atmadharam_patrika/atmadharam_patrika.aspx",
+  "exported_at_utc": "2026-10-24T05:15:56.117134+00:00",
+  "pages": 23,
+  "rows": 459,
+  "gujarati_pdf_links": 459,
+  "hindi_pdf_links": 434,
+  "unique_gujarati_pdf_links": 459,
+  "unique_hindi_pdf_links": 423,
+  "hindi_links_without_parsed_issue": 0,
+  "notes": [
+    "Hindi Date is blank: the source table has no separate Hindi date.",
+    "Gujarati Date combines the source Gujarati month and Vikram Samvat; no day is provided.",
+    "Hindi Year and Hindi Number are extracted only from matching PDF filenames.",
+    "PDF links are copied from the source; PDFs have not been downloaded or all checked for availability."
+  ]
+}

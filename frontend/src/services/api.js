@@ -44,7 +44,7 @@ export const api = {
             return await response.json();
         } catch (error) {
             console.error("API Error: Could not fetch app config", error);
-            return { app_name: 'swalakshya', debug_mode: false, active_categories: ['Pravachan', 'Granth'] };
+            return { app_name: 'swalakshya', debug_mode: false, active_categories: ['Pravachan', 'Granth', 'Books', 'Magazine'] };
         }
     },
 
@@ -136,11 +136,12 @@ export const api = {
     search: async (requestPayload, onProgress) => {
         const startedAt = performance.now();
         const _empty = () => ({ results: [], total_hits: 0, page_size: 20, page_number: 1 });
-        const CAT_KEY = { Pravachan: 'pravachan_results', Granth: 'granth_results', Books: 'books_results' };
+        const CAT_KEY = { Pravachan: 'pravachan_results', Granth: 'granth_results', Books: 'books_results', Magazine: 'magazine_results' };
         const result = {
             pravachan_results: _empty(),
             granth_results: _empty(),
             books_results: _empty(),
+            magazine_results: _empty(),
             suggestions: [],
         };
         try {

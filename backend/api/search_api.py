@@ -441,6 +441,7 @@ async def get_app_config(request: Request):
         "page_size_pravachan": config.PAGE_SIZE_PRAVACHAN,
         "page_size_granth": config.PAGE_SIZE_GRANTH,
         "page_size_books": config.PAGE_SIZE_BOOKS,
+        "page_size_magazine": config.PAGE_SIZE_MAGAZINE,
         "enable_reranking": config.ENABLE_RERANKING,
         "effective_mode": config.SEARCH_MODE,
     }, status_code=200)
@@ -471,12 +472,16 @@ class SearchRequest(BaseModel):
                 "enabled": True,
                 "page_size": 20,
                 "page_number": 1
-            }
+            },
+            "Books": {"enabled": True, "page_size": 20, "page_number": 1},
+            "Magazine": {"enabled": True, "page_size": 20, "page_number": 1}
         },
         description="Configuration for each search type",
         example={
             "Pravachan": {"enabled": True, "page_size": 20, "page_number": 1},
-            "Granth": {"enabled": True, "page_size": 10, "page_number": 1}
+            "Granth": {"enabled": True, "page_size": 10, "page_number": 1},
+            "Books": {"enabled": True, "page_size": 20, "page_number": 1},
+            "Magazine": {"enabled": True, "page_size": 20, "page_number": 1}
         }
     )
 
@@ -484,7 +489,7 @@ class SearchRequest(BaseModel):
     query_id: Optional[str] = Field(None, description="Optional caller-supplied ID for correlating client and server timings.")
 
 class SearchTypeResults(BaseModel):
-    """Results for a specific search type (Pravachan or Granth)."""
+    """Results for a specific content category."""
     results: List[Dict[str, Any]] = Field(default_factory=list)
     total_hits: int = Field(0)
     page_size: int = Field(20)
@@ -497,6 +502,7 @@ class SearchResponse(BaseModel):
     pravachan_results: SearchTypeResults = Field(default_factory=SearchTypeResults)
     granth_results: SearchTypeResults = Field(default_factory=SearchTypeResults)
     books_results: SearchTypeResults = Field(default_factory=SearchTypeResults)
+    magazine_results: SearchTypeResults = Field(default_factory=SearchTypeResults)
     suggestions: List[str] = Field(default_factory=list, description="Spelling suggestions when no results found")
 
 @app.post("/api/search")
@@ -655,7 +661,7 @@ async def search(request: Request, request_data: SearchRequest = Body(...)):
     )
 
 _EXPORT_PDF_MAX_COUNT = 50
-_EXPORT_PDF_CATEGORIES = {"Pravachan", "Granth", "Books"}
+_EXPORT_PDF_CATEGORIES = {"Pravachan", "Granth", "Books", "Magazine"}
 
 class ExportPdfRequest(BaseModel):
     """

@@ -79,6 +79,22 @@ def _row_for_directory(directory: str, base_folder: str) -> dict:
     elif not name:
         return None
 
+    issue_count = None
+    if category == "Magazine":
+        # Inherited Name also reaches pdfs/. Only the edition's own Name
+        # config represents a magazine, not every descendant directory.
+        own_config = os.path.join(directory, 'config.json')
+        if not os.path.isfile(own_config):
+            return None
+        import json
+        with open(own_config, encoding='utf-8') as handle:
+            if not (json.load(handle).get('Name')):
+                return None
+        manifest = os.path.join(directory, 'issues.json')
+        if os.path.isfile(manifest):
+            with open(manifest, encoding='utf-8') as handle:
+                issue_count = len(json.load(handle))
+
     lang_key = normalize_language(merged.get("language"))
 
     return {
@@ -93,6 +109,7 @@ def _row_for_directory(directory: str, base_folder: str) -> dict:
         "series_end_date": _normalize_date(merged.get("series_end_date")),
         "count": str(count) if count else None,
         "relative_path": os.path.relpath(directory, base_folder),
+        **({'issue_count': issue_count} if category == 'Magazine' else {}),
     }
 
 

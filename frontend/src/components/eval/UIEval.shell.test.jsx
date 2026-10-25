@@ -149,3 +149,19 @@ test('the Eval home tab is still there for the mode and permission setup', async
     expect(within(bar()).getByRole('button', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
     expect(within(bar()).queryByTestId('file-chip')).not.toBeInTheDocument();     // Home takes no file
 });
+
+test('full screen collapses settings, keeps Process available, and preserves edits when reopened', async () => {
+    renderEval(`?tab=pdf-parser${FILE_QS}`);
+    await waitFor(() => expect(within(bar()).getByTestId('file-chip')).toHaveTextContent('Book.pdf'));
+    fireEvent.change(topInput(), { target: { value: '17' } });
+    fireEvent.click(within(bar()).getByRole('button', { name: /Full screen/ }));
+    expect(topInput()).not.toBeVisible();
+    expect(await screen.findByRole('button', { name: 'Process' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(topInput()).toBeVisible();
+    expect(topInput()).toHaveValue(17);
+    fireEvent.click(screen.getByRole('button', { name: 'Hide settings' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Exit full screen' }));
+    expect(topInput()).toBeVisible();
+    expect(topInput()).toHaveValue(17);
+});

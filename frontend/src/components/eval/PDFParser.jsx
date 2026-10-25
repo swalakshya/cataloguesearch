@@ -43,12 +43,19 @@ const BLOCK_TYPE_STYLES = {
 };
 const DEFAULT_BLOCK_STYLE = { label: 'Unknown', bg: 'bg-gray-50', border: 'border-gray-200', text: 'text-gray-800', badge: 'bg-gray-100 text-gray-700' };
 
-const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, baseDirectoryHandles, onPdfParentDirChange, fill = false }) => {
+const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, baseDirectoryHandles, onPdfParentDirChange, fill = false, focus = false }) => {
     // In fill mode (Eval's window layout) the panes fill the height (flex) instead of the fixed 700/660px boxes, and the card is not widened.
     const leftBox = fill ? 'flex-1 min-h-0' : 'h-[700px]';
     const rightBox = fill ? 'flex-1 min-h-0' : 'h-[660px]';
+    const [settingsOpen, setSettingsOpen] = useState(true);
+    const [focusSettingsOpen, setFocusSettingsOpen] = useState(false);
+    const showSettings = focus ? focusSettingsOpen : settingsOpen;
+    const toggleSettings = () => focus
+        ? setFocusSettingsOpen((open) => !open)
+        : setSettingsOpen((open) => !open);
+
     // Mode
-    const [mode, setMode] = useState('tesseract'); // 'tesseract' | 'llm' | 'surya'
+    const [mode, setMode] = useState('tesseract'); // 'tesseract' | 'auto-tesseract' | 'llm' | 'surya'
 
     // Shared state
     const [selectedFile, setSelectedFile] = useState(null);
@@ -106,6 +113,14 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
 
     const pdfViewer = usePDFViewer({ setError });
     const { pdfDoc, currentPage, totalPages, previewUrl, croppedPreviewUrl, bookmarks, setCroppedPreviewUrl } = pdfViewer;
+
+    // The page override changes extraction for this physical page only. The
+    // underlying file's ocr_engine remains the default on every other page.
+    useEffect(() => {
+        if (!libraryScanConfig || !('auto_tesseract_pages' in libraryScanConfig)) return;
+        const auto = libraryScanConfig.auto_tesseract_pages.includes(currentPage);
+        setMode(auto ? 'auto-tesseract' : libraryScanConfig.ocr_engine === 'llm' ? 'llm' : 'tesseract');
+    }, [currentPage, libraryScanConfig]);
 
     const { multiPagePDF, setMultiPagePDF, splitPct, setSplitPct, splitPreviewUrls, splitImageFile } =
         useMultiPageSplit({ previewUrl, croppedPreviewUrl });
@@ -378,7 +393,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
         setAppliedNote(null);
         setLibraryScanConfig(null);
         setSelectedFile(file);
-        const isFilePDF = file.type === 'application/pdf';
+        const isFilePDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
         setIsPDF(isFilePDF);
         if (isFilePDF) await pdfViewer.loadPDF(file);
         else pdfViewer.loadImagePreview(file);
@@ -424,7 +439,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
         if (!pdfDoc) return null;
         try {
             const page = await pdfDoc.getPage(currentPage);
-            const scale = 1.5;
+            const scale = mode === 'auto-tesseract' ? 3 : 1.5;
             const viewport = page.getViewport({ scale });
             const canvas = document.createElement('canvas');
             canvas.height = viewport.height;
@@ -508,7 +523,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                 const apiCall = mode === 'llm' ? callLLMApi : (f) => callOCRApi(f, ocrEndpoint);
                 const [leftResults, rightResults] = await Promise.all([apiCall(leftFile), apiCall(rightFile)]);
                 setResults({ isMultiPage: true, left: leftResults, right: rightResults });
-            } else if (mode === 'tesseract' || mode === 'surya') {
+            } else if (mode === 'tesseract' || mode === 'auto-tesseract' || mode === 'surya') {
                 const ocrEndpoint = mode === 'surya' ? '/eval/ocr/surya' : '/eval/ocr';
                 const isFromBrowser = propSelectedFile?.relativePath && selectedFile?.name === propSelectedFile.selectedPDFFile;
                 const formData = new FormData();
@@ -518,9 +533,10 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                 formData.append('crop_left', cropLeft);
                 formData.append('crop_right', cropRight);
                 formData.append('mode', 'advanced');
+                formData.append('auto_layout', mode === 'auto-tesseract');
+                formData.append('page_number', currentPage);
                 if (isFromBrowser && isPDF) {
                     formData.append('relative_path', propSelectedFile.relativePath);
-                    formData.append('page_number', currentPage);
                 } else {
                     let fileToProcess = selectedFile;
                     if (isPDF) {
@@ -719,6 +735,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
     const activeData = results?.isMultiPage ? results[activeHalf] : results;
     const scanConfig = activeData?.scan_config ?? null;
     const previewImageSrc = (() => {
+        if (mode === 'auto-tesseract' && activeData?.preview_image) return `data:image/png;base64,${activeData.preview_image}`;
         if (multiPagePDF && splitPreviewUrls?.[activeHalf]) return splitPreviewUrls[activeHalf];
         if (croppedPreviewUrl) return croppedPreviewUrl;
         if (mode === 'llm' && activeData?.preview_image) return `data:image/png;base64,${activeData.preview_image}`;
@@ -803,6 +820,18 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                 {/* Controls */}
                 <div className="px-4 pt-3 pb-2 border-b border-slate-200 space-y-2 shrink-0" style={{ backgroundColor: 'var(--bg-surface)' }}>
 
+                    <div className="flex items-center gap-3 min-w-0">
+                        <button type="button" onClick={toggleSettings} aria-expanded={showSettings}
+                            aria-controls="pdf-parser-settings"
+                            className="shrink-0 text-xs px-3 py-1.5 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-100">
+                            {showSettings ? 'Hide settings' : 'Settings'}
+                        </button>
+                        <span className="text-xs text-slate-500 truncate" title={selectedFile?.name}>
+                            {selectedFile?.name || 'Open a PDF or image'}{!showSettings && <> · {describeControls(currentControls())}</>}
+                        </span>
+                    </div>
+                    <div id="pdf-parser-settings" hidden={!showSettings}
+                        className="max-h-[45vh] overflow-y-auto space-y-2">
                     {/* Line 1: File input + language */}
                     <div>
                         <FileOrUrlInput
@@ -863,6 +892,11 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                                 className={`px-3 py-1 text-xs ${mode === 'tesseract' ? 'bg-sky-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
                                 Tesseract
                             </button>
+                            <button onClick={() => { setMode('auto-tesseract'); setMultiPagePDF(false); setUseDefaultScanConfig(false); }}
+                                title="Experimental: detect one or two columns and reconstruct paragraphs within each text region"
+                                className={`px-3 py-1 text-xs border-l border-slate-300 ${mode === 'auto-tesseract' ? 'bg-sky-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+                                Auto Tesseract
+                            </button>
                             <button onClick={() => setMode('llm')}
                                 className={`px-3 py-1 text-xs border-l border-slate-300 ${mode === 'llm' ? 'bg-sky-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
                                 LLM
@@ -899,7 +933,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                                 className="w-16 text-xs px-2 py-1 border border-slate-300 rounded-md focus:outline-none focus:ring-sky-500 focus:border-sky-500" />
                         </div>
                         <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-                            <input type="checkbox" checked={multiPagePDF} onChange={(e) => setMultiPagePDF(e.target.checked)}
+                            <input type="checkbox" checked={multiPagePDF} disabled={mode === 'auto-tesseract'} onChange={(e) => setMultiPagePDF(e.target.checked)}
                                 className="h-3.5 w-3.5 text-sky-600 border-slate-300 rounded" />
                             Multi-page PDF
                         </label>
@@ -937,7 +971,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                             className="text-xs px-3 py-1.5 bg-slate-600 text-white rounded-md hover:bg-slate-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors">
                             Apply
                         </button>
-                        {propSelectedFile && selectedFile?.name === propSelectedFile.selectedPDFFile && (
+                        {mode !== 'auto-tesseract' && propSelectedFile && selectedFile?.name === propSelectedFile.selectedPDFFile && (
                             <button onClick={() => setShowSaveControls(true)}
                                 title="Write these OCR/crop/language/multi-page settings into this file's scan_config.json"
                                 className="text-xs px-3 py-1.5 bg-sky-600 text-white rounded-md hover:bg-sky-700 transition-colors">
@@ -960,9 +994,10 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                         );
                     })()}
 
+                    </div>
                     {/* Line 3: Page nav + bookmarks + Process + Batch */}
-                    <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-2 flex-wrap">
                             {isPDF && pdfDoc && (
                                 <>
                                     <button onClick={() => pdfViewer.jumpToPage(1, cropTop, cropBottom, () => setResults(null))} disabled={currentPage === 1}
@@ -982,7 +1017,7 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                                 </>
                             )}
                             <ShowBookmarksButton hasBookmarks={isPDF && bookmarks.length > 0} onClick={() => setShowBookmarkModal(true)} />
-                            <ParseBookmarksControl isPDF={isPDF} pdfDoc={pdfDoc} />
+                            <div hidden={!showSettings}><ParseBookmarksControl isPDF={isPDF} pdfDoc={pdfDoc} /></div>
                         </div>
                         <div className="flex items-center gap-2">
                             <button onClick={handleProcess} disabled={!selectedFile || isLoading}
@@ -990,8 +1025,8 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                                 {isLoading && !batchJobId ? <><Spinner /><span>Processing…</span></> : 'Process'}
                             </button>
                             <button onClick={handleBatchProcess}
-                                disabled={!selectedFile || isLoading || mode === 'llm' || mode === 'surya'}
-                                title={mode !== 'tesseract' ? `Batch not available in ${mode === 'llm' ? 'LLM' : 'Surya'} mode` : 'Process all pages and download as ZIP'}
+                                disabled={!selectedFile || isLoading || mode !== 'tesseract'}
+                                title={mode !== 'tesseract' ? 'Batch is only available in regular Tesseract mode' : 'Process all pages and download as ZIP'}
                                 className="text-xs px-3 py-1.5 bg-slate-600 text-white font-semibold rounded-md hover:bg-slate-700 disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-1 transition-colors">
                                 {isLoading && batchJobId ? <><Spinner /><span>Batching…</span></> : 'Batch'}
                             </button>
@@ -1038,6 +1073,22 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                 )}
 
                 {/* Content panels */}
+                {libraryScanConfig?.auto_tesseract_pages && (
+                    <p className="mx-4 mt-3 text-xs text-slate-600">
+                        Configured for PDF page {currentPage}: {libraryScanConfig.auto_tesseract_pages.includes(currentPage)
+                            ? 'Auto Tesseract' : libraryScanConfig.ocr_engine === 'llm' ? 'LLM' : 'Tesseract'}
+                        {' · '}Included pages: {libraryScanConfig.start_page ?? 1}–{libraryScanConfig.end_page ?? totalPages}
+                    </p>
+                )}
+                {activeData?.layout && (
+                    <div className="mx-4 mt-3 p-3 border border-sky-200 rounded-md bg-sky-50 text-xs text-slate-700" role="status">
+                        <strong>Auto Tesseract · Experimental · </strong>
+                        {activeData.layout.mode === 'two_column' ? `Two columns · split at ${activeData.layout.split_percent}%`
+                            : activeData.layout.mode === 'single_column' ? 'Single column' : 'Layout needs review · whole-page segmentation'}
+                        <span> · {activeData.ocr_json?.regions?.length || 0} text regions in reading order. See OCR Preview for region outlines.</span>
+                        {activeData.layout.warnings?.map((warning, i) => <p key={i} className="mt-1 text-amber-800">{warning}</p>)}
+                    </div>
+                )}
                 <div className={`flex flex-col lg:flex-row${fill ? ' flex-1 min-h-0' : ''}`}>
                     {/* Left: full-page preview */}
                     <div className={fill ? 'flex-1 min-w-0 min-h-0 p-2 flex flex-col' : 'flex-1 p-4'}>
@@ -1101,16 +1152,16 @@ const PDFParser = ({ selectedFile: propSelectedFile, onFileSelect, basePaths, ba
                                 {isProcessing ? renderProcessing() : activeData?.ocr_json ? (
                                     <>
                                         <div className="absolute top-2 right-2 flex items-center gap-2">
-                                            <button
+                                            {mode !== 'auto-tesseract' && <button
                                                 onClick={() => setShowRawJson(v => !v)}
                                                 className="px-2.5 py-1 text-xs font-medium border border-slate-300 rounded-md bg-white text-slate-600 hover:bg-slate-100 transition-colors"
                                             >
                                                 {showRawJson ? 'Show Annotated' : 'Show Raw JSON'}
-                                            </button>
+                                            </button>}
                                             <CopyButton text={JSON.stringify(activeData.ocr_json, null, 2)} />
                                         </div>
-                                        {showRawJson ? (
-                                            <pre className="text-xs font-mono text-slate-700 whitespace-pre-wrap">
+                                        {showRawJson || mode === 'auto-tesseract' ? (
+                                            <pre className="pt-9 text-xs font-mono text-slate-700 whitespace-pre-wrap">
                                                 {JSON.stringify(activeData.ocr_json, null, 2)}
                                             </pre>
                                         ) : (

@@ -95,6 +95,20 @@ def get_merged_config(file_path: str, base_folder: str) -> dict:
 
     config = _merge_folder_configs(_collect_folders(os.path.dirname(file_path), base_folder))
 
+    # Magazine issues share one metadata manifest instead of hundreds of sidecars.
+    issue_key = os.path.splitext(os.path.basename(file_path))[0]
+    for folder in _collect_folders(os.path.dirname(file_path), base_folder):
+        manifest_path = os.path.join(folder, "issues.json")
+        if os.path.exists(manifest_path):
+            try:
+                with open(manifest_path, encoding="utf-8") as handle:
+                    issue_metadata = json.load(handle).get(issue_key, {})
+                if not isinstance(issue_metadata, dict):
+                    raise ValueError("issue metadata must be an object")
+                config.update(issue_metadata)
+            except (OSError, ValueError, AttributeError) as exc:
+                log_handle.warning(f"Could not read issue metadata from {manifest_path}: {exc}")
+
     # Merge file-specific config
     file_base, _ = os.path.splitext(file_path)
     file_config_path = f"{file_base}_config.json"

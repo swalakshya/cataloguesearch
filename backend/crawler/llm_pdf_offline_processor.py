@@ -104,6 +104,10 @@ class LLMPDFOfflineProcessor(LLMPDFProcessor):
         output_ocr_dir = f"{self._base_ocr_folder}/{os.path.splitext(relative_pdf_path)[0]}"
         os.makedirs(output_ocr_dir, exist_ok=True)
 
+        from backend.common.auto_tesseract_config import prepare_ocr_cache
+        if prepare_ocr_cache(pdf_file, scan_config, self._config):
+            self._index_state.clear_batch_job(document_id)
+
         batch_job = self._index_state.get_batch_job(document_id)
         if batch_job:
             return self._collect(pdf_file, document_id, batch_job, output_ocr_dir, scan_config)

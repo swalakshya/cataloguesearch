@@ -284,6 +284,9 @@ class LLMPDFProcessor(PDFProcessor):
         if not os.path.exists(pdf_file):
             raise FileNotFoundError(f"Error: File {pdf_file} not found.")
 
+        from backend.common.auto_tesseract_config import prepare_ocr_cache
+        prepare_ocr_cache(pdf_file, scan_config, self._config)
+
         relative_pdf_path = os.path.relpath(pdf_file, self._base_pdf_folder)
         output_ocr_dir = f"{self._base_ocr_folder}/{os.path.splitext(relative_pdf_path)[0]}"
         log_handle.info(f"Output OCR directory: {output_ocr_dir}")

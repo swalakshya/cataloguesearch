@@ -6,6 +6,7 @@ const CATEGORY_META = {
     Pravachan: { colorVar: '--color-info' },
     Granth: { colorVar: '--color-brand' },
     Books: { colorVar: '--color-success' },
+    Magazine: { colorVar: '--color-brand' },
 };
 
 // Shared by the chat composer's filter row (ChatFilters) and Settings' "Default

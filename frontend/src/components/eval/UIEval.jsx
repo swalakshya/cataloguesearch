@@ -530,6 +530,7 @@ const UIEval = () => {
 
                         {activeTab === 'pdf-parser' && (
                             <PDFParser
+                                focus={focus}
                                 fill
                                 selectedFile={selectedFile}
                                 onFileSelect={handleFileSelect}

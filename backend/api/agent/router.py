@@ -27,8 +27,8 @@ router = APIRouter(tags=["agent"])
 class AgentSearchRequest(BaseModel):
     query: str = Field(..., description="Search text (Hindi or Gujarati)")
     language: Literal["hi", "gu"] = Field(..., description="Script language")
-    content_type: List[Literal["Pravachan", "Granth", "Books"]] = Field(
-        default=["Granth", "Books"], description="Filter by content categories"
+    content_type: List[Literal["Pravachan", "Granth", "Books", "Magazine"]] = Field(
+        default=["Pravachan", "Granth", "Books", "Magazine"], description="Filter by content categories"
     )
     anuyog: Optional[str] = Field(None, description="Anuyog classification")
     granth: Optional[str] = Field(None, description="Granth name")
@@ -60,7 +60,7 @@ class AgentFindSimilarRequest(BaseModel):
 
 class AgentFilterOptionsRequest(BaseModel):
     language: Literal["hi", "gu"] = Field(..., description="Language context")
-    content_type: Literal["Pravachan", "Granth", "Books"] = Field(..., description="Category")
+    content_type: Literal["Pravachan", "Granth", "Books", "Magazine"] = Field(..., description="Category")
 
 
 class AgentGetPravachanRequest(BaseModel):
@@ -71,7 +71,7 @@ class AgentGetPravachanRequest(BaseModel):
 
 class AgentMetadataOptionsRequest(BaseModel):
     language: Literal["hi", "gu"] = Field(..., description="Language context")
-    content_type: Literal["Pravachan", "Granth", "Books"] = Field(..., description="Category")
+    content_type: Literal["Pravachan", "Granth", "Books", "Magazine"] = Field(..., description="Category")
 
 
 class AgentShortenUrlRequest(BaseModel):
@@ -110,7 +110,10 @@ def _chunk_from_hit(hit: Dict[str, Any], language: str) -> Dict[str, Any]:
         "author": _first_value(metadata, ["Author", "Tikakaar", "Teekakar", "Bhasha Vachanika"]),
         "anuyog": _first_value(metadata, ["Anuyog", "anuyog"]),
         "language": source.get("language", language),
-        "date": chunk_labels.get("date"),
+        "date": chunk_labels.get("date") or metadata.get("date"),
+        **({"issue_number": (metadata.get("metadata") or {}).get("ank"),
+            "magazine_year": (metadata.get("metadata") or {}).get("year")}
+           if metadata.get("category") == "Magazine" else {}),
         "pravachan_number": chunk_labels.get("pravachan_number"),
         "gatha": chunk_labels.get("gatha"),
         "kalash": chunk_labels.get("kalash"),
@@ -220,7 +223,7 @@ def _extract_file_url_from_bucket(bucket: Dict[str, Any]) -> Optional[str]:
     return metadata.get("file_url")
 
 
-_ALL_CONTENT_TYPES = {"Pravachan", "Granth", "Books"}
+_ALL_CONTENT_TYPES = {"Pravachan", "Granth", "Books", "Magazine"}
 
 _METADATA_OPTIONS_CACHE_TTL = 30 * 60  # 30 minutes, same as metadata_cache
 # Maps (language, content_type) -> (results, expiry_timestamp)

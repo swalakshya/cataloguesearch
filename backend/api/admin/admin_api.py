@@ -203,7 +203,7 @@ async def update_admin_config(
     if bad_keys:
         raise HTTPException(status_code=400, detail=f"Unknown keys: {sorted(bad_keys)}")
     # Validate rerank_oversample >= max page size after proposed update
-    page_keys = ("page_size_pravachan", "page_size_granth", "page_size_books")
+    page_keys = ("page_size_pravachan", "page_size_granth", "page_size_books", "page_size_magazine")
     would_be_oversample = int(updates.get("rerank_oversample", config.RERANK_OVERSAMPLE))
     would_be_pages = [int(updates.get(k, getattr(config, k.upper()))) for k in page_keys]
     if would_be_oversample < max(would_be_pages):

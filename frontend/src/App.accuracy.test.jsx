@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/re
 import { beforeEach, afterEach, it, expect, vi } from 'vitest';
 import App from './App';
 
-const apiMock = vi.hoisted(() => ({ getAppConfig: vi.fn(), getAuthors: vi.fn(), getMetadata: vi.fn(), checkLlmHealth: vi.fn(), search: vi.fn() }));
+const apiMock = vi.hoisted(() => ({ getCatalogue: vi.fn(async () => []), getAppConfig: vi.fn(), getAuthors: vi.fn(), getMetadata: vi.fn(), checkLlmHealth: vi.fn(), search: vi.fn() }));
 vi.mock('./services/api', () => ({ api: apiMock }));
 vi.mock('./auth/AuthContext', () => ({ useAuth: () => ({ user: null, settings: null, loading: false }) }));
 vi.mock('./theme/ThemeContext', () => ({ useTheme: () => ({ setMode: () => {}, setPalette: () => {} }),

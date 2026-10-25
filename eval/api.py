@@ -45,6 +45,7 @@ from backend.crawler.paragraph_generator.advanced import AdvancedParagraphGenera
 from backend.crawler.paragraph_generator.language_meta import get_language_meta
 from backend.crawler import heading_detector
 from .ocr import get_ocr_service
+from backend.crawler.auto_tesseract import auto_page_data, annotate_regions
 
 log_handle = logging.getLogger(__name__)
 
@@ -85,6 +86,8 @@ class OCRResponse(BaseModel):
     language: str
     ocr_json: Optional[Dict] = None
     scan_config: Optional[Dict] = None
+    layout: Optional[Dict] = None
+    preview_image: Optional[str] = None
 
 class LineClassification(BaseModel):
     line_num: int
@@ -613,8 +616,9 @@ async def process_ocr(
     crop_left: float = Form(0, description="Percentage to crop from left (0-50)"),
     crop_right: float = Form(0, description="Percentage to crop from right (0-50)"),
     relative_path: Optional[str] = Form(None, description="Relative path to PDF file from base folder"),
-    page_number: Optional[int] = Form(None, description="Page number to extract from PDF (1-indexed, requires relative_path)"),
-    use_default_scan_config: bool = Form(False, description="Load scan_config.json from base_dir/<language>/ when no relative_path is given")
+    page_number: Optional[int] = Form(None, description="PDF page number, or source page label for an uploaded page image (1-indexed)"),
+    use_default_scan_config: bool = Form(False, description="Load scan_config.json from base_dir/<language>/ when no relative_path is given"),
+    auto_layout: bool = Form(False, description="Experimental eval-only automatic single/two-column reconstruction"),
 ):
     """
     Process OCR on an image.
@@ -634,6 +638,10 @@ async def process_ocr(
         raise HTTPException(status_code=400, detail="Provide either 'image' file OR 'relative_path'+'page_number', not both")
     if not (0 <= crop_top <= 50 and 0 <= crop_bottom <= 50 and 0 <= crop_left <= 50 and 0 <= crop_right <= 50):
         raise HTTPException(status_code=400, detail="Crop percentages must be between 0 and 50")
+    if page_number is not None and page_number < 1:
+        raise HTTPException(status_code=400, detail="Page number must be positive")
+    if crop_top + crop_bottom >= 100 or crop_left + crop_right >= 100:
+        raise HTTPException(status_code=400, detail="Crop settings must leave some page content")
 
     # Build scan_config
     scan_config = {}
@@ -719,8 +727,8 @@ async def process_ocr(
                 temp_path = temp_file.name
 
             if image.content_type == 'application/pdf':
-                # Use PDFProcessor._get_image to extract first page with cropping
-                images, page_numbers = pdf_processor._get_image(temp_path, [1], scan_config)
+                # Extract the requested uploaded PDF page with cropping.
+                images, page_numbers = pdf_processor._get_image(temp_path, [page_number or 1], scan_config)
                 if not images:
                     raise HTTPException(status_code=400, detail="Failed to extract page from PDF")
 
@@ -739,7 +747,7 @@ async def process_ocr(
                     right_crop_pixels = int(width * crop_right / 100)
                     pil_image = pil_image.crop((left_crop_pixels, top_crop_pixels, width - right_crop_pixels, height - bottom_crop_pixels))
 
-                page_num = 1
+                page_num = page_number or 1
 
             source_description = f"uploaded file {image.filename}"
 
@@ -747,10 +755,13 @@ async def process_ocr(
         log_handle.info(f"Processing OCR for {source_description}...")
         tesseract_lang = language.replace(' ', '+')
 
-        _, json_strings = AdvancedPDFProcessor._process_single_page(
-            (page_num, pil_image, tesseract_lang, 6)
-        )
-        page_data = json.loads(json_strings[0])
+        if auto_layout:
+            page_data = auto_page_data(page_num, pil_image, tesseract_lang)
+        else:
+            _, json_strings = AdvancedPDFProcessor._process_single_page(
+                (page_num, pil_image, tesseract_lang, scan_config.get("psm", 6))
+            )
+            page_data = json.loads(json_strings[0])
 
         # No heading detection here -- plain Tesseract carries no heading
         # signal at all (is_heading stays absent/False for every line) unless
@@ -758,10 +769,25 @@ async def process_ocr(
         # /eval/ocr/surya is the endpoint to use instead.
 
         # --- Paragraph generation via AdvancedParagraphGenerator ---
-        lang_code = "gu" if language.lower() in ("guj", "gu") else "hi"
+        lang_code = "gu" if language.lower().split('+')[0] in ("guj", "gu") else "hi"
         para_gen = AdvancedParagraphGenerator(config, get_language_meta(lang_code, scan_config))
-        phase1 = para_gen._phase1_lines_to_typed_paragraphs([page_data], scan_config)
-        typed_paragraphs = para_gen._phase2_combine_by_type(phase1)
+        layout = None
+        preview_image = None
+        if auto_layout:
+            layout = page_data["layout"]
+            regions = page_data["regions"]
+            typed_paragraphs = []
+            for region in regions:
+                phase1 = para_gen._phase1_lines_to_typed_paragraphs([region], scan_config)
+                # Do not combine paragraphs across independent columns/regions.
+                typed_paragraphs.extend(para_gen._phase2_combine_by_type(phase1))
+            buffer = io.BytesIO()
+            annotate_regions(pil_image, regions).save(buffer, format="PNG")
+            preview_image = base64.b64encode(buffer.getvalue()).decode("ascii")
+            scan_config = {**scan_config, "psm": 3, "eval_layout": "auto"}
+        else:
+            phase1 = para_gen._phase1_lines_to_typed_paragraphs([page_data], scan_config)
+            typed_paragraphs = para_gen._phase2_combine_by_type(phase1)
 
         api_paragraphs = [
             Paragraph(text=text, boxes=[], paragraph_type=state.name)
@@ -777,6 +803,8 @@ async def process_ocr(
             language=language,
             ocr_json=page_data,
             scan_config=scan_config,
+            layout=layout,
+            preview_image=preview_image,
         )
 
     except HTTPException:

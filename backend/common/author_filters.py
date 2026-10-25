@@ -1,11 +1,12 @@
 """Catalogue-based author groups and category-scoped search filters."""
 from backend.common.language import normalize_language
 
-AUTHOR_FILTER_KEYS = {"Granth": "_granth_authors", "Books": "_books_authors"}
+AUTHOR_FILTER_KEYS = {"Granth": "_granth_authors", "Books": "_books_authors", "Magazine": "_magazine_authors"}
 CATEGORY_FILTER_FIELDS = {
     "Pravachan": {"Anuyog", "Series", "volume", "pravachan_number", "_pravachan_groups"},
     "Granth": {"Name", "Anuyog", "Author"},
     "Books": {"Name", "Author"},
+    "Magazine": {"Name", "Author"},
 }
 
 

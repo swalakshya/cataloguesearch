@@ -10,11 +10,12 @@ import { CategoryEmojiIcon } from './categoryEmoji';
 // `anchor` is the matching <section id> on SearchIndex.js -- each tile is a
 // real link there, so the strip doubles as a mini table-of-contents from
 // anywhere in the app.
-const DEFAULT_LABELS = { Pravachan: 'Pravachans', Granth: 'Granths', Curated: 'Contemporary Jain Books' };
+const DEFAULT_LABELS = { Pravachan: 'Pravachans', Granth: 'Granths', Curated: 'Contemporary Jain Books', Magazine: 'Magazines' };
 
-const TILES = (pravachanTotal, granthCount, booksCount, labels) => [
+const TILES = (pravachanTotal, granthCount, booksCount, magazineCount, labels) => [
     { category: 'Pravachan', colorVar: '--color-info', value: pravachanTotal != null ? pravachanTotal.toLocaleString() : undefined, label: labels.Pravachan, anchor: 'pravachan-index' },
     { category: 'Granth', colorVar: '--color-brand', value: granthCount != null ? granthCount.toLocaleString() : undefined, label: labels.Granth, anchor: 'granth-index' },
+    { category: 'Magazine', colorVar: '--color-brand', value: magazineCount != null ? magazineCount.toLocaleString() : undefined, label: labels.Magazine, anchor: 'magazine-index' },
     { category: 'Curated', colorVar: '--color-danger', value: booksCount != null ? booksCount.toLocaleString() : undefined, label: labels.Curated, anchor: 'contemporary-index' },
 ];
 
@@ -43,7 +44,8 @@ export default function StatsStrip({ topAccent, spacious = false, labels }) {
     const granthCount = loading ? null : groupGranthEditions(rows.filter((r) => r.category === 'Granth')).length;
     const booksCount = loading ? null : rows.filter((r) => r.category === 'Books').length;
 
-    const tiles = TILES(pravachanTotal, granthCount, booksCount, resolvedLabels);
+    const magazineCount = loading ? null : new Set(rows.filter(r => r.category === 'Magazine').map(r => r.granth)).size;
+    const tiles = TILES(pravachanTotal, granthCount, booksCount, magazineCount, resolvedLabels);
 
     return (
         <div className={`card flex flex-col sm:flex-row items-stretch relative overflow-hidden ${spacious ? 'px-3 py-4' : 'px-2 py-2.5'}`}>

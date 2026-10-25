@@ -8,6 +8,8 @@ from backend.crawler.advanced_pdf_processor import AdvancedPDFProcessor
 from backend.crawler.llm_pdf_processor import LLMPDFProcessor
 from backend.crawler.llm_pdf_offline_processor import LLMPDFOfflineProcessor
 from backend.crawler.multi_page_pdf_processor import MultiPagePDFProcessor
+from backend.crawler.hybrid_pdf_processor import HybridPDFProcessor
+from backend.common.auto_tesseract_config import validate_auto_pages
 
 log_handle = logging.getLogger(__name__)
 
@@ -29,6 +31,8 @@ def create_pdf_processor(config: Config, chunk_strategy: str = None,
         PDFProcessor, AdvancedPDFProcessor, or LLMPDFProcessor instance
     """
     scan_config = scan_config or {}
+    if "auto_tesseract_pages" in scan_config:
+        validate_auto_pages(scan_config)
 
     # ocr_engine from scan_config overrides config default
     ocr_engine = scan_config.get("ocr_engine", config.OCR_ENGINE)
@@ -53,6 +57,9 @@ def create_pdf_processor(config: Config, chunk_strategy: str = None,
             inner = AdvancedPDFProcessor(config)
         else:
             raise ValueError(f"Unknown chunk_strategy: {strategy!r}")
+
+    if "auto_tesseract_pages" in scan_config and not scan_config.get("multi_page"):
+        inner = HybridPDFProcessor(inner, config)
 
     if scan_config.get("multi_page"):
         log_handle.info("Wrapping processor in MultiPagePDFProcessor")

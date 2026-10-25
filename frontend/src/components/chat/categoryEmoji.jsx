@@ -15,6 +15,7 @@ export const CATEGORY_EMOJI_SRC = {
     Pravachan: mic,
     Granth: scroll,
     Books: books,
+    Magazine: books,
     Curated: books,
     Author: writingHand,
 };

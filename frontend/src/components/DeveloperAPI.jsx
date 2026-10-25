@@ -34,7 +34,7 @@ const SEARCH_REQUEST = `POST /agent/search
 {
   "query": "आत्मा का स्वभाव क्या है?",
   "language": "hi",
-  "content_type": ["Granth", "Books"],
+  "content_type": ["Pravachan", "Granth", "Books", "Magazine"],
   "anuyog": "Dravyanuyog",
   "page_size": 5,
   "page": 1,
@@ -148,6 +148,10 @@ const DeveloperAPI = () => {
                     {
                         title: '📚 Contemporary Literature',
                         desc: 'Contemporary literature by modern Jain Scholars bringing the same timeless wisdom into accessible, common-use language for modern readers.'
+                    },
+                    {
+                        title: '📚 Magazine',
+                        desc: 'Hindi and Gujarati magazine issues, including Atmadharma. Use content_type: ["Magazine"] for magazine-only retrieval; citations include the issue, available date and PDF page.'
                     },
                 ].map(({ title, desc }) => (
                     <Card key={title} className="p-4">

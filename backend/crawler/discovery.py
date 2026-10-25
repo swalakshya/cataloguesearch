@@ -14,6 +14,9 @@ from backend.crawler.pdf_processor import PDFProcessor
 from backend.crawler.pdf_factory import create_pdf_processor
 from backend.utils import json_dumps
 from backend.common.scan_config import get_scan_config
+from backend.common.auto_tesseract_config import (
+    included_pages, ocr_directory, prepare_ocr_cache, recipe_current, recipe, RECIPE_FILE,
+)
 from backend.config import Config
 from backend.crawler.index_generator import IndexGenerator
 from backend.crawler.llm_index_generator import LLMIndexGenerator
@@ -132,6 +135,14 @@ class SingleFileProcessor:
             config_data, sort_keys=True)
         return hashlib.sha256(sorted_config_str.encode('utf-8')).hexdigest()
 
+    def _calculate_ocr_checksum(self, relative_path, pages):
+        checksum = self._index_state.calculate_ocr_checksum(relative_path, pages)
+        if self._scan_config.get("auto_tesseract_pages") or (
+            ocr_directory(self._file_path, self._config) / RECIPE_FILE).exists():
+            checksum = hashlib.sha256((checksum + ":" + recipe(
+                self._file_path, self._scan_config, self._config)).encode()).hexdigest()
+        return checksum
+
     def _save_state(self, document_id: str, state: dict):
         """Saves the current indexed state to a JSON file."""
         self._index_state.update_state(document_id, state)
@@ -169,6 +180,8 @@ class SingleFileProcessor:
             log_handle.info(f"Skipping PDF pages: {sorted(skip_pages)}")
             all_pages -= skip_pages
 
+        if "auto_tesseract_pages" in scan_config:
+            return included_pages(all_pages, scan_config)
         return sorted(list(all_pages))
 
     def _get_bounded_logical_pages(self, scan_config, pdf_processor):
@@ -263,13 +276,23 @@ class SingleFileProcessor:
         document_id = str(uuid.uuid5(uuid.NAMESPACE_URL, relative_pdf_path))
 
         pages_list = self._get_page_list(self._scan_config)
-        current_ocr_checksum = self._index_state.calculate_ocr_checksum(
+        # Recipe management is opt-in and persists after removing the override,
+        # so old auto output cannot be silently reused as ordinary OCR.
+        managed = bool(self._scan_config.get("auto_tesseract_pages")) or (
+            ocr_directory(self._file_path, self._config) / RECIPE_FILE).exists()
+        if managed and "language" not in self._scan_config:
+            self._scan_config["language"] = self._get_metadata().get("language", "hi")
+        recipe_changed = prepare_ocr_cache(self._file_path, self._scan_config, self._config)
+        if recipe_changed:
+            self._index_state.clear_batch_job(document_id)
+        current_ocr_checksum = self._calculate_ocr_checksum(
             relative_pdf_path, pages_list)
 
         last_state = self._index_state.get_state(document_id)
 
         # Check if OCR text files already exist for this OCR configuration
-        if last_state and last_state.get("ocr_checksum") == current_ocr_checksum:
+        complete = not managed or all((ocr_directory(self._file_path, self._config) / f"page_{p:04d}.json").exists() for p in pages_list)
+        if complete and not recipe_changed and last_state and last_state.get("ocr_checksum") == current_ocr_checksum:
             log_handle.info(f"OCR text files already exist for {self._file_path}. Skipping.")
             return
 
@@ -352,6 +375,14 @@ class SingleFileProcessor:
         output_ocr_dir = f"{self._output_ocr_base_dir}/{os.path.splitext(relative_path)[0]}"
         output_text_dir = f"{self._output_text_base_dir}/{os.path.splitext(relative_path)[0]}"
 
+        if "language" not in self._scan_config and (
+            self._scan_config.get("auto_tesseract_pages") or
+            (ocr_directory(self._file_path, self._config) / RECIPE_FILE).exists()
+        ):
+            self._scan_config["language"] = self._get_metadata().get("language", "hi")
+        if not recipe_current(self._file_path, self._scan_config, self._config):
+            raise ValueError("OCR settings changed for this PDF; run OCR before indexing")
+
         # Check if OCR directory exists
         if not os.path.exists(output_ocr_dir):
             log_handle.error(
@@ -382,7 +413,7 @@ class SingleFileProcessor:
         # Calculate current checksums for comparison
         file_metadata = self._get_metadata()
         current_config_hash = self._get_config_hash(file_metadata)
-        current_ocr_checksum = self._index_state.calculate_ocr_checksum(relative_path, effective_pages)
+        current_ocr_checksum = self._calculate_ocr_checksum(relative_path, effective_pages)
 
         index_state = self._index_state.get_state(document_id)
 
@@ -546,7 +577,7 @@ class SingleFileProcessor:
                 sub_file_path = f"{relative_path}#{sub_section_key}"
                 # Use sub_file_path (not relative_path) so the stored ocr_checksum
                 # is tied to this sub-section's identity, consistent with file_path.
-                sub_ocr_checksum = self._index_state.calculate_ocr_checksum(
+                sub_ocr_checksum = self._calculate_ocr_checksum(
                     sub_file_path, sub_pages)
 
                 self._note_progress(f"sub-section {i+1}/{len(sub_sections)}: {sg_name}")
@@ -674,7 +705,8 @@ class Discovery:
         Checks the directory's scan_config.json for file entries with a file_url
         and downloads any PDFs that don't already exist locally.
 
-        The PDF is saved as <key>.pdf (e.g. Samaysaar.pdf) in the same directory.
+        The PDF is saved as <key>.pdf in this directory, or in the optional
+        default.pdf_subdirectory (used by magazine manifests).
         """
         scan_config_path = os.path.join(directory, "scan_config.json")
         if not os.path.exists(scan_config_path):
@@ -687,6 +719,13 @@ class Discovery:
             log_handle.warning(f"Could not read scan_config.json in {directory}: {e}")
             return
 
+        pdf_subdirectory = scan_config_data.get("default", {}).get("pdf_subdirectory", ".")
+        target_directory = os.path.realpath(os.path.join(directory, pdf_subdirectory))
+        if os.path.commonpath([os.path.realpath(directory), target_directory]) != os.path.realpath(directory):
+            log_handle.warning(f"PDF subdirectory escapes its configuration directory: {pdf_subdirectory}")
+            return
+        os.makedirs(target_directory, exist_ok=True)
+
         for key, file_config in scan_config_data.items():
             if key == "default" or not isinstance(file_config, dict):
                 continue
@@ -695,7 +734,10 @@ class Discovery:
             if not file_url:
                 continue
 
-            pdf_path = os.path.join(directory, f"{key}.pdf")
+            if os.path.basename(key) != key:
+                log_handle.warning(f"Ignoring unsafe PDF name: {key}")
+                continue
+            pdf_path = os.path.join(target_directory, f"{key}.pdf")
             if os.path.exists(pdf_path):
                 log_handle.info(f"PDF already exists, skipping download: {pdf_path}")
                 continue

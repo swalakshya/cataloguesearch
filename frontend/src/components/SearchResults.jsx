@@ -165,6 +165,10 @@ export const ResultCard = ({ result, onFindSimilar, onExpand, onExpandGranth, on
                     {result.metadata?.sub_section && (
                         <MetaItem>({result.metadata.sub_section.name})</MetaItem>
                     )}
+                    {resultType === 'magazine' && <span className="text-ink-muted text-xs">
+                        {result.metadata?.metadata?.year && `Year ${result.metadata.metadata.year} · `}
+                        {result.metadata?.metadata?.ank && `Issue ${result.metadata.metadata.ank} · `}{result.metadata?.date || ''}
+                    </span>}
                     {result.metadata?.title && resultType === 'granth' && <span className="text-ink font-semibold text-[0.8rem]">{result.metadata.title}</span>}
                     {resultType === 'granth' && result.metadata?.adhikar && (
                         <MetaItem>Adhikar: {result.metadata.adhikar}</MetaItem>
@@ -333,23 +337,26 @@ const CategoryTabButton = ({ active, isLoading, onClick, emojiSrc, label, count 
 
 // Maps the active results tab to the category name /api/export-pdf expects.
 // 'similar' has no entry -- there's no "Export PDF" button on that tab.
-export const EXPORT_CATEGORY_BY_TAB = { pravachan: 'Pravachan', granth: 'Granth', books: 'Books' };
+export const EXPORT_CATEGORY_BY_TAB = { pravachan: 'Pravachan', granth: 'Granth', books: 'Books', magazine: 'Magazine' };
 
 export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData, onClearSimilar, loadingCategories, activeCategories, onExportClick }) => {
     const pravachanCount = searchData?.pravachan_results?.total_hits || 0;
     const granthCount = searchData?.granth_results?.total_hits || 0;
     const booksCount = searchData?.books_results?.total_hits || 0;
+    const magazineCount = searchData?.magazine_results?.total_hits || 0;
     const similarCount = similarDocumentsData?.total_results || 0;
     const hasSuggestions = searchData?.suggestions && searchData.suggestions.length > 0;
     const isLoadingPravachan = loadingCategories?.has('Pravachan');
     const isLoadingGranth = loadingCategories?.has('Granth');
     const isLoadingBooks = loadingCategories?.has('Books');
+    const isLoadingMagazine = loadingCategories?.has('Magazine');
     const anyLoading = loadingCategories?.size > 0;
 
-    const hasAnyResults = (!hasSuggestions && (pravachanCount > 0 || granthCount > 0 || booksCount > 0)) || similarDocumentsData;
+    const hasAnyResults = (!hasSuggestions && (pravachanCount > 0 || granthCount > 0 || booksCount > 0 || magazineCount > 0)) || similarDocumentsData;
     const showPravachan = !hasSuggestions && (isLoadingPravachan || pravachanCount > 0);
     const showGranth = !hasSuggestions && (isLoadingGranth || granthCount > 0);
-    const showBooks = !hasSuggestions && (isLoadingBooks || booksCount > 0);
+    const showMagazine = !hasSuggestions && (isLoadingMagazine || magazineCount > 0);
+    const showBooks = !hasSuggestions && (isLoadingBooks || booksCount > 0 || magazineCount > 0);
 
     if (!anyLoading && !hasAnyResults) return null;
 
@@ -359,6 +366,7 @@ export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData
         pravachan: { loading: isLoadingPravachan, count: pravachanCount },
         granth: { loading: isLoadingGranth, count: granthCount },
         books: { loading: isLoadingBooks, count: booksCount },
+        magazine: { loading: isLoadingMagazine, count: magazineCount },
     };
     const activeTabState = ACTIVE_TAB_STATE[activeTab];
     const showExport = activeTabState && !activeTabState.loading && activeTabState.count > 0;
@@ -395,6 +403,8 @@ export const Tabs = ({ activeTab, setActiveTab, searchData, similarDocumentsData
                     count={booksCount}
                 />
             )}
+            {showMagazine && (<CategoryTabButton active={activeTab === 'magazine'} isLoading={isLoadingMagazine}
+                onClick={() => setActiveTab('magazine')} emojiSrc={CATEGORY_EMOJI_SRC.Magazine} label="Magazine" count={magazineCount} />)}
             {similarDocumentsData && (
                 <button
                     onClick={() => setActiveTab('similar')}

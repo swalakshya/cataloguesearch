@@ -17,6 +17,12 @@ function renderStats(rows, loading = false) {
 const work = { category: 'Granth', granth: 'Shrimad Rajchandra', author: 'Shrimad Rajchandra', anuyog: 'Dravyanuyog' };
 
 describe('Granth stats count', () => {
+    it('counts language editions as one magazine rather than hundreds of issues', () => {
+        renderStats([{ category: 'Magazine', granth: 'Atmadharma', language: 'hi', issue_count: 423 },
+            { category: 'Magazine', granth: 'Atmadharma', language: 'gu', issue_count: 459 }]);
+        const tile = within(screen.getByRole('link', { name: /Magazines/ }));
+        expect(tile.getByText('1')).toBeTruthy();
+    });
     it('counts Hindi and Gujarati editions as one Granth', () => {
         const pill = renderStats([{ ...work, language: 'hi' }, { ...work, language: 'gu', tikakaar: null }]);
         expect(pill.getByText('1')).toBeTruthy();

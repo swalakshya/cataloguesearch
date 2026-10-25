@@ -22,7 +22,8 @@ const PARAM_META = {
     spelling_min_score:  { label: 'Spelling suggestion min score', type: 'number', min: 0, max: 1, step: 0.05 },
     enable_reranking:    { label: 'Enable reranking',         type: 'boolean' },
     context_reranking:   { label: 'Rerank with surrounding context', type: 'boolean', tooltip: 'Enables bounded previous/next paragraph context for Low effort in Khoj and chat. High effort always uses context when reranking. May take longer.' },
-    active_categories:   { label: 'Default active categories', type: 'multiselect', options: ['Pravachan', 'Granth', 'Books'] },
+    page_size_magazine: { label: 'Page size — Magazine', type: 'number', min: 5, max: 100, step: 5 },
+    active_categories:   { label: 'Default active categories', type: 'multiselect', options: ['Pravachan', 'Granth', 'Books', 'Magazine'] },
 };
 
 const ConfigRow = ({ paramKey, defaults, overrides, effective, onSave, onReset, metaMap = PARAM_META }) => {

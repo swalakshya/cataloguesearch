@@ -139,6 +139,7 @@ Full reference of all options:
 | `typo_list` | array | `[]` | `[pattern, replacement]` pairs applied as regex substitutions |
 | `start_page` | int | 1 | First PDF page to process (file-specific only) |
 | `end_page` | int | last | Last PDF page to process (file-specific only) |
+| `auto_tesseract_pages` | array | absent | Per-PDF physical page numbers to process using Auto Tesseract; other included pages keep the configured `ocr_engine` and settings |
 | `page_list` | array | `[]` | Explicit list of page ranges: `[{"start": 1, "end": 5}, {"start": 100, "end": 150}]` |
 | `multi_page` | bool | false | Set to `true` for scanned book spreads (two logical pages per physical page) |
 | `book_start_page` | int | 1 | Which PDF page the book content begins on (multi-page only) |
@@ -155,6 +156,46 @@ Full reference of all options:
 ---
 
 ## 4. Tesseract vs LLM parsing
+
+### Per-page Auto Tesseract overrides
+
+Keep the existing `ocr_engine`. Add `auto_tesseract_pages` only to the PDFs
+that need it; existing scan configs require no edits:
+
+```json
+{
+  "default": { "ocr_engine": "tesseract", "psm": 6 },
+  "A_048_04": {
+    "start_page": 3,
+    "end_page": 19,
+    "auto_tesseract_pages": [3, 16]
+  }
+}
+```
+
+The example content bounds are illustrative. Pages 3 and 16 use shared Auto
+Tesseract extraction (PSM 3, detected regions, region-specific paragraph margins).
+Other included pages use the original engine, including LLM online/batch when
+configured. Page numbers remain physical PDF page numbers, starting at 1.
+`start_page`, `end_page`, and `skip_pdf_pages` take precedence over extraction;
+an auto override never adds excluded pages to the scan.
+
+The list is per-PDF, not inherited through `default`. Duplicate page numbers
+are normalized. Invalid numbers, pages beyond the PDF or configured bounds,
+and explicitly skipped pages are rejected. This option cannot be combined
+with `multi_page` book spreads. An empty list disables the overrides.
+
+Only PDFs using these overrides acquire an OCR recipe sidecar. Changing or
+removing the list, crop, PSM, language, engine/model, or content bounds
+invalidates that PDF's OCR and indexing checksum. Existing configs without
+this feature retain their original caching behavior. Changed hybrid settings
+require an OCR run before indexing; pending LLM batch state is reset when the
+recipe changes.
+
+In PDF Parser, opening a library PDF selects Auto Tesseract on its configured
+pages and the base engine on other pages. Manual engine selection remains
+available for comparisons. The regular Tesseract eval endpoint respects the
+loaded `psm`, falling back to its existing value of 6 when absent.
 
 The `ocr_engine` setting selects the pipeline:
 
@@ -491,6 +532,21 @@ Then open **http://localhost:3000/eval** in your browser.
 
 ### What you can do
 
+For mixed single/two-column magazines, open **PDF Parser**, load a PDF using
+**URL** or **Upload**, select its language, then choose **Auto Tesseract** and
+click **Process** on the page you want to inspect. **Paragraphs** shows the text;
+**OCR Preview** outlines numbered text regions in reading order; **Raw OCR JSON**
+includes the detected layout, region margins and cropped-page coordinates.
+Crop controls still apply before detection. Table-like, ambiguous and mixed
+layouts show a review warning and fall back to whole-page segmentation.
+
+Auto Tesseract is experimental. It uses Tesseract PSM 3 and
+reconstructs paragraphs separately within detected regions. It does not write
+scan configs or index documents from the eval UI. Production indexing can use
+the per-PDF `auto_tesseract_pages` override described above. Eval batch mode
+remains available only for regular Tesseract. Columns retain their physical PDF
+page number. Check recognition and paragraph boundaries before using the output.
+
 | Feature                  | How to use it                                                                                                                                    |
 |--------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------|
 | **OCR preview**          | Upload a PDF and pick a page range. Inspect the raw OCR text for the corresponding page. Useful for checking the OCR quality and crop settings.  |
@@ -500,3 +556,16 @@ Then open **http://localhost:3000/eval** in your browser.
 | **Batch OCR**            | Queue a whole folder of pages for OCR; download results as a ZIP.                                                                                |
   | **ParaClassifier**     | Lets you make para classification changes to the Gemini output for minor corrections here and there |  
 The Eval UI is the right place to iterate on `crop`, `psm`, `stop_words`, and `typo_list` settings before running the full pipeline.
+
+
+## Magazine search and chat support
+
+Use `category: Magazine` with the language-first layout `Magazines/gujarati/AtmaDharma` and `Magazines/hindi/AtmaDharma`. Each edition keeps its own scan config, issue manifest and PDFs. All four categories (Pravachan, Granth, Books, Magazine) are enabled by default; existing saved user category preferences remain unchanged.
+
+The search API accepts `search_types.Magazine` and streams `category: Magazine` events. Non-stream response models include `magazine_results`. Agent search, metadata options and filter options accept `content_type: Magazine`; agent search defaults to all four categories. Magazine author filters use `_magazine_authors`. Admin supports `page_size_magazine`.
+
+The catalogue represents each language edition once, with `issue_count` derived from its manifest. The UI groups language editions into one magazine title and shows issue counts separately. Refresh the catalogue after changing manifests. Catalogue presence does not imply content has been indexed: OCR and indexing remain explicit operations.
+
+Issue metadata currently lives under `metadata` in the issue manifest entry (`ank`, `year`, Samvats), with a top-level `date` when known. Agent results expose `issue_number` and `magazine_year`; citations retain physical PDF pages separately from printed page numbers. API exports include the magazine, issue, date and PDF page link.
+
+Verification: open `/aagam-khoj` and `/search-index`, check the Magazine picker and catalogue, switch Hindi/Gujarati, and test a magazine-only query after indexing an issue. In Settings, change Magazine independently for Chat and Search; existing saved selections must remain intact. No OCR/indexing is triggered just by opening these pages.

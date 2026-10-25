@@ -29,6 +29,7 @@ import { getStoredChatDefaultCategories, getStoredKhojDefaultCategories, clampCa
 import { useTheme, getInitialMode, getInitialPalette, getSystemDefaultMode } from './theme/ThemeContext';
 import { DEFAULT_PALETTE } from './theme/palettes';
 import StatsStrip from './components/chat/StatsStrip';
+import { mergeMagazineMetadata } from './utils/catalogue';
 import { Spinner, ChevronUpIcon, ChevronDownIcon, ExpandIcon } from './components/SharedComponents';
 import ExportPdfModal from './components/ExportPdfModal';
 import { AlertTriangle, Mail, Home as HomeIcon, PenLine, SendHorizontal } from 'lucide-react';
@@ -206,10 +207,10 @@ const AppContent = () => {
     };
     const [query, setQuery] = useState('');
     const [activeFilters, setActiveFilters] = useState([]);
-    const [contentTypes, setContentTypes] = useState({ pravachans: true, granths: true, books: false });
+    const [contentTypes, setContentTypes] = useState({ pravachans: true, granths: true, books: false, magazines: false });
     const [debugMode, setDebugMode] = useState(false);
     const [appName, setAppName] = useState('swalakshya');
-    const [activeCategories, setActiveCategories] = useState(['Pravachan', 'Granth']);
+    const [activeCategories, setActiveCategories] = useState(['Pravachan', 'Granth', 'Books', 'Magazine']);
     const [language, setLanguage] = useState('hindi');
     const [textSearch, setTextSearch] = useState(false);
     const [khojAccuracyMode, setKhojAccuracyMode] = useState(false);
@@ -219,7 +220,9 @@ const AppContent = () => {
     const [showFilters, setShowFilters] = useState(true);
     const [startYear, setStartYear] = useState(null);
     const [endYear, setEndYear] = useState(null);
-    const [allMetadata, setAllMetadata] = useState({});
+    const [rawMetadata, setAllMetadata] = useState({});
+    const [catalogueRows, setCatalogueRows] = useState([]);
+    const allMetadata = useMemo(() => mergeMagazineMetadata(rawMetadata, catalogueRows), [rawMetadata, catalogueRows]);
     const [authorGroups, setAuthorGroups] = useState({});
     const [authorsError, setAuthorsError] = useState(false);
     const [metadata, setMetadata] = useState({});
@@ -239,6 +242,7 @@ const AppContent = () => {
     const [pravachanPage, setPravachanPage] = useState(1);
     const [granthPage, setGranthPage] = useState(1);
     const [booksPage, setBooksPage] = useState(1);
+    const [magazinePage, setMagazinePage] = useState(1);
     const [similarDocsPage, setSimilarDocsPage] = useState(1);
     const [similarDocumentsData, setSimilarDocumentsData] = useState(null);
     const [sourceDocForSimilarity, setSourceDocForSimilarity] = useState(null);
@@ -357,6 +361,7 @@ const AppContent = () => {
             pravachans: categories.includes('Pravachan'),
             granths: categories.includes('Granth'),
             books: categories.includes('Books'),
+            magazines: categories.includes('Magazine'),
         });
     };
 
@@ -432,11 +437,12 @@ const AppContent = () => {
             pravachan: searchData.pravachan_results?.total_hits || 0,
             granth: searchData.granth_results?.total_hits || 0,
             books: searchData.books_results?.total_hits || 0,
+            magazine: searchData.magazine_results?.total_hits || 0,
         };
-        const categoryLabel = { pravachan: 'Pravachan', granth: 'Granth', books: 'Books' };
+        const categoryLabel = { pravachan: 'Pravachan', granth: 'Granth', books: 'Books', magazine: 'Magazine' };
         const isAvailable = (tab) => counts[tab] > 0 || loadingCategories.has(categoryLabel[tab]);
         if (isAvailable(activeTab)) return;
-        const firstAvailable = ['pravachan', 'granth', 'books'].find(isAvailable);
+        const firstAvailable = ['pravachan', 'granth', 'books', 'magazine'].find(isAvailable);
         if (firstAvailable) setActiveTab(firstAvailable);
     }, [searchData, loadingCategories, activeTab]);
 
@@ -494,6 +500,7 @@ const AppContent = () => {
             console.error(error);
             setAuthorsError(true);
         });
+        api.getCatalogue().then(setCatalogueRows);
         api.getMetadata().then(data => {
             setAllMetadata(data);
             // Set initial metadata based on default content type (Pravachan) and language
@@ -598,17 +605,20 @@ const AppContent = () => {
         const hasPravachanFilter = activeFilters.some(f => f.key === '_pravachan_groups');
         const hasGranthFilter = activeFilters.some(f => f.key === '_granth_authors' || (f.key === 'Name' && granthNames.includes(f.value)));
         const hasBooksFilter = activeFilters.some(f => f.key === '_books_authors' || (f.key === 'Name' && booksNames.includes(f.value)));
-        const hasAnyCategoryFilter = hasPravachanFilter || hasGranthFilter || hasBooksFilter;
+        const magazineNames = allMetadata?.Magazine?.[language]?.Name || [];
+        const hasMagazineFilter = activeFilters.some(f => f.key === '_magazine_authors' || (f.key === 'Name' && magazineNames.includes(f.value)));
+        const hasAnyCategoryFilter = hasPravachanFilter || hasGranthFilter || hasBooksFilter || hasMagazineFilter;
         return {
             ...contentTypes,
             pravachans: activeCategories.includes('Pravachan') && (hasPravachanFilter || (contentTypes.pravachans && !hasAnyCategoryFilter)),
             granths: activeCategories.includes('Granth') && (hasGranthFilter || (contentTypes.granths && !hasAnyCategoryFilter)),
             books: activeCategories.includes('Books') && (hasBooksFilter || (contentTypes.books && !hasAnyCategoryFilter)),
+            magazines: activeCategories.includes('Magazine') && (hasMagazineFilter || (contentTypes.magazines && !hasAnyCategoryFilter)),
         };
     }, [activeFilters, contentTypes, allMetadata, language, activeCategories]);
 
     // Single source of truth for building search payload
-    const buildSearchPayload = useCallback((pravachanPage = 1, granthPage = 1) => {
+    const buildSearchPayload = useCallback((pravachanPage = 1, granthPage = 1, requestedMagazinePage = magazinePage) => {
         return {
             query,
             text_search: textSearch,
@@ -632,14 +642,15 @@ const AppContent = () => {
                     "enabled": effectiveContentTypes.books,
                     "page_size": PAGE_SIZE,
                     "page_number": booksPage
-                }
+                },
+                "Magazine": {"enabled": effectiveContentTypes.magazines, "page_size": PAGE_SIZE, "page_number": requestedMagazinePage}
             },
             enable_reranking: searchType === 'relevance',
             query_id: Array.from(crypto.getRandomValues(new Uint8Array(3)), b => b.toString(16).padStart(2, '0')).join(''),
             ...(startYear && { start_year: startYear }),
             ...(endYear && { end_year: endYear })
         };
-    }, [query, activeFilters, contentTypes, effectiveContentTypes, language, textSearch, khojAccuracyMode, exactMatch, excludeWords, searchType, startYear, endYear, booksPage]);
+    }, [query, activeFilters, contentTypes, effectiveContentTypes, language, textSearch, khojAccuracyMode, exactMatch, excludeWords, searchType, startYear, endYear, booksPage, magazinePage]);
 
     // Params for the "Export PDF" modal: the same query/filters as the active
     // search (no per-category page/enabled config -- /api/export-pdf always
@@ -668,10 +679,11 @@ const AppContent = () => {
         setSearchData(null);
         setPravachanPage(page);
         setBooksPage(1);
+        setMagazinePage(1);
         setSimilarDocumentsData(null);
         setSourceDocForSimilarity(null);
 
-        const requestPayload = buildSearchPayload(1, 1);
+        const requestPayload = buildSearchPayload(1, 1, 1);
         setLoadingCategories(new Set(activeCategories));
         setActiveTab(activeCategories[0]?.toLowerCase() || 'pravachan');
         const data = await api.search(requestPayload, (category, partialData) => {
@@ -747,6 +759,20 @@ const AppContent = () => {
         setBooksPage(page);
 
         const requestPayload = buildSearchPayload(1, 1);
+        const data = await api.search(requestPayload);
+        setSearchData(data);
+        setIsLoading(false);
+    }, [query, buildSearchPayload]);
+
+    const handleMagazineSearch = useCallback(async (page = 1) => {
+        if (!query.trim()) {
+            return;
+        }
+        setSearchStartedAt(Date.now());
+        setIsLoading(true);
+        setMagazinePage(page);
+
+        const requestPayload = buildSearchPayload(1, 1, page);
         const data = await api.search(requestPayload);
         setSearchData(data);
         setIsLoading(false);
@@ -854,6 +880,9 @@ const AppContent = () => {
                 break;
             case 'books':
                 handleBooksSearch(page);
+                break;
+            case 'magazine':
+                handleMagazineSearch(page);
                 break;
             case 'similar':
                 setSimilarDocsPage(page);
@@ -1144,6 +1173,14 @@ const AppContent = () => {
                                                     <ResultsList results={searchData.books_results.results} totalResults={searchData.books_results.total_hits}
                                                         pageSize={PAGE_SIZE} currentPage={booksPage} onPageChange={handlePageChange}
                                                         resultType="books" onFindSimilar={handleFindSimilar} onExpand={handleExpand}
+                                                        onOpenReference={setActiveCitation}
+                                                        searchType={searchType} query={query} currentFilters={activeFilters} language={language} compact={compact} />
+                                                )}
+                                                {activeTab === 'magazine' && loadingCategories.has('Magazine') && <SkeletonResultsList />}
+                                                {activeTab === 'magazine' && searchData?.magazine_results?.results.length > 0 && (
+                                                    <ResultsList results={searchData.magazine_results.results} totalResults={searchData.magazine_results.total_hits}
+                                                        pageSize={PAGE_SIZE} currentPage={magazinePage} onPageChange={handlePageChange}
+                                                        resultType="magazine" onFindSimilar={handleFindSimilar} onExpand={handleExpand}
                                                         onOpenReference={setActiveCitation}
                                                         searchType={searchType} query={query} currentFilters={activeFilters} language={language} compact={compact} />
                                                 )}

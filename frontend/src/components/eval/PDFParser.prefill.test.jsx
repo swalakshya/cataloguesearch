@@ -101,6 +101,14 @@ test('if the scan_config cannot be read, the page still opens with the defaults 
     expect(screen.queryByText(/settings from scan_config/)).not.toBeInTheDocument();
 });
 
+test('a configured auto page selects Auto Tesseract without rewriting the base engine', async () => {
+    mockScanConfig({ ocr_engine: 'llm', language: 'gu', auto_tesseract_pages: [1, 3], start_page: 1, end_page: 20 });
+    renderParser();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Auto Tesseract' }).className).toMatch(/bg-sky-600/));
+    expect(screen.getByText(/Configured for PDF page 1: Auto Tesseract/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save to scan_config' })).not.toBeInTheDocument();
+});
+
 
 describe('Verify', () => {
     const SUBS = [{ field: 'Adhikaar', name: 'Prastavana', start_page: 12, end_page: 39 },

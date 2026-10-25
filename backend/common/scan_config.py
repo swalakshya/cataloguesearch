@@ -11,6 +11,7 @@ import logging
 from typing import Optional
 
 import fitz
+from backend.common.auto_tesseract_config import validate_auto_pages
 
 log_handle = logging.getLogger(__name__)
 
@@ -167,6 +168,8 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
 
                 # Apply default settings from this config file
                 default_config = scan_config_data.get("default", {})
+                if "auto_tesseract_pages" in default_config:
+                    raise ValueError("auto_tesseract_pages must be configured per PDF, not in default")
                 scan_meta["header_prefix"].extend(default_config.get("header_prefix", []))
                 scan_meta["header_regex"].extend(default_config.get("header_regex", []))
                 scan_meta["strip_regex"].extend(default_config.get("strip_regex", []))
@@ -313,4 +316,7 @@ def get_scan_config(file_path: str, base_pdf_folder: str) -> dict:
         if "qa_merge" in file_config:
             scan_meta["qa_merge"] = file_config["qa_merge"]
 
+    if "auto_tesseract_pages" in file_config:
+        scan_meta["auto_tesseract_pages"] = validate_auto_pages(
+            {**scan_meta, "auto_tesseract_pages": file_config["auto_tesseract_pages"]}, num_pages)
     return scan_meta

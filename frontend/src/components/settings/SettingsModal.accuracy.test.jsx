@@ -17,6 +17,18 @@ afterEach(cleanup);
 const props = { open: true, onClose: vi.fn(), answerFormat: 'summary', onSaveAnswerFormat: vi.fn(),
     activeCategories: ['Granth'], chatDefaultCategories: ['Granth'], khojDefaultCategories: ['Granth'] };
 
+it('saves Magazine independently for Chat and Search', () => {
+    const saveChat = vi.fn(), saveSearch = vi.fn();
+    render(<SettingsModal {...props} activeCategories={['Pravachan', 'Granth', 'Books', 'Magazine']}
+        onSaveChatDefaultCategories={saveChat} onSaveKhojDefaultCategories={saveSearch} />);
+    const buttons = screen.getAllByRole('button', { name: 'Magazine' });
+    expect(buttons).toHaveLength(2);
+    fireEvent.click(buttons[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(saveChat).toHaveBeenCalledWith(['Granth', 'Magazine']);
+    expect(saveSearch).toHaveBeenCalledWith(['Granth']);
+});
+
 it('keeps accuracy as a draft until Save and persists the anonymous default', () => {
     const save = vi.fn();
     render(<SettingsModal {...props} onSaveChatAccuracyMode={save} />);

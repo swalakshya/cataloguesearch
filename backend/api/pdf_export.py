@@ -25,6 +25,7 @@ _COLUMNS: Dict[str, List[Optional[str]]] = {
     "Pravachan": ["Granth", "Series", "Date", "Pravachan No.", "Answer Text", "PDF Link"],
     "Granth": ["Granth", "Author", "Answer Text", None, "Page No.", "PDF Link"],
     "Books": ["Book Name", "Author", "Page No.", None, "PDF Link"],
+    "Magazine": ["Magazine", "Issue", "Date", "Page No.", "Answer Text", "PDF Link"],
 }
 
 
@@ -87,6 +88,11 @@ def _row_cells(category: str, result: Dict[str, Any]) -> List[str]:
             html.escape(str(result.get("page_number", ""))),
             link,
         ]
+    if category == "Magazine":
+        return [html.escape(str(metadata.get("Name", ""))),
+                html.escape(str(metadata.get("metadata", {}).get("ank", ""))),
+                html.escape(str(metadata.get("date", ""))),
+                html.escape(str(result.get("page_number", ""))), answer, link]
     # Books
     _, sub_name = _sub_section(result)
     return [

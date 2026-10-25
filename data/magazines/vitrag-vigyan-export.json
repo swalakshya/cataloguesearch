@@ -1,0 +1,30 @@
+{
+  "source_url": "https://ptst.in/pdf/vitrag_vigyan.php",
+  "exported_at_utc": "2026-10-24T06:25:32.261028+00:00",
+  "source_html_sha256": "b511cc137a3e13828d9ea4b88c7f7620e27b992c2d214cbaceed50e909ec4578",
+  "rows": 283,
+  "unique_pdf_links": 282,
+  "duplicate_pdf_links": {
+    "https://ptst.in/snatak/admin/docs/files_vitrag/11-Vitrag-Vigyan-Patrika-November-2017.pdf": 2
+  },
+  "rows_with_complete_month_date": 278,
+  "rows_without_complete_date": [
+    "189",
+    "235",
+    "236",
+    "237",
+    "279"
+  ],
+  "earliest_complete_date": "2003-01",
+  "latest_complete_date": "2023-07",
+  "notes": [
+    "All rows are embedded in one HTML response; browser pagination does not require further requests.",
+    "Editorials and supplements remain separate rows; duplicate downloads are retained and flagged.",
+    "Dates come from title month names and four-digit years; no publication day is inferred.",
+    "Title Prefix is preserved text, not a verified Ank/issue number.",
+    "Author and lunar-calendar metadata are not supplied by this listing.",
+    "Language is filled only where the title explicitly names it (Marathi); other PDFs are not language-verified.",
+    "File size values and their KB label are copied verbatim; the apparent units are not verified.",
+    "PDF URLs are extracted and escaped, not individually downloaded or availability-checked."
+  ]
+}

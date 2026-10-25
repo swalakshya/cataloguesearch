@@ -7,6 +7,7 @@ from backend.config import Config
 from backend.crawler.paragraph_generator.advanced import AdvancedParagraphGenerator
 from backend.crawler.paragraph_generator.granth import GranthParagraphGenerator
 from backend.crawler.paragraph_generator.language_meta import LanguageMeta
+from backend.crawler.paragraph_generator.hybrid import HybridParagraphGenerator
 
 log_handle = logging.getLogger(__name__)
 
@@ -30,6 +31,10 @@ def create_paragraph_generator(config: Config, language_meta: LanguageMeta,
         AdvancedParagraphGenerator or GranthParagraphGenerator instance
     """
     scan_config = scan_config or {}
+    if "auto_tesseract_pages" in scan_config:
+        regular_config = {k: v for k, v in scan_config.items() if k != "auto_tesseract_pages"}
+        regular = create_paragraph_generator(config, language_meta, chunk_strategy, regular_config)
+        return HybridParagraphGenerator(regular, config, language_meta)
 
     # ocr_engine == "llm" always maps to GranthParagraphGenerator
     ocr_engine = scan_config.get("ocr_engine", config.OCR_ENGINE)

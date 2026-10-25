@@ -28,6 +28,10 @@ export const buildCitationLabel = (attrs) => {
         if (attrs.dohra) parts.push(`Doha ${attrs.dohra}`);
         if (attrs.kavya) parts.push(`Kavya ${attrs.kavya}`);
     }
+    if (attrs.category === 'Magazine') {
+        if (attrs.magazine_year) parts.push(`Year ${attrs.magazine_year}`);
+        if (attrs.issue_number) parts.push(`Issue ${attrs.issue_number}`);
+    }
     if (attrs.page) parts.push(`पृष्ठ ${attrs.page}`);
     if (attrs.date) parts.push(attrs.date);
     return parts.filter(Boolean).join(', ');
@@ -96,6 +100,8 @@ export const getCitationCategoryMeta = (category) => {
             return { label: 'Granth', variant: 'brand' };
         case 'Books':
             return { label: 'Books', variant: 'success' };
+        case 'Magazine':
+            return { label: 'Magazine', variant: 'brand' };
         default:
             return { label: 'Reference', variant: 'neutral' };
     }
@@ -104,6 +110,11 @@ export const getCitationCategoryMeta = (category) => {
 export const buildInlineQuoteLabel = (citation) => {
     if (!citation) return '';
     const parts = [citation.granth];
+    if (citation.category === 'Magazine') {
+        if (citation.magazine_year) parts.push(`Year ${citation.magazine_year}`);
+        if (citation.issue_number) parts.push(`Issue ${citation.issue_number}`);
+        if (citation.date) parts.push(citation.date);
+    }
     if (citation.category === 'Pravachan') {
         if (citation.series) parts.push(citation.series);
         if (citation.volume != null && citation.volume !== '') parts.push(`Vol ${citation.volume}`);
@@ -134,6 +145,10 @@ export const buildReferenceLines = (citation) => {
     if (!citation) return { title: '', subtitle: '' };
     const title = citation.granth || citation.reference || 'Untitled reference';
     const subtitleParts = [];
+    if (citation.category === 'Magazine') {
+        if (citation.magazine_year) subtitleParts.push(`Year ${citation.magazine_year}`);
+        if (citation.issue_number) subtitleParts.push(`Issue ${citation.issue_number}`);
+    }
     if (citation.category === 'Pravachan') {
         if (citation.pravachankar) subtitleParts.push(citation.pravachankar);
         if (citation.series) subtitleParts.push(citation.series);

@@ -1159,7 +1159,7 @@ const GranthFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter,
     );
 };
 
-const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, language, disabled, catalogue, catalogueLoading }) => {
+const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, language, disabled, catalogue, catalogueLoading, category = 'Books' }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [pending, setPending]   = useState([]);
     const [search, setSearch]     = useState('');
@@ -1169,11 +1169,11 @@ const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, 
     useOverlayBehavior(isOpen, () => setIsOpen(false));
 
     const allNames = useMemo(() => {
-        return [...(allMetadata?.Books?.[language]?.Name || [])].sort();
-    }, [allMetadata, language]);
+        return [...(allMetadata?.[category]?.[language]?.Name || [])].sort();
+    }, [allMetadata, language, category]);
 
-    const selectedAuthors = useMemo(() => activeFilters.filter(f => f.key === '_books_authors').map(f => f.value), [activeFilters]);
-    const eligibleNames = useMemo(() => eligibleWorkNames(allNames, catalogue, language, selectedAuthors, 'Books'), [allNames, catalogue, language, selectedAuthors]);
+    const selectedAuthors = useMemo(() => activeFilters.filter(f => f.key === (category === 'Magazine' ? '_magazine_authors' : '_books_authors')).map(f => f.value), [activeFilters, category]);
+    const eligibleNames = useMemo(() => eligibleWorkNames(allNames, catalogue, language, selectedAuthors, category), [allNames, catalogue, language, selectedAuthors, category]);
     const catalogueUnavailable = selectedAuthors.length > 0 && (catalogueLoading || !catalogue.length);
     const filtered = catalogueUnavailable ? [] : eligibleNames.filter(n => n.toLowerCase().includes(search.toLowerCase()));
 
@@ -1208,11 +1208,11 @@ const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, 
                 onClick={() => setIsOpen(true)}
                 disabled={disabled}
                 className={`filter-trigger flex-none ${disabled ? 'filter-trigger-disabled' : activeCount > 0 ? 'filter-trigger-active' : ''}`}
-                title={disabled ? 'Not searched — pick a Books filter to include Books results again.' : undefined}
+                title={disabled ? `Not searched — pick a ${category} filter to include its results again.` : undefined}
             >
                 <span className="flex items-center gap-1.5 whitespace-nowrap">
-                    <img src={CATEGORY_EMOJI_SRC.Books} alt="" className="w-4 h-4 flex-shrink-0" />
-                    Books{activeCount > 0 ? ` (${activeCount})` : ''}{disabled ? ' (off)' : ''}
+                    <img src={CATEGORY_EMOJI_SRC[category]} alt="" className="w-4 h-4 flex-shrink-0" />
+                    {category}{activeCount > 0 ? ` (${activeCount})` : ''}{disabled ? ' (off)' : ''}
                 </span>
                 <ChevronDown className="w-3.5 h-3.5 ml-1 opacity-60 flex-shrink-0" />
             </button>
@@ -1226,7 +1226,7 @@ const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, 
 
                             {/* Header */}
                             <div className="p-4 border-b border-border flex items-center justify-between sticky top-0 bg-surface rounded-t-lg">
-                                <h3 className="text-base font-bold text-ink">Filter by Books</h3>
+                                <h3 className="text-base font-bold text-ink">Filter by {category}</h3>
                                 <CloseButton onClick={() => setIsOpen(false)} />
                             </div>
 
@@ -1236,7 +1236,7 @@ const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, 
                                     type="text"
                                     value={search}
                                     onChange={e => setSearch(e.target.value)}
-                                    placeholder="Search books..."
+                                    placeholder={`Search ${category.toLowerCase()}...`}
                                     className="text-sm"
                                 />
                             </div>
@@ -1246,7 +1246,7 @@ const BooksFilter = ({ allMetadata, activeFilters, onAddFilter, onRemoveFilter, 
                                 <div className="border border-border rounded-lg overflow-hidden">
                                     {catalogueUnavailable && <p role="status" className="p-4 text-sm text-ink-muted">{catalogueLoading ? 'Loading books...' : 'Could not load author–book relationships. Please reload to retry.'}</p>}
                                     {!catalogueUnavailable && filtered.length === 0 && (
-                                        <p className="p-4 text-sm text-ink-muted text-center">No books found</p>
+                                        <p className="p-4 text-sm text-ink-muted text-center">No {category.toLowerCase()} titles found</p>
                                     )}
                                     {filtered.map((name) => (
                                         <label key={name} className="filter-list-row">
@@ -1290,6 +1290,7 @@ const CHIP_LABELS = {
     Name: '',
     _granth_authors: 'Acharya/Gyani',
     _books_authors: 'Scholar',
+    _magazine_authors: 'Magazine author',
 };
 
 // Builds a human label for a _pravachan_groups chip, e.g. "1979 Series (Vol 3)".
@@ -1318,7 +1319,7 @@ export const SearchFilters = ({
     const { rows: catalogue, loading: catalogueLoading } = useCatalogue();
     const [authorNotice, setAuthorNotice] = useState('');
     const applyAuthors = authors => {
-        const categories = [['Books', '_books_authors'], ['Granth', '_granth_authors']];
+        const categories = [['Books', '_books_authors'], ['Granth', '_granth_authors'], ['Magazine', '_magazine_authors']];
         const allNames = [];
         const eligibleNames = [];
         categories.forEach(([category, key]) => {
@@ -1336,8 +1337,8 @@ export const SearchFilters = ({
     const hasYearFilter = startYear || endYear;
     const hasAnyFilter  = activeFilters.length > 0 || hasYearFilter;
     const removeChip = index => {
-        if (['_books_authors', '_granth_authors'].includes(activeFilters[index].key)) {
-            applyAuthors(activeFilters.filter((f, i) => i !== index && ['_books_authors', '_granth_authors'].includes(f.key)));
+        if (['_books_authors', '_granth_authors', '_magazine_authors'].includes(activeFilters[index].key)) {
+            applyAuthors(activeFilters.filter((f, i) => i !== index && ['_books_authors', '_granth_authors', '_magazine_authors'].includes(f.key)));
         } else {
             onRemoveFilter(index);
         }
@@ -1392,7 +1393,13 @@ export const SearchFilters = ({
                         catalogue={catalogue} catalogueLoading={catalogueLoading}
                     />
                 )}
-                {activeCategories.some(category => category === 'Granth' || category === 'Books') && (
+                {activeCategories.includes('Magazine') && (
+                    <BooksFilter category="Magazine" allMetadata={allMetadata} activeFilters={activeFilters}
+                        onAddFilter={onAddFilter} onRemoveFilter={onRemoveFilter} language={language}
+                        disabled={contentTypes && !contentTypes.magazines}
+                        catalogue={catalogue} catalogueLoading={catalogueLoading} />
+                )}
+                {activeCategories.some(category => ['Granth', 'Books', 'Magazine'].includes(category)) && (
                     <AuthorFilter authorGroups={authorGroups} authorsError={authorsError}
                         activeCategories={activeCategories} language={language} activeFilters={activeFilters}
                         onAddFilter={onAddFilter} onRemoveFilter={onRemoveFilter}

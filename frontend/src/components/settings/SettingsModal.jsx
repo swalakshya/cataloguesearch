@@ -39,7 +39,7 @@ export default function SettingsModal({
     onClose,
     answerFormat,
     onSaveAnswerFormat,
-    activeCategories = ['Pravachan', 'Granth'],
+    activeCategories = ['Pravachan', 'Granth', 'Books', 'Magazine'],
     chatDefaultCategories,
     onSaveChatDefaultCategories,
     khojDefaultCategories,

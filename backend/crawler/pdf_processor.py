@@ -9,6 +9,7 @@ from PIL import Image
 from tqdm import tqdm
 
 from backend.config import Config
+from backend.common.auto_tesseract_config import prepare_ocr_cache, RECIPE_FILE
 
 # Disable tokenizers parallelism to avoid fork conflicts
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -58,6 +59,8 @@ class PDFProcessor:
         if not os.path.exists(pdf_file):
             raise FileNotFoundError(f"Error: File {pdf_file} not found.")
 
+        prepare_ocr_cache(pdf_file, scan_config, self._config)
+
         log_handle.info(f"base_pdf_folder: {self._base_pdf_folder}")
         log_handle.info(f"pdf_file: {pdf_file}")
         relative_pdf_path = os.path.relpath(pdf_file, self._base_pdf_folder)
@@ -89,7 +92,12 @@ class PDFProcessor:
                 f"Required pages: {len(pages_list)}, Found: {len(existing_files)}, "
                 f"Missing: {len(missing_pages)}. First few missing: {sorted(list(missing_pages))[:10]}"
             )
-            shutil.rmtree(output_ocr_dir)
+            if os.path.exists(os.path.join(output_ocr_dir, RECIPE_FILE)):
+                # Hybrid siblings (including pending LLM results) share this
+                # directory. Fill missing pages without deleting other modes.
+                pages_list = sorted(missing_pages)
+            else:
+                shutil.rmtree(output_ocr_dir)
 
         os.makedirs(output_ocr_dir, exist_ok=True)
         language = scan_config.get("language", "hi")

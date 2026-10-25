@@ -15,7 +15,7 @@ export function applyAuthorFilters(filters, authors, allWorkNames, eligibleNames
     const workNames = new Set(allWorkNames);
     const eligible = new Set(eligibleNames);
     return [...filters.filter(filter =>
-        !['_books_authors', '_granth_authors'].includes(filter.key)
+        !['_books_authors', '_granth_authors', '_magazine_authors'].includes(filter.key)
         && !(filter.key === 'Name' && workNames.has(filter.value) && !eligible.has(filter.value))
     ), ...authors];
 }

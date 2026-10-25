@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
 import useCatalogue from '../hooks/useCatalogue';
-import { groupGranthEditions } from '../utils/catalogue';
+import { groupGranthEditions, groupMagazineEditions } from '../utils/catalogue';
 import { PageHeader, Table, Badge } from './ui';
 import StatsStrip from './chat/StatsStrip';
 import { CategoryEmojiIcon } from './chat/categoryEmoji';
@@ -160,6 +160,10 @@ const SearchIndex = () => {
   const pravachanRows = useMemo(() => catalogue.filter((r) => r.category === 'Pravachan'), [catalogue]);
   const granthRows = useMemo(() => catalogue.filter((r) => r.category === 'Granth'), [catalogue]);
   const bookRows = useMemo(() => catalogue.filter((r) => r.category === 'Books'), [catalogue]);
+  const magazineRows = useMemo(() => {
+    const editions = catalogue.filter(row => row.category === 'Magazine');
+    return groupMagazineEditions(editions);
+  }, [catalogue]);
 
   const granthAuthorOptions = useMemo(() => [...new Set(granthRows.map((r) => r.author))].sort(), [granthRows]);
   const granthAnuyogOptions = useMemo(() => [...new Set(granthRows.map((r) => r.anuyog))].sort(), [granthRows]);
@@ -337,6 +341,15 @@ const SearchIndex = () => {
         {filteredGranths.length === 0 && (
           <p className="text-center text-ink-muted text-sm py-6">No Granths match this filter.</p>
         )}
+      </section>
+
+      <section id="magazine-index" className="mb-14 scroll-mt-24">
+        <SectionHeader category="Magazine" colorVar="--color-brand" title="Magazines" />
+        <Table columns={[{ key: 'granth', label: 'Magazine' }, { key: 'issues', label: 'Issues' }, { key: 'language', label: 'Language' }]}
+          rows={magazineRows} rowKey={row => row.key}
+          renderRow={row => <><td className="font-medium text-ink">{row.granth}</td>
+            <td>{row.issue_count || '—'}</td><td><LanguageAvailability hi={row.hi} gu={row.gu} /></td></>} />
+        {!magazineRows.length && <p className="text-center text-ink-muted text-sm py-6">No magazines available.</p>}
       </section>
 
       {/* ===================== Contemporary Jain Literature ===================== */}

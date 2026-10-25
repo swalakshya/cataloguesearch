@@ -8,6 +8,7 @@ import { OverlayBackdrop, CloseButton } from './ui/Overlay';
 const TABS = [
     { category: 'Granth', key: '_granth_authors', label: 'Jain Acharyas & Gyanis' },
     { category: 'Books', key: '_books_authors', label: 'Contemporary Jain Scholars' },
+    { category: 'Magazine', key: '_magazine_authors', label: 'Magazine Authors' },
 ];
 
 export default function AuthorFilter({ authorGroups, authorsError, activeCategories, language, activeFilters, onAddFilter, onRemoveFilter, onApplyAuthors, catalogueReady = true }) {
@@ -23,7 +24,7 @@ export default function AuthorFilter({ authorGroups, authorsError, activeCategor
     const filtered = (available || []).filter(name => name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
     const open = () => {
         setPending(Object.fromEntries(TABS.map(item => [item.key, activeFilters.filter(f => f.key === item.key).map(f => f.value)])));
-        setTab(activeCategories.includes('Granth') ? 'Granth' : 'Books');
+        setTab(TABS.find(item => activeCategories.includes(item.category))?.category || 'Granth');
         setSearch('');
         setIsOpen(true);
     };

@@ -238,4 +238,5 @@ catalogue_index:
         type: keyword
       relative_path:
         type: keyword
-
+      issue_count:
+        type: integer

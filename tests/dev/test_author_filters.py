@@ -10,7 +10,7 @@ def test_groups_follow_catalogue_category_language_and_deduplicate():
         {"category": "Pravachan", "language": "hi", "author": "Speaker"},
         {"category": "Granth", "author": None},
     ]
-    assert group_authors(rows) == {"Granth": {"hi": ["Shared"], "gu": []}, "Books": {"hi": ["Shared"], "gu": ["Gujarati"]}}
+    assert group_authors(rows) == {"Granth": {"hi": ["Shared"], "gu": []}, "Books": {"hi": ["Shared"], "gu": ["Gujarati"]}, "Magazine": {"hi": [], "gu": []}}
 
 
 def test_scoped_authors_do_not_cross_categories():
@@ -61,10 +61,10 @@ def test_every_search_mode_receives_only_its_scoped_authors():
     searcher = SimpleNamespace(perform_rrf_search=search, perform_category_search=search, perform_vector_search=search)
     async def run():
         for mode, lexical in [('rrf', None), ('lexical', True), ('vector', False)]:
-            for category in ['Granth', 'Books']:
+            for category in ['Granth', 'Books', 'Magazine']:
                 await _search_category(asyncio.get_running_loop(), searcher, category, {}, 'query', False, [],
-                    {'_granth_authors': ['Acharya'], '_books_authors': ['Scholar']}, 'hindi', mode, lexical,
+                    {'_granth_authors': ['Acharya'], '_books_authors': ['Scholar'], '_magazine_authors': ['Editor']}, 'hindi', mode, lexical,
                     None, False, 20, None, None)
-                assert calls[-1]['categories']['Author'] == (['Acharya'] if category == 'Granth' else ['Scholar'])
+                assert calls[-1]['categories']['Author'] == {'Granth': ['Acharya'], 'Books': ['Scholar'], 'Magazine': ['Editor']}[category]
                 assert not any(key.startswith('_') for key in calls[-1]['categories'])
     asyncio.run(run())
