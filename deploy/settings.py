@@ -38,6 +38,8 @@ DOCKER_TIMEOUT_SECONDS = float(os.environ.get("DEPLOY_DOCKER_TIMEOUT_SECONDS", "
 ORB_BIN = os.environ.get("DEPLOY_ORB_BIN", "")
 # The local OpenSearch container the restart waits for (when it exists).
 OPENSEARCH_CONTAINER = os.environ.get("DEPLOY_OPENSEARCH_CONTAINER", "opensearch-node")
+# Restoring a multi-GB local index can take several minutes after an OrbStack restart.
+OPENSEARCH_STARTUP_TIMEOUT = float(os.environ.get("DEPLOY_OPENSEARCH_STARTUP_TIMEOUT", "600"))
 
 # Local backups and a dedicated Google Drive connection. Archives stay outside the source.
 BACKUP_SOURCE_DIR = Path(os.environ.get('BACKUP_SOURCE_DIR', Path.home() / 'cataloguesearch')).expanduser()

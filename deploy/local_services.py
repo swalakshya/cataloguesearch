@@ -151,19 +151,29 @@ class Manager:
             return self._cache
 
     def _wait(self, service, ctx):
-        deadline = time.monotonic() + self.service(service).startup_timeout
+        started = time.monotonic()
+        timeout = self.service(service).startup_timeout
+        deadline = started + timeout
+        next_note = started
+        last_error = 'Readiness check has not succeeded'
         while time.monotonic() < deadline:
             if ctx.cancelled:
                 raise RuntimeError('Startup cancelled. Services already started are left running.')
             try:
                 if self._health(service):
                     return
-            except Exception:
-                pass
+            except Exception as exc:
+                last_error = self.redact(str(exc))[:400]
+            now = time.monotonic()
+            if now >= next_note:
+                note = f'Waiting for {service} ({int(now - started)}s / {timeout:g}s): {last_error}'
+                ctx.progress(note)
+                ctx.log(note)
+                next_note = now + 10
             if self.service(service).native and not self._owned(service):
                 raise RuntimeError(f'{service} exited before becoming ready. Open its logs.')
             ctx.sleep(1)
-        raise RuntimeError(f'{service} did not become ready. Startup timed out; open its logs.')
+        raise RuntimeError(f'{service} did not become ready after {timeout:g}s. Last check: {last_error}. Open its logs.')
 
     def _start_one(self, service, ctx, prepared=None):
         try:

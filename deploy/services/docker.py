@@ -44,15 +44,26 @@ class DockerService(Service):
         if ctx.cancelled:
             raise RuntimeError('Docker startup cancelled')
         ctx.log('Checking Docker responsiveness…')
-        result = docker_health.check()
-        ctx.log(result['message'])
-        if result['status'] == docker_health.OK:
+        for attempt in range(3):
+            result = docker_health.check()
+            ctx.log(result['message'])
+            if ctx.cancelled:
+                raise RuntimeError('Docker startup cancelled')
+            if result['status'] != docker_health.SLOW:
+                break
+            if attempt < 2:
+                ctx.progress(f'Docker is slow; checking again ({attempt + 2}/3)')
+                if not ctx.sleep(2):
+                    raise RuntimeError('Docker startup cancelled')
+        if result['status'] in (docker_health.OK, docker_health.SLOW):
+            if result['status'] == docker_health.SLOW:
+                ctx.log('Docker is responding slowly; continuing without restarting the runtime.')
             docker_health.forget()
             return
         ctx.log('Docker is not ready; recovering OrbStack using the navbar restart procedure.')
         # Run inside the current service/Discover job, preserving its logs and cancellation.
         # `orb start` alone cannot recover a running but unresponsive VM.
-        if docker_restart._restart(ctx) != 0:
+        if docker_restart._restart(ctx, wait_for_opensearch=False) != 0:
             raise RuntimeError('Docker startup cancelled' if ctx.cancelled else
                                'OrbStack recovery failed. See the startup log for details.')
 

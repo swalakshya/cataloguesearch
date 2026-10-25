@@ -236,7 +236,7 @@ def test_an_opensearch_container_that_is_down_is_reported_with_the_command_to_st
     monkeypatch.setattr(docker_restart, "_opensearch_state", lambda: "exited")
     ctx = Ctx()
     assert docker_restart._restart(ctx) == 0
-    assert any("docker compose up -d opensearch-node" in line for line in ctx.logs)
+    assert any("docker compose up -d opensearch" in line for line in ctx.logs)
 
 
 def test_restart_needs_the_orb_command(restart_env, monkeypatch):
@@ -267,3 +267,14 @@ def test_run_kills_a_command_that_outlives_its_time_limit(tmp_path):
 def test_discovery_accepts_jobs_to_prepare_missing_services(client, monkeypatch, no_real_jobs, state, path, body):
     set_docker(monkeypatch, state)
     assert client.post(path, json=body).status_code == 202
+
+
+
+def test_dependency_recovery_does_not_probe_or_wait_for_opensearch(restart_env, monkeypatch):
+    from unittest.mock import Mock
+    probe = Mock(side_effect=AssertionError('OpenSearch must be handled by its own starter'))
+    monkeypatch.setattr(docker_restart, '_opensearch_state', probe)
+    ctx = Ctx()
+    assert docker_restart._restart(ctx, wait_for_opensearch=False) == 0
+    assert ctx.steps == ['Stopping OrbStack', 'Starting OrbStack', 'Waiting for Docker to answer']
+    probe.assert_not_called()

@@ -454,3 +454,82 @@ def test_ready_opensearch_is_reused_without_compose_changes(manager, monkeypatch
     monkeypatch.setattr(manager, '_command', command)
     manager._start_one('opensearch', Mock(cancelled=False))
     command.assert_not_called()
+
+
+@pytest.fixture
+def startup_clock(monkeypatch):
+    now = [0.0]
+    monkeypatch.setattr(local.time, 'monotonic', lambda: now[0])
+    def sleep(seconds):
+        now[0] += seconds
+        return True
+    return now, sleep
+
+
+def test_opensearch_recovery_can_take_more_than_three_minutes(manager, monkeypatch, startup_clock):
+    now, sleep = startup_clock
+    monkeypatch.setattr(local.settings, 'OPENSEARCH_STARTUP_TIMEOUT', 600)
+    def health(service):
+        if now[0] < 184:
+            raise RuntimeError('cluster red; initializing shards: 3')
+        return True
+    monkeypatch.setattr(manager, '_health', health)
+    ctx = Mock(cancelled=False, sleep=sleep)
+    manager._wait('opensearch', ctx)
+    assert now[0] == 184
+    assert ctx.log.call_count >= 18
+    assert 'cluster red' in ctx.log.call_args.args[0]
+
+
+def test_configured_opensearch_timeout_keeps_last_error_in_failure(manager, monkeypatch, startup_clock):
+    _, sleep = startup_clock
+    monkeypatch.setattr(local.settings, 'OPENSEARCH_STARTUP_TIMEOUT', 5)
+    monkeypatch.setattr(manager, '_health', Mock(side_effect=OSError('connection refused')))
+    ctx = Mock(cancelled=False, sleep=sleep)
+    with pytest.raises(RuntimeError, match='after 5s.*connection refused'):
+        manager._wait('opensearch', ctx)
+    assert ctx.progress.call_count > 0
+
+
+def test_wait_still_honors_cancellation(manager, monkeypatch, startup_clock):
+    now, _ = startup_clock
+    ctx = Mock(cancelled=False)
+    def sleep(seconds):
+        now[0] += seconds
+        ctx.cancelled = True
+        return False
+    ctx.sleep = sleep
+    monkeypatch.setattr(manager, '_health', lambda _: False)
+    with pytest.raises(RuntimeError, match='cancelled'):
+        manager._wait('opensearch', ctx)
+    assert now[0] == 1
+
+
+def test_red_cluster_reports_shard_recovery_details(manager, monkeypatch):
+    from deploy.services import opensearch
+    response = Mock()
+    response.read.return_value = json.dumps({'status': 'red', 'active_shards': 4,
+                                            'initializing_shards': 2, 'unassigned_shards': 1})
+    stream = Mock()
+    stream.__enter__ = Mock(return_value=response)
+    stream.__exit__ = Mock(return_value=False)
+    monkeypatch.setattr(opensearch.urllib.request, 'urlopen', lambda *a, **kw: stream)
+    with pytest.raises(RuntimeError, match='cluster red; active shards: 4, initializing: 2, unassigned: 1'):
+        manager.service('opensearch').health()
+
+
+def test_opensearch_is_explicitly_started_before_waiting(manager, monkeypatch):
+    events = []
+    monkeypatch.setattr(manager, '_local_docker', lambda: None)
+    monkeypatch.setattr(manager, '_health', lambda _: False)
+    def command(argv, **kwargs):
+        assert argv[-1] == 'opensearch'
+        assert '--pull' in argv and 'never' in argv
+        events.append('compose up')
+        return 'OpenSearch container started'
+    monkeypatch.setattr(manager, '_command', command)
+    monkeypatch.setattr(manager, '_wait', lambda *a: events.append('wait for cluster'))
+    ctx = Mock(cancelled=False)
+    manager.service('opensearch').start(ctx)
+    assert events == ['compose up', 'wait for cluster']
+    ctx.log.assert_any_call('OpenSearch container started')

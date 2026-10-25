@@ -56,7 +56,7 @@ def _opensearch_state() -> Optional[str]:
     return proc.stdout.strip() if proc.returncode == 0 and proc.stdout.strip() else None
 
 
-def _restart(ctx: StepCtx) -> int:
+def _restart(ctx: StepCtx, *, wait_for_opensearch: bool = True) -> int:
     orb = settings.ORB_BIN or shutil.which("orb") or shutil.which("orbctl")
     if not orb:
         ctx.log("OrbStack's command line tool (orb) was not found on this machine, so Docker cannot be restarted from here.")
@@ -64,7 +64,8 @@ def _restart(ctx: StepCtx) -> int:
         return 1
     docker_health.forget()
 
-    ctx.progress("Stopping OrbStack", index=1, of=4)
+    steps = 4 if wait_for_opensearch else 3
+    ctx.progress("Stopping OrbStack", index=1, of=steps)
     ctx.log("$ orb stop")
     code = _run(ctx, [orb, "stop"], STOP_TIMEOUT)
     if ctx.cancelled:
@@ -74,7 +75,7 @@ def _restart(ctx: StepCtx) -> int:
     elif code != 0:
         ctx.log(f"orb stop exited with {code}. Going on to start it anyway.")
 
-    ctx.progress("Starting OrbStack", index=2, of=4)
+    ctx.progress("Starting OrbStack", index=2, of=steps)
     ctx.log("$ orb start")
     code = _run(ctx, [orb, "start"], START_TIMEOUT)
     if ctx.cancelled:
@@ -84,7 +85,7 @@ def _restart(ctx: StepCtx) -> int:
     elif code != 0:
         ctx.log(f"orb start exited with {code}. Checking Docker anyway.")
 
-    ctx.progress("Waiting for Docker to answer", index=3, of=4)
+    ctx.progress("Waiting for Docker to answer", index=3, of=steps)
     deadline = time.monotonic() + DOCKER_WAIT
     last_note = 0.0
     while True:
@@ -102,7 +103,12 @@ def _restart(ctx: StepCtx) -> int:
         if not ctx.sleep(POLL):
             return 1
 
-    ctx.progress(f"Waiting for {settings.OPENSEARCH_CONTAINER}", index=4, of=4)
+    if not wait_for_opensearch:
+        docker_health.forget()
+        ctx.log('Docker recovered; the next service step will start and check OpenSearch.')
+        return 0
+
+    ctx.progress(f"Waiting for {settings.OPENSEARCH_CONTAINER}", index=4, of=steps)
     state = _opensearch_state()
     deadline = time.monotonic() + OPENSEARCH_WAIT
     while state in ("starting", "created", "restarting") and time.monotonic() < deadline:
@@ -116,7 +122,7 @@ def _restart(ctx: StepCtx) -> int:
         ctx.log(f"{settings.OPENSEARCH_CONTAINER} does not exist here; nothing to wait for.")
         note = "no local OpenSearch container"
     else:
-        ctx.log(f"⚠️ {settings.OPENSEARCH_CONTAINER} is '{state}'. Start it with: docker compose up -d {settings.OPENSEARCH_CONTAINER}")
+        ctx.log(f"⚠️ {settings.OPENSEARCH_CONTAINER} is '{state}'. Start it with: docker compose up -d opensearch")
         note = f"OpenSearch {state}"
     docker_health.forget()
     ctx.summary(f"Docker answers again ({result['seconds']:g}s); {note}")

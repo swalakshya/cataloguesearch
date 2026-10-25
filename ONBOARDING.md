@@ -332,6 +332,14 @@ cancelled, subsequent discovery steps do not run. Startup reuses healthy service
 running after the job finishes. Missing Docker/images and readiness timeouts appear in the job logs;
 startup does not restart a healthy stack or build/pull container images.
 
+Discovery's Docker recovery waits only for Docker responsiveness, then explicitly starts the
+OpenSearch Compose service. Slow Docker probes are retried without restarting a responsive runtime.
+OpenSearch readiness allows 600 seconds by default; set `DEPLOY_OPENSEARCH_STARTUP_TIMEOUT` on the
+dashboard process to change it. During recovery, the startup step logs its latest readiness result
+every ten seconds, including red-cluster shard counts or connection errors. A timeout retains the
+last result in its failure message. The standalone Docker restart action still reports the existing
+OpenSearch container's state after recovering Docker.
+
 Service cards use solid green **Ready**, orange **Starting / Stopped**, and red **Not ready / Failed**
 badges, with explicit labels and direct dependencies shown on each card.
 

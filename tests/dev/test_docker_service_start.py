@@ -21,14 +21,13 @@ def test_ready_docker_is_reused(service, monkeypatch):
     restart.assert_not_called()
 
 
-@pytest.mark.parametrize('state', ['down', 'slow'], ids=['unresponsive', 'sluggish'])
-def test_unhealthy_docker_uses_navbar_recovery_in_current_job(service, monkeypatch, state):
-    monkeypatch.setattr(docker_health, 'check', lambda: {'status': state, 'message': 'Docker not ready'})
+def test_unresponsive_docker_recovers_without_waiting_for_opensearch(service, monkeypatch):
+    monkeypatch.setattr(docker_health, 'check', lambda: {'status': 'down', 'message': 'Docker not ready'})
     restart = Mock(return_value=0)
     monkeypatch.setattr(docker_restart, '_restart', restart)
     ctx = Mock(cancelled=False)
     service.start(ctx)
-    restart.assert_called_once_with(ctx)
+    restart.assert_called_once_with(ctx, wait_for_opensearch=False)
     ctx.log.assert_any_call('Docker not ready')
 
 
@@ -69,4 +68,36 @@ def test_start_runs_stop_start_and_readiness_checks(service, monkeypatch):
     ctx = Mock(cancelled=False)
     service.start(ctx)
     assert commands == [['/test/orb', 'stop'], ['/test/orb', 'start']]
-    ctx.progress.assert_any_call('Waiting for Docker to answer', index=3, of=4)
+    ctx.progress.assert_any_call('Waiting for Docker to answer', index=3, of=3)
+
+
+@pytest.mark.parametrize('answers', [['slow', 'ok'], ['slow', 'slow', 'slow']])
+def test_slow_but_responsive_docker_is_retried_without_restart(service, monkeypatch, answers):
+    check = Mock(side_effect=[{'status': state, 'message': state} for state in answers])
+    restart = Mock()
+    monkeypatch.setattr(docker_health, 'check', check)
+    monkeypatch.setattr(docker_restart, '_restart', restart)
+    ctx = Mock(cancelled=False)
+    service.start(ctx)
+    assert check.call_count == len(answers)
+    assert ctx.sleep.call_count == len(answers) - 1
+    restart.assert_not_called()
+
+
+def test_docker_becoming_unresponsive_during_retry_triggers_recovery(service, monkeypatch):
+    monkeypatch.setattr(docker_health, 'check', Mock(side_effect=[
+        {'status': 'slow', 'message': 'busy'}, {'status': 'down', 'message': 'stuck'}]))
+    restart = Mock(return_value=0)
+    monkeypatch.setattr(docker_restart, '_restart', restart)
+    ctx = Mock(cancelled=False)
+    service.start(ctx)
+    restart.assert_called_once_with(ctx, wait_for_opensearch=False)
+
+
+def test_cancelling_a_slow_probe_retry_never_restarts_docker(service, monkeypatch):
+    monkeypatch.setattr(docker_health, 'check', lambda: {'status': 'slow', 'message': 'busy'})
+    restart = Mock()
+    monkeypatch.setattr(docker_restart, '_restart', restart)
+    with pytest.raises(RuntimeError, match='cancelled'):
+        service.start(Mock(cancelled=False, sleep=Mock(return_value=False)))
+    restart.assert_not_called()

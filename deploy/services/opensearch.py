@@ -15,7 +15,10 @@ class OpenSearchService(Service):
     icon = '🔎'
     dependencies = ('docker',)
     default_port = 9200
-    startup_timeout = 180
+
+    @property
+    def startup_timeout(self):
+        return settings.OPENSEARCH_STARTUP_TIMEOUT
 
     def spec(self):
         root = settings.REPO_ROOT
@@ -44,7 +47,14 @@ class OpenSearchService(Service):
 
     def health(self):
         with urllib.request.urlopen(f'http://127.0.0.1:{self.port}/_cluster/health', timeout=1) as response:
-            return json.load(response).get('status') in ('yellow', 'green')
+            health = json.load(response)
+        if health.get('status') in ('yellow', 'green'):
+            return True
+        raise RuntimeError(
+            f"OpenSearch cluster {health.get('status', 'unknown')}; "
+            f"active shards: {health.get('active_shards', '?')}, "
+            f"initializing: {health.get('initializing_shards', '?')}, "
+            f"unassigned: {health.get('unassigned_shards', '?')}")
 
     def status(self):
         self.manager._local_docker()
@@ -71,8 +81,11 @@ class OpenSearchService(Service):
                 return
         except Exception:
             pass
-        self.manager._command(['docker', 'compose', '--env-file', str(settings.REPO_ROOT / '.env.local'),
-                              '-f', str(settings.REPO_ROOT / 'docker-compose.yml'), 'up', '-d', '--no-build', '--pull', 'never', 'opensearch'], timeout=90)
+        ctx.log('Starting OpenSearch Compose service (opensearch)…')
+        output = self.manager._command(['docker', 'compose', '--env-file', str(settings.REPO_ROOT / '.env.local'),
+                                       '-f', str(settings.REPO_ROOT / 'docker-compose.yml'), 'up', '-d', '--no-build', '--pull', 'never', 'opensearch'], timeout=90)
+        if output:
+            ctx.log(self.manager.redact(output))
         self.manager._wait(self.id, ctx)
 
     def stop(self, ctx):
